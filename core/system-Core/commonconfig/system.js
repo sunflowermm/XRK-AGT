@@ -2997,7 +2997,7 @@ export default class SystemConfig extends ConfigBase {
       monitor: {
         name: 'monitor',
         displayName: '系统监控配置',
-        description: '系统监控相关配置，包括浏览器、内存、CPU等资源监控',
+        description: '资源监控；企业默认仅观察+本进程 GC，杀浏览器/删文件/改系统须显式开启',
         filePath: getConfigPath('monitor'),
         fileType: 'yaml',
         schema: {
@@ -3013,7 +3013,7 @@ export default class SystemConfig extends ConfigBase {
               label: '监控检查间隔',
               description: '监控检查间隔（毫秒）',
               min: 1000,
-              default: 120000,
+              default: 300000,
               component: 'InputNumber'
             },
             browser: {
@@ -3024,7 +3024,8 @@ export default class SystemConfig extends ConfigBase {
                 enabled: {
                   type: 'boolean',
                   label: '启用浏览器监控',
-                  default: true,
+                  description: '会扫描并可能结束浏览器进程，企业默认关闭',
+                  default: false,
                   component: 'Switch'
                 },
                 maxInstances: {
@@ -3065,14 +3066,16 @@ export default class SystemConfig extends ConfigBase {
                 systemThreshold: {
                   type: 'number',
                   label: '系统内存阈值（%）',
+                  description: '仅告警，不驱动 flushdns/GC',
                   min: 0,
                   max: 100,
-                  default: 85,
+                  default: 90,
                   component: 'InputNumber'
                 },
                 nodeThreshold: {
                   type: 'number',
                   label: 'Node堆内存阈值（%）',
+                  description: '仅堆超阈值才执行本进程 GC',
                   min: 0,
                   max: 100,
                   default: 85,
@@ -3081,6 +3084,7 @@ export default class SystemConfig extends ConfigBase {
                 autoOptimize: {
                   type: 'boolean',
                   label: '自动优化',
+                  description: '仅本进程 GC，不改系统',
                   default: true,
                   component: 'Switch'
                 },
@@ -3158,14 +3162,14 @@ export default class SystemConfig extends ConfigBase {
                 aggressive: {
                   type: 'boolean',
                   label: '激进模式',
-                  description: '激进模式（更频繁清理）',
+                  description: '更频繁清理；Windows 下才允许 flushdns',
                   default: false,
                   component: 'Switch'
                 },
                 autoRestart: {
                   type: 'boolean',
                   label: '自动重启',
-                  description: '严重时自动重启',
+                  description: '严重时自动重启（企业默认禁止）',
                   default: false,
                   component: 'Switch'
                 },
@@ -3206,20 +3210,23 @@ export default class SystemConfig extends ConfigBase {
               fields: {
                 enabled: {
                   type: 'boolean',
-                  label: '启用磁盘优化',
+                  label: '启用磁盘监控',
+                  description: '空间告警；自动删除须另开下方开关',
                   default: true,
                   component: 'Switch'
                 },
                 cleanupTemp: {
                   type: 'boolean',
                   label: '清理临时文件',
-                  default: true,
+                  description: '仅 data/temp；永不清理 uploads',
+                  default: false,
                   component: 'Switch'
                 },
                 cleanupLogs: {
                   type: 'boolean',
                   label: '清理日志文件',
-                  default: true,
+                  description: '删除 logs/*.log（审计场景请保持关闭）',
+                  default: false,
                   component: 'Switch'
                 },
                 tempMaxAge: {
@@ -3250,7 +3257,8 @@ export default class SystemConfig extends ConfigBase {
                 enabled: {
                   type: 'boolean',
                   label: '启用网络优化',
-                  default: true,
+                  description: 'netstat 类探测，企业默认关闭',
+                  default: false,
                   component: 'Switch'
                 },
                 maxConnections: {
@@ -3263,7 +3271,7 @@ export default class SystemConfig extends ConfigBase {
                 cleanupIdle: {
                   type: 'boolean',
                   label: '清理空闲连接',
-                  default: true,
+                  default: false,
                   component: 'Switch'
                 }
               }
@@ -3276,7 +3284,8 @@ export default class SystemConfig extends ConfigBase {
                 enabled: {
                   type: 'boolean',
                   label: '启用进程优化',
-                  default: true,
+                  description: '会修改本进程优先级，企业默认关闭',
+                  default: false,
                   component: 'Switch'
                 },
                 priority: {
@@ -3305,19 +3314,22 @@ export default class SystemConfig extends ConfigBase {
                 enabled: {
                   type: 'boolean',
                   label: '启用系统优化',
-                  default: true,
+                  description: '系统级动作总开关，企业默认关闭',
+                  default: false,
                   component: 'Switch'
                 },
                 clearCache: {
                   type: 'boolean',
                   label: '清理系统缓存',
-                  default: true,
+                  description: '如 flushdns；须配合激进模式',
+                  default: false,
                   component: 'Switch'
                 },
                 optimizeCPU: {
                   type: 'boolean',
                   label: '优化CPU调度',
-                  default: true,
+                  description: 'Linux chrt 等，企业默认关闭',
+                  default: false,
                   component: 'Switch'
                 }
               }

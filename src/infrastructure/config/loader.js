@@ -13,14 +13,15 @@ import {
   EXIT_STOP
 } from '#utils/process-signals.js';
 import { getRuntimeGlobal, isShuttingDown, setShuttingDown, isProcessFlagSet, setProcessFlag } from '#utils/runtime-globals.js';
+import { isUvInterfaceAddressesError } from '#utils/safe-os-network.js';
 
 const CONFIG = {
   PROCESS_TITLE: 'XRK-AGT',
   TIMEZONE: 'Asia/Shanghai'
 };
 
-const NETWORK_ERROR_CODES = ['ECONNRESET', 'ECONNREFUSED', 'ETIMEDOUT', 'PROTOCOL_CONNECTION_LOST'];
-const EXPECTED_REJECTION_CODES = ['ENOTFOUND', 'EAI_AGAIN', 'EAI_NONAME'];
+/** 瞬时 socket 错误：只记日志，不拖垮进程（Redis/QQ 断线常见） */
+const TRANSIENT_NETWORK_CODES = ['ECONNRESET', 'ECONNREFUSED', 'ETIMEDOUT', 'PROTOCOL_CONNECTION_LOST', 'ENOTFOUND', 'EAI_AGAIN', 'EAI_NONAME'];
 
 let packageloaderPromise = null;
 
@@ -44,8 +45,8 @@ class ProcessManager {
     process.exit(EXIT_RESTART);
   }
 
-  isNetworkError(error) {
-    return NETWORK_ERROR_CODES.includes(error.code);
+  isTransientNetworkError(error) {
+    return TRANSIENT_NETWORK_CODES.includes(error.code);
   }
 
   async gracefulShutdown(exitCode) {
@@ -102,21 +103,23 @@ class ProcessManager {
     if (isProcessFlagSet('__xrkErrorHandlersReady')) return;
     setProcessFlag('__xrkErrorHandlersReady', true);
 
-    const onNetworkFatal = async (reason, label) => {
+    const onUnexpected = async (reason, label) => {
       if (isShuttingDown()) return;
       const error = normalizeError(reason);
-      if (EXPECTED_REJECTION_CODES.includes(error.code)) {
-        logger.warn(`${label}: ${error.message} (${error.code})`);
+      // 网卡枚举瞬态错误：忽略且不重启（见 #utils/safe-os-network）
+      if (isUvInterfaceAddressesError(error)) {
+        logger.warn(`${label}: 网卡枚举失败（已忽略）: ${error.message}`);
+        return;
+      }
+      if (this.isTransientNetworkError(error)) {
+        logger.warn(`${label}: ${error.message} (${error.code || 'no-code'}，不自动重启)`);
         return;
       }
       logger.error(`${label}: ${error.message}`);
-      if (!this.isNetworkError(error)) return;
-      logger.error(chalk.red(`网络错误(${error.code})，准备重启`));
-      await this.restart();
     };
 
-    process.on('uncaughtException', (error) => onNetworkFatal(error, '未捕获异常'));
-    process.on('unhandledRejection', (reason) => onNetworkFatal(reason, '未处理Promise'));
+    process.on('uncaughtException', (error) => void onUnexpected(error, '未捕获异常'));
+    process.on('unhandledRejection', (reason) => void onUnexpected(reason, '未处理Promise'));
     process.on('exit', (code) => {
       logger.mark(chalk.magenta(`XRK-AGT 已停止，退出码: ${code}`));
     });
@@ -139,6 +142,10 @@ class InitManager {
     this.processManager.setupSignalHandlers();
   }
 
+  /**
+   * 启动 SystemMonitor；`critical` 时仅当规范化后 `autoRestart === true` 才重启。
+   * @returns {Promise<void>}
+   */
   async startMonitoring() {
     const monitorConfig = cfg.monitor;
     if (!monitorConfig.enabled) return;
@@ -151,7 +158,7 @@ class InitManager {
 
     this.systemMonitor.on('critical', ({ type }) => {
       logger.error(`系统资源严重不足: ${type}`);
-      if (monitorConfig.optimize.autoRestart) {
+      if (this.systemMonitor.config?.optimize?.autoRestart === true) {
         logger.error('将在5秒后重启...');
         setTimeout(() => this.processManager.restart(), 5000);
       }

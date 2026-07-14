@@ -870,7 +870,8 @@ class PluginsLoader {
         taskName: t.name || pluginName, // 保存原始任务名称用于日志
         cron: t.cron,
         fnc,
-        log: t.log !== false
+        // 默认可静默；挂机刷屏多因默认真导致「开始执行/执行完成」刷 console
+        log: t.log === true
       })
     })
   }

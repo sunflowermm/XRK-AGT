@@ -78,7 +78,7 @@ export class stattools extends plugin {
         si.osInfo(),
         si.processes(),
         si.time(),
-        si.networkInterfaces()
+        si.networkInterfaces().catch(() => [])
       ])
 
       const bot = (globalThis.Bot && (Bot[e.self_id] || Bot)) || {}

@@ -147,45 +147,32 @@ async function startRedisOnWindows() {
   }
 }
 
+let healthCheckTimer = null
+
 function registerEventHandlers(client) {
-  client.on('error', async (/** @type {any} */ err) => {
-    const error = normalizeError(err)
-    BotUtil.makeLog('error', error.message, 'Redis')
-
-    if (!client._reconnectState) {
-      client._reconnectState = { isReconnecting: false }
-    }
-
-    if (client._reconnectState.isReconnecting || client.isOpen) return
-
-    client._reconnectState.isReconnecting = true
-    try {
-      BotUtil.makeLog('info', '尝试重新连接...', 'Redis')
-      await client.connect()
-      BotUtil.makeLog('success', '重新连接成功', 'Redis')
-    } catch (reconnectErr) {
-      const reconnectError = normalizeError(reconnectErr)
-      BotUtil.makeLog('error', `重连失败: ${reconnectError.message}`, 'Redis')
-    } finally {
-      client._reconnectState.isReconnecting = false
-    }
+  // 勿在 error 里再手动 connect：与 socket reconnectStrategy 双重重连会打架刷 console
+  client.on('error', (/** @type {any} */ err) => {
+    BotUtil.makeLog('warn', normalizeError(err).message, 'Redis')
   })
-
-  client.on('ready', () => BotUtil.makeLog('info', '就绪', 'Redis'))
-  client.on('reconnecting', () => BotUtil.makeLog('info', '正在重新连接...', 'Redis'))
+  client.on('ready', () => BotUtil.makeLog('debug', '就绪', 'Redis'))
+  client.on('reconnecting', () => BotUtil.makeLog('debug', '正在重新连接...', 'Redis'))
   client.on('end', () => BotUtil.makeLog('warn', '连接已关闭', 'Redis'))
 }
 
 function startHealthCheck(client) {
-  setInterval(async () => {
+  if (healthCheckTimer) {
+    clearInterval(healthCheckTimer)
+    healthCheckTimer = null
+  }
+  healthCheckTimer = setInterval(async () => {
     if (!client.isOpen) return
     try {
       await client.ping()
     } catch (err) {
-      const error = normalizeError(err)
-      BotUtil.makeLog('warn', `健康检查失败: ${error.message}`, 'Redis')
+      BotUtil.makeLog('debug', `健康检查失败: ${normalizeError(err).message}`, 'Redis')
     }
   }, REDIS_CONFIG.HEALTH_CHECK_INTERVAL)
+  healthCheckTimer.unref?.()
 }
 
 async function getArchitectureOptions() {
@@ -210,6 +197,10 @@ async function getArchitectureOptions() {
 }
 
 export async function closeRedis() {
+  if (healthCheckTimer) {
+    clearInterval(healthCheckTimer)
+    healthCheckTimer = null
+  }
   if (!globalClient?.isOpen) return
 
   globalClient.removeAllListeners('end')
