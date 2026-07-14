@@ -218,20 +218,34 @@ export function findInCoreSubDirs(subDirs, fileBaseName) {
 }
 
 /**
- * 从 core 子目录内绝对路径解析模块 key（相对 core 子目录，不含 .js）
+ * 从 core 子目录内绝对路径解析模块 key（相对该子目录，不含 .js）
  * @param {string} filePath
  * @param {string[]} [coreDirs] 如 paths.getCoreSubDirs('http') 的返回值
+ * @param {{ qualifyCore?: boolean, subDir?: string }} [options]
+ *   qualifyCore=true 时前缀 Core/插件组名，避免多 Core 同名覆盖（如 `system-Core/admin`）
  */
-export function resolveCoreModuleKey(filePath, coreDirs = []) {
+export function resolveCoreModuleKey(filePath, coreDirs = [], options = {}) {
+  const qualifyCore = options.qualifyCore === true;
+  const subDir = options.subDir || path.basename(coreDirs[0] || 'http');
   const normalizedPath = path.resolve(filePath);
   for (const coreDir of coreDirs) {
     const normalizedCoreDir = path.resolve(coreDir);
     const rel = path.relative(normalizedCoreDir, normalizedPath);
     if (rel && !rel.startsWith('..') && !path.isAbsolute(rel)) {
-      return rel.replace(/\\/g, '/').replace(/\.js$/, '');
+      const relKey = rel.replace(/\\/g, '/').replace(/\.js$/, '');
+      if (!qualifyCore) return relKey;
+      const label = resolveCoreExtensionLabel(normalizedPath, path.basename(normalizedCoreDir) || subDir);
+      return `${label}/${relKey}`;
     }
   }
-  return path.basename(filePath, '.js');
+  const base = path.basename(filePath, '.js');
+  if (!qualifyCore) return base;
+  return `${resolveCoreExtensionLabel(normalizedPath, subDir)}/${base}`;
+}
+
+/** 多 Core 友好的模块 key（始终带 Core/组名前缀） */
+export function resolveQualifiedCoreModuleKey(filePath, coreDirs = [], subDir = 'http') {
+  return resolveCoreModuleKey(filePath, coreDirs, { qualifyCore: true, subDir });
 }
 
 /** @param {string} pattern @param {string} event */

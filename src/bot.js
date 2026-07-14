@@ -1206,70 +1206,10 @@ export default class Bot extends EventEmitter {
     // 静态文件安全中间件（已优化，跳过API）
     this.express.use(this._staticSecurityMiddleware.bind(this));
     
-    // 挂载所有 core/*/www 目录及其子目录
-    const coreDirs = await paths.getCoreDirs();
     const staticOptions = this._createStaticOptions();
-    const mountedPaths = new Set(); // 用于检测路径冲突
-    
-    const { statDirs, statFiles } = await import('#utils/core-fs.js');
-    const wwwDirPaths = coreDirs.map((coreDir) => path.join(coreDir, 'www'));
-    const wwwIsDir = await statDirs(wwwDirPaths);
+    const { mountCoreWwwStatic } = await import('#infrastructure/http/mount-core-www.js');
+    await mountCoreWwwStatic(this.express, staticOptions);
 
-    for (let ci = 0; ci < coreDirs.length; ci++) {
-      const coreDir = coreDirs[ci];
-      const wwwDir = wwwDirPaths[ci];
-      const coreName = path.basename(coreDir);
-
-      if (!wwwIsDir[ci]) continue;
-
-      // 挂载 core/*/www 到 /core/{coreName}/*
-      const coreMountPath = `/core/${coreName}`;
-      if (!mountedPaths.has(coreMountPath)) {
-        this.express.use(coreMountPath, express.static(wwwDir, staticOptions));
-        mountedPaths.add(coreMountPath);
-        BotUtil.makeLog('info', `挂载静态资源: ${coreMountPath} -> ${wwwDir}`, 'Bot');
-      }
-
-      // 扫描 www 下的子目录，挂载到根路径（避免冲突）
-      try {
-        const entries = fsSync.readdirSync(wwwDir, { withFileTypes: true });
-        const dirEntries = entries.filter((entry) => entry.isDirectory());
-        const signPaths = dirEntries.map((entry) =>
-          path.join(wwwDir, entry.name, 'sign.json')
-        );
-        const signExists = signPaths.length > 0 ? await statFiles(signPaths) : [];
-
-        for (let di = 0; di < dirEntries.length; di++) {
-          const entry = dirEntries[di];
-          const subDirName = entry.name;
-          const subDirPath = path.join(wwwDir, subDirName);
-          const mountPath = `/${subDirName}`;
-
-          if (signExists[di]) {
-            BotUtil.makeLog('info', `检测到前端 sign.json，跳过子目录静态挂载: ${mountPath} (core: ${coreName})`, 'Bot');
-            continue;
-          }
-
-          const reservedPaths = ['api', 'core', 'media', 'uploads', 'File'];
-          if (reservedPaths.includes(subDirName)) {
-            BotUtil.makeLog('warn', `跳过保留路径: ${mountPath} (core: ${coreName})`, 'Bot');
-            continue;
-          }
-
-          if (mountedPaths.has(mountPath)) {
-            BotUtil.makeLog('warn', `路径冲突，跳过: ${mountPath} (core: ${coreName})，已被其他core占用`, 'Bot');
-            continue;
-          }
-
-          this.express.use(mountPath, express.static(subDirPath, staticOptions));
-          mountedPaths.add(mountPath);
-          BotUtil.makeLog('info', `挂载子目录: ${mountPath} -> ${subDirPath} (core: ${coreName})`, 'Bot');
-        }
-      } catch (error) {
-        BotUtil.makeLog('debug', `扫描 www 子目录失败: ${wwwDir} - ${error.message}`, 'Bot');
-      }
-    }
-    
     this.express.use((req, res, next) => {
       if (this._checkHeadersSent(res, next)) return;
       
@@ -3197,21 +3137,27 @@ export default class Bot extends EventEmitter {
     
     await phase('packageloader', () => Packageloader());
     
-    const [configResult, streamResult, pluginsResult, apiResult] = await phase('loaders', () =>
+    // Config 先于 Plugins：AI 助手等 init 时需可读 ConfigManager
+    let configOk = false;
+    try {
+      await phase('configLoader', () => ConfigLoader.load());
+      setRuntimeGlobal('ConfigManager', ConfigLoader);
+      setRuntimeGlobal('cfg', cfg);
+      configOk = true;
+    } catch (err) {
+      BotUtil.makeLog('error', `配置加载失败: ${err?.message}`, '服务器');
+    }
+
+    const [streamResult, pluginsResult, apiResult] = await phase('loaders', () =>
       Promise.allSettled([
-        ConfigLoader.load(),
         StreamLoader.load(),
         PluginsLoader.load(),
         ApiLoader.load()
       ])
     );
-    
-    // 处理加载结果（统一处理，避免重复日志）
-    if (configResult.status === 'fulfilled') {
-      setRuntimeGlobal('ConfigManager', ConfigLoader);
-      setRuntimeGlobal('cfg', cfg);
-    } else {
-      BotUtil.makeLog('error', `配置加载失败: ${configResult.reason?.message}`, '服务器');
+
+    if (!configOk) {
+      /* already logged */
     }
     
     if (streamResult.status === 'rejected') {
@@ -3230,10 +3176,11 @@ export default class Bot extends EventEmitter {
       Promise.allSettled([
         ConfigLoader.watch(true),
         StreamLoader.watch(true),
-        PluginsLoader.watch(true)
+        PluginsLoader.watch(true),
+        ApiLoader.watch(true)
       ])
     );
-    const watchLabels = ['配置', '工作流', '插件'];
+    const watchLabels = ['配置', '工作流', '插件', 'API'];
     watchResults.forEach((result, i) => {
       if (result.status === 'rejected') {
         BotUtil.makeLog('error', `${watchLabels[i]}热加载启动失败: ${result.reason?.message}`, '服务器');
@@ -3269,12 +3216,7 @@ export default class Bot extends EventEmitter {
       await phase('proxyListen', () => this.startProxyServers());
     }
     
-    await phase('listener', () =>
-      Promise.all([
-        ListenerLoader.load(this),
-        ApiLoader.watch(true)
-      ])
-    );
+    await phase('listener', () => ListenerLoader.load(this));
     
     const loadTime = Date.now() - startTime;
     cfg.enableWatching?.();
@@ -3314,7 +3256,8 @@ export default class Bot extends EventEmitter {
     const phaseLabels = {
       proxyInit: '反向代理初始化',
       packageloader: 'Packageloader',
-      loaders: 'Loader 并行加载',
+      configLoader: '配置加载',
+      loaders: 'Stream/Plugins/Api 并行加载',
       watchSetup: '热加载监视',
       middleware: '中间件与路由',
       apiRegister: 'API 注册',

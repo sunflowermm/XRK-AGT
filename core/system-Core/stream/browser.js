@@ -35,6 +35,8 @@ export default class BrowserStream extends AIStream {
       version: '1.0.0',
       author: 'XRK',
       priority: 92,
+      capabilities: ['tools'],
+      frameworkToolSurface: true,
       config: {
         enabled: true,
         temperature: 0.2,

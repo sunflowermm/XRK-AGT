@@ -5,9 +5,10 @@ import { getAistreamConfigOptional } from '#utils/aistream-config.js';
 import paths from '#utils/paths.js';
 import { validateApiInstance, getApiPriority } from './utils/helpers.js';
 import { FileLoader } from '#utils/file-loader.js';
-import { resolveCoreModuleKey } from '#utils/core-fs.js';
+import { resolveCoreModuleKey, resolveQualifiedCoreModuleKey } from '#utils/core-fs.js';
 import { HotReloadBase } from '#utils/hot-reload-base.js';
 import { API_REGISTER_BATCH_SIZE, LOADER_BATCH_SIZE } from '#utils/loader-constants.js';
+import { classifyModuleImportError } from '#utils/module-import-error.js';
 
 class ApiLoader {
   apis = new Map();
@@ -39,7 +40,7 @@ class ApiLoader {
 
   async getApiKey(filePath) {
     const httpDirs = this._httpDirsCache ?? await paths.getCoreSubDirs('http');
-    return resolveCoreModuleKey(filePath, httpDirs);
+    return resolveQualifiedCoreModuleKey(filePath, httpDirs, 'http');
   }
 
   async loadApi(filePath) {
@@ -87,7 +88,14 @@ class ApiLoader {
       this.apis.set(key, apiInstance);
       return true;
     } catch (error) {
-      BotUtil.makeLog('error', `加载API失败: ${filePath} - ${error.message}`, 'ApiLoader', error);
+      const classified = classifyModuleImportError(error);
+      let detail = error.message;
+      if (classified.kind === 'missing_export') {
+        detail = `模块未导出 ${classified.exportName}（Runtime database 仅 Redis；Mongo/PG/Vector 请用对应 Core）`;
+      } else if (classified.kind === 'missing_package') {
+        detail = `缺少依赖 ${classified.packageName || '未知'}，请 pnpm add 后重启`;
+      }
+      BotUtil.makeLog('error', `加载API失败: ${filePath} - ${detail}`, 'ApiLoader', error);
       return false;
     }
   }
@@ -217,7 +225,7 @@ class ApiLoader {
     const apiDirs = await paths.getCoreSubDirs('http');
     for (const apiDir of apiDirs) {
       const files = await FileLoader.readFiles(apiDir, { ext: '.js', recursive: true });
-      const file = files.find((f) => resolveCoreModuleKey(f, [apiDir]) === key);
+      const file = files.find((f) => resolveQualifiedCoreModuleKey(f, [apiDir], 'http') === key);
       if (file) return file;
     }
     return null;

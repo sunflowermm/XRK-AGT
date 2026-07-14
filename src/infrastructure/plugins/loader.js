@@ -15,6 +15,10 @@ import { matchEventPattern as matchEventPatternFn, findInCoreSubDirs, statFiles,
 import { EventNormalizer } from '#utils/event-normalizer.js'
 import { FileLoader } from '#utils/file-loader.js'
 import BotUtil from '#utils/botutil.js'
+import {
+  classifyModuleImportError,
+  isMissingPackageError
+} from '#utils/module-import-error.js'
 import { HotReloadBase } from '#utils/hot-reload-base.js'
 import { LOADER_BATCH_SIZE } from '#utils/loader-constants.js'
 import { segment } from '#oicq'
@@ -710,9 +714,20 @@ class PluginsLoader {
     this.identifyDefaultMsgHandlers()
   }
 
-  /** 插件文件键名（不含 .js，与热重载/unload 一致） */
+  /** 插件文件短键名（不含 .js） */
   _pluginFileKey(nameOrPath) {
     return HotReloadBase.moduleFileKey(nameOrPath);
+  }
+
+  /** 多 Core 限定键：`system-Core/ai`；已是 `core/name` 则原样返回 */
+  _pluginQualifiedKey(filePathOrKey, coreLabel = null) {
+    const s = String(filePathOrKey ?? '');
+    if (s.includes('/') && !s.endsWith('.js') && !s.includes('\\')) return s.replace(/\\/g, '/');
+    const base = this._pluginFileKey(s);
+    const label = coreLabel || (s.includes(path.sep) || s.endsWith('.js')
+      ? resolvePluginCoreLabel(s)
+      : null);
+    return label ? `${label}/${base}` : base;
   }
 
   async getPlugins() {
@@ -725,10 +740,11 @@ class PluginsLoader {
       })
 
       for (const filePath of files) {
+        const core = resolvePluginCoreLabel(filePath)
         ret.push({
-          name: this._pluginFileKey(filePath),
+          name: this._pluginQualifiedKey(filePath, core),
           path: filePath,
-          core: resolvePluginCoreLabel(filePath)
+          core
         })
       }
     } catch (error) {
@@ -783,11 +799,17 @@ class PluginsLoader {
       // 优化：简化返回逻辑
       return app.apps || app
     } catch (error) {
-      if (error.stack?.includes('Cannot find package')) {
+      if (isMissingPackageError(error)) {
         packageErr.push({ error, file })
       } else {
-        // 优化：减少错误日志输出，避免阻塞
-        logger.debug(`加载插件模块错误: ${file.name}`, error.message)
+        const classified = classifyModuleImportError(error)
+        if (classified.kind === 'missing_export') {
+          logger.warn(
+            `${file.name} 导出不匹配: 缺少 ${classified.exportName}（${classified.packageName || 'unknown'}）`
+          )
+        } else {
+          logger.debug(`加载插件模块错误: ${file.name}`, error.message)
+        }
       }
       return {}
     }
@@ -801,19 +823,20 @@ class PluginsLoader {
   async initializePlugin(plugin) {
     if (!plugin?.init) return true
 
+    // 只发起一次 init；超时后勿再次调用（否则会双初始化）
+    const initPromise = Promise.resolve().then(() => plugin.init())
     try {
-      // 优化：减少超时时间到1.5秒，快速失败
       const initRes = await Promise.race([
-        plugin.init(),
+        initPromise,
         new Promise((resolve, reject) => setTimeout(() => reject(new Error('init_timeout')), 1500))
       ])
       return initRes !== 'return'
     } catch (err) {
-      // 优化：超时不视为错误，允许插件延迟初始化
       if (err.message === 'init_timeout') {
-        logger.debug(`插件 ${plugin.name} 初始化超时，将在后台继续初始化`)
-        // 后台继续初始化，不阻塞加载流程
-        plugin.init().catch(() => {})
+        logger.debug(`插件 ${plugin.name} 初始化超时，将在后台继续（不重复 init）`)
+        initPromise.catch((e) => {
+          logger.error(`插件 ${plugin.name} 后台初始化错误: ${e?.message || e}`)
+        })
         return true
       }
       logger.error(`插件 ${plugin.name} 初始化错误: ${err.message}`)
@@ -988,12 +1011,13 @@ class PluginsLoader {
 
   packageTips(packageErr) {
     if (!packageErr?.length) return
-    logger.error('--------- 插件加载错误 ---------')
+    logger.error('--------- 插件缺少 npm 依赖 ---------')
     packageErr.forEach(({ error, file }) => {
-      const pack = error.stack?.match(/'(.+?)'/g)?.[0]?.replace(/'/g, '') || '未知依赖'
+      const classified = classifyModuleImportError(error)
+      const pack = classified.packageName || '未知依赖'
       logger.warn(`${file.name} 缺少依赖: ${pack}`)
     })
-    logger.error(`安装插件后请 pnpm i 安装依赖`)
+    logger.error('请在仓库根目录执行: pnpm add <依赖名> 后重启')
     logger.error('--------------------------------')
   }
 
@@ -1405,8 +1429,17 @@ class PluginsLoader {
    * @param {string} key - 插件文件名（不含扩展名）
    */
   unloadPlugin(key) {
-    const normalizedKey = this._pluginFileKey(key)
-    const matchesKey = (pluginKey) => this._pluginFileKey(pluginKey) === normalizedKey
+    const normalizedKey = this._pluginQualifiedKey(key)
+    const shortKey = this._pluginFileKey(key)
+    const matchesKey = (pluginKey) => {
+      const q = this._pluginQualifiedKey(pluginKey)
+      if (q === normalizedKey) return true
+      // 兼容旧 basename 键：仅当限定键后缀匹配且调用方给的是短名时
+      if (!String(key).includes('/')) {
+        return this._pluginFileKey(pluginKey) === shortKey || q.endsWith(`/${shortKey}`)
+      }
+      return false
+    }
 
     // 清理定时任务（精确匹配插件键名）
     this.task = this.task.filter(task => {
@@ -1546,7 +1579,7 @@ class PluginsLoader {
       const started = await hotReload.watch(true, {
         dirs: pluginDirs,
         onAdd: async (filePath) => {
-          const key = hotReload.getFileKey(filePath)
+          const key = this._pluginQualifiedKey(filePath)
           logger.mark(`[新增插件][${key}]`)
           try {
             const file = this.buildPluginFileObject(filePath, key)
@@ -1560,12 +1593,12 @@ class PluginsLoader {
           }
         },
         onChange: async (filePath) => {
-          const key = hotReload.getFileKey(filePath)
+          const key = this._pluginQualifiedKey(filePath)
           logger.mark(`[修改插件][${key}]`)
           await this.changePlugin(key, filePath)
         },
         onUnlink: async (filePath) => {
-          const key = hotReload.getFileKey(filePath)
+          const key = this._pluginQualifiedKey(filePath)
           logger.mark(`[删除插件][${key}]`)
           this.unloadPlugin(key)
         }

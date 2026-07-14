@@ -53,8 +53,8 @@ sequenceDiagram
   Note over Boot: bot.js 首行 import
   Boot->>Boot: globalThis.plugin / segment
   Start->>Bot: setRuntimeGlobal('Bot')
-  Bot->>Load: Config / Stream / Plugins / Api
-  Load->>Load: setRuntimeGlobal('cfg' / 'ConfigManager')
+  Bot->>Load: ConfigLoader 先完成并挂 ConfigManager
+  Bot->>Load: 再并行 Stream / Plugins / Api
   Note over Load: Tasker 注册 Bot.tasker / Bot.wsf
   Note over Load: stdin Tasker → setRuntimeGlobal('stdinHandler')
 ```
@@ -64,7 +64,7 @@ sequenceDiagram
 | `bot.js` 模块加载 | `plugin`、`segment` | `src/bootstrap-globals.js` | 裸名 `segment`；基类 `import plugin from '…'` |
 | `bot.js` constructor | HTTP 业务层方法、`callSubserver` 等 | `Bot._mountHttpBusinessMethods()`、`_initSubServer()` | `Bot.handleRedirect(req,res)` 等 |
 | `start.js` / `TaskerLoader` | `Bot` | `start.js`、`tasker/loader.js` | 裸名 `Bot`，勿 `new Bot()` |
-| `Bot.run` 配置阶段 | `cfg`、`ConfigManager` | `bot.js` → `ConfigLoader.load()` | `import cfg` 或裸 `cfg`（加载完成后） |
+| `Bot.run` 配置阶段 | `cfg`、`ConfigManager` | **先** `ConfigLoader.load()` 再其它 Loader | `import cfg` 或裸 `cfg`（配置阶段完成后） |
 | 模块 side-effect | `Renderer`（基类） | `renderer/loader.js` 顶层 | 继承 `Renderer`；实例 `getRenderer()` |
 | stdin Tasker 初始化 | `stdinHandler` | `core/system-Core/tasker/stdin.js` | 一般业务不直接碰 |
 | `ApiLoader.register` | `req.bot`、`req.apiLoader` | `http/loader.js` 中间件 | handler 第三参或 `req.bot` |

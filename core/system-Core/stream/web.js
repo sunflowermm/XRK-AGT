@@ -29,6 +29,8 @@ export default class WebStream extends AIStream {
       version: '1.2.0',
       author: 'XRK',
       priority: 95,
+      capabilities: ['tools'],
+      frameworkToolSurface: true,
       config: {
         enabled: true,
         temperature: 0.3,

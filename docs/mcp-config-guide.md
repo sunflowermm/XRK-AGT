@@ -102,7 +102,7 @@ XRK-AGT 提供以下工作流，每个工作流包含一组相关工具：
 
 **工作流使用说明**：
 - **主工作流**：通过 `mergeStreams` 参数合并，用于完整功能场景
-- **工具工作流**：通过 `enableMemory`、`enableDatabase`、`enableTools` 标志启用，自动整合到主工作流中
+- **工具工作流**：写入 `mergeStreams: ['memory','database','tools']`（或兼容别名 `enableMemory` 等，最终仍走 `StreamLoader.mergeStreams`）
 
 > 详细工具列表和参数说明请参考 [MCP 完整指南](mcp-guide.md)。
 

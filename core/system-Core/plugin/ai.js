@@ -12,7 +12,6 @@ import {
   rawMessageTextForAiTrigger,
   resolveChatStream,
   runChatAgent,
-  scheduleChatStreamMerge,
   shouldTriggerAI,
   isInAiWhitelist,
 } from '../lib/ai-assistant-runtime.js';
@@ -30,13 +29,15 @@ export class XRKAIAssistant extends plugin {
 
   async init() {
     this.config = await loadAiAssistantConfig();
-    scheduleChatStreamMerge(this.config);
     logAiInit(this.config);
   }
 
   async handleMessage() {
     const e = this.e;
     try {
+      // 每次触发重读，与 CommonConfig 热更对齐（ConfigBase 有缓存）
+      this.config = await loadAiAssistantConfig();
+
       const msgText = String(e.msg || '').trim();
       const normalized = msgText.startsWith('#') ? msgText.slice(1).trim() : msgText;
       if (normalized === '清空对话') {
@@ -47,7 +48,6 @@ export class XRKAIAssistant extends plugin {
         return handleClearConversation(e);
       }
 
-      if (!this.config) this.config = await loadAiAssistantConfig();
       if (this.config.enabled === false) return false;
 
       const rawForDump = rawMessageTextForAiTrigger(e);

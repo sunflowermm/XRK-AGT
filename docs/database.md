@@ -123,7 +123,9 @@ system-Core HTTP（如 `core/system-Core/http/core.js`）与 `src/modules/system
 | 本机开发 | `127.0.0.1:6379` | 按本机 redis 安装 |
 | docker-compose | 服务名 `redis` | 卷 `redis-data` |
 
-连接失败时，非生产环境日志会提示手动启动命令（如 `redis-server`）。完整编排见 [docker.md](docker.md)。
+连接失败时，非生产环境日志会提示手动启动命令。完整编排见 [docker.md](docker.md)。
+
+**Windows**：推荐安装 **Memurai Developer**（Redis API 兼容，Windows 服务名 `Memurai`，开机自启）。`start.bat` / `scripts/ensure-redis.cmd` 会 `net start Memurai` 并探测 `127.0.0.1:6379`；CLI 可用 `memurai-cli`（或 `%ProgramFiles%\Memurai\memurai-cli.exe`）。不要用 WSL Redis（localhost 转发易断）。
 
 ---
 
@@ -139,7 +141,13 @@ system-Core HTTP（如 `core/system-Core/http/core.js`）与 `src/modules/system
 
 ## 其它数据库（业务 Core）
 
-MongoDB / Postgres 等由 `core/<产品>/` 自行引入，不在 Runtime 初始化；亦不在 `docker-compose.yml` 默认栈内。
+MongoDB / Postgres / Qdrant（Vector）由 `core/<产品>/` 自行引入，**不在** Runtime `database/index.js` 初始化；亦无 `getMongoDb` 等 Runtime 导出。业务侧应：
+
+```javascript
+const { getDb } = await import('../../mongodb-Core/lib/index.js');
+```
+
+可选存储 Core（mongodb / postgres / vector）在服务未就绪或 npm 依赖未装时 **bootstrap 软失败**（warn，不阻断 AGT）。缺少 `mongodb` / `pg` 等包时，插件 Loader 会归类为「缺少 npm 依赖」并提示 `pnpm add`。
 
 ---
 

@@ -358,7 +358,8 @@ GET /api/mcp/health
 - 后端将其解析为 `streams` 白名单，传给 LLM 工厂和 `MCPToolAdapter`；
 - LLM 客户端在收到 `tool_calls` 时，会通过 `MCPToolAdapter.handleToolCalls(tool_calls, options)` 执行工具；
 - `options` 可含 `streams`（白名单）、`parallel_tool_calls`（为 `false` 时**顺序**执行同轮 tool_calls，避免 reply 与其它 MCP 抢状态）；
-- MCP handler 的 `context.e` / `context.turnState` 优先从 `runWithStreamRequestContext`（AsyncLocalStorage）读取，并发消息互不串线；无 ALS 时回退 `StreamLoader.currentEvent`；
+- MCP handler 的 `context.e` / `context.turnState` 优先从 `runWithStreamRequestContext`（AsyncLocalStorage）读取，并发消息互不串线；无 ALS 时回退 `StreamLoader.currentEvent`（**遗留兼容，计划移除**，新代码务必建 ALS）；
+- 远程 MCP **stdio** 子进程默认 `shell: false`（防命令注入）；确需 shell 语法时在该服务器配置里显式 `"shell": true`；
 - `MCPToolAdapter` 会基于 `streams` 计算出**允许的工具集合**，只有这些工具可以被真正调用，其它工具调用会被拒绝并返回错误结果。
 
 > 换句话说：**前端/调用方在 v3 接口里没有显式允许的工作流，其下所有 MCP 工具都不会被 AI 使用**，确保工具权限和作用域可控。

@@ -1,20 +1,41 @@
 /**
- * chat 对话 MCP 工具流白名单：mergeStreams 副流 + 框架自研能力 + 远程 MCP
+ * chat 对话 MCP 工具流白名单：mergeStreams 副流 + frameworkToolSurface 流 + 远程 MCP
  */
 import BotUtil from '#utils/botutil.js';
 import StreamLoader from '#infrastructure/aistream/loader.js';
 
-/** 框架自研能力流：chat 白名单始终包含（无需写入 mergeStreams） */
+/** 未声明 frameworkToolSurface 时的兼容回退（web/browser） */
 export const CHAT_FRAMEWORK_TOOL_STREAMS = ['web', 'browser'];
 
+/** 是否对话 Agent 工具表面（chat 或以其为主流的合成实例） */
 export function isChatToolSurface(stream) {
   if (!stream) return false;
-  if (stream.name === 'chat' || stream.name === 'chat-merged') return true;
+  if (stream.name === 'chat') return true;
   if (stream.primaryStream === 'chat') return true;
   if (Array.isArray(stream._mergedStreams) && stream._mergedStreams.some((s) => s?.name === 'chat')) {
     return true;
   }
+  // 兼容历史命名 chat-* / chat-merged
+  if (typeof stream.name === 'string' && (stream.name === 'chat-merged' || stream.name.startsWith('chat-'))) {
+    return true;
+  }
   return false;
+}
+
+/** 扫描已加载流上的 frameworkToolSurface；若无则回退硬编码名单 */
+export function getFrameworkToolStreamNames() {
+  const fromMeta = [];
+  try {
+    for (const s of StreamLoader.streams.values()) {
+      if (!s?.frameworkToolSurface || !s.name) continue;
+      if (Array.isArray(s._mergedStreams) && s._mergedStreams.length > 0) continue;
+      if (!fromMeta.includes(s.name)) fromMeta.push(s.name);
+    }
+  } catch (err) {
+    BotUtil.makeLog('debug', `扫描 frameworkToolSurface 失败: ${err?.message || err}`, 'ChatToolStreams');
+  }
+  if (fromMeta.length) return fromMeta;
+  return [...CHAT_FRAMEWORK_TOOL_STREAMS];
 }
 
 export function appendRemoteMcpStreamNames(names) {
@@ -38,7 +59,7 @@ export function expandChatToolStreamWhitelist(baseNames) {
   if (Array.isArray(baseNames)) {
     for (const n of baseNames) add(n);
   }
-  for (const n of CHAT_FRAMEWORK_TOOL_STREAMS) add(n);
+  for (const n of getFrameworkToolStreamNames()) add(n);
   appendRemoteMcpStreamNames(names);
   return names;
 }
@@ -46,7 +67,7 @@ export function expandChatToolStreamWhitelist(baseNames) {
 /** 供 AIStream / HTTP 解析 LLM 工具白名单 */
 export function resolveToolStreamNames(stream) {
   const base =
-    stream?._mergedStreams && Array.isArray(stream._mergedStreams)
+    stream?._mergedStreams && Array.isArray(stream._mergedStreams) && stream._mergedStreams.length > 0
       ? stream._mergedStreams.map((s) => s.name)
       : [stream?.name].filter(Boolean);
 
@@ -64,11 +85,11 @@ export function resolveToolStreamNames(stream) {
 export function collectAuxiliaryStreamPrompts(stream, context = {}) {
   if (!stream || !isChatToolSurface(stream)) return '';
   const names = resolveToolStreamNames(stream);
-  const skip = new Set(['chat', 'chat-merged', stream.name].filter(Boolean));
+  const skip = new Set(['chat', stream.name].filter(Boolean));
   const parts = [];
 
   for (const name of names) {
-    if (skip.has(name) || name.startsWith('remote-mcp.')) continue;
+    if (skip.has(name) || name.startsWith('remote-mcp.') || name.startsWith('chat-')) continue;
     const aux = StreamLoader.getStream(name);
     if (!aux || typeof aux.buildSystemPrompt !== 'function') continue;
     try {

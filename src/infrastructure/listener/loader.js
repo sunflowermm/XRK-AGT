@@ -44,6 +44,11 @@ class ListenerLoader {
     }
 
     BotUtil.makeLog('info', `加载监听事件[${eventCount}个]`, 'ListenerLoader');
+    BotUtil.makeLog(
+      'debug',
+      'events / tasker 不支持热重载，修改后需重启进程',
+      'ListenerLoader'
+    );
 
     if (process.argv.includes('server')) {
       await this.loadAdapters();

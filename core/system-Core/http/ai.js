@@ -25,6 +25,7 @@ import { pickPromptCacheOverrides } from '#utils/llm/prompt-cache-policy.js';
 import { expandChatToolStreamWhitelist } from '#infrastructure/aistream/chat-tool-streams.js';
 import { transformOpenAIStyleVisionMessages } from '#utils/llm/message-transform.js';
 import { assembleChatLlmMessages } from '#infrastructure/aistream/chat-pipeline.js';
+import { runWithStreamRequestContext } from '#infrastructure/aistream/stream-request-context.js';
 import {
   pickFirst,
   parseOptionalJson,
@@ -584,16 +585,17 @@ export default {
           };
 
           let acc = '';
-          const finalText = await stream.callAIStream(
-            messages,
-            llmOverrides,
-            (delta) => {
-        acc += delta;
-              res.write(`data: ${JSON.stringify({ delta, workflow: stream.name })}\n\n`);
-            },
-            {
-              context: executionContext
-            }
+          const finalText = await runWithStreamRequestContext(
+            { e: null, turnState: null },
+            () => stream.callAIStream(
+              messages,
+              llmOverrides,
+              (delta) => {
+                acc += delta;
+                res.write(`data: ${JSON.stringify({ delta, workflow: stream.name })}\n\n`);
+              },
+              { context: executionContext }
+            )
           );
 
           res.write(

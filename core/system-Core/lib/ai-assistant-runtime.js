@@ -1,16 +1,39 @@
 /**
- * AI 助手运行时 — 功能对齐 XRK-Yunzai，底层走 AGT stream.process / StreamLoader.mergeStreams
+ * AI 助手运行时 — 底层走 AGT stream.process / StreamLoader.mergeStreams
  */
+import StreamLoader from '#infrastructure/aistream/loader.js';
 import ChatStream from '../stream/chat.js';
 
-export const CHAT_MERGED_NAME = 'chat-merged';
 export const AI_FULL_PROMPT_DUMP_REGEX = /#?XRK完整AI上下文/;
 
 const cooldownState = new Map();
 
+function resolveAiConfigInstance() {
+  try {
+    const cm = typeof ConfigManager !== 'undefined' ? ConfigManager : null;
+    if (!cm?.get) return null;
+    const direct = cm.get('ai_config') || cm.get('system-Core/ai_config');
+    if (direct) return direct;
+    if (typeof cm.getAll === 'function') {
+      for (const [key, inst] of cm.getAll()) {
+        if (key === 'ai_config' || String(key).endsWith('/ai_config')) return inst;
+      }
+    }
+  } catch { /* ignore */ }
+  return null;
+}
+
+/** 始终走 ConfigManager（若已就绪）或模板实例；勿缓存过期快照 */
 export async function loadAiAssistantConfig() {
+  const inst = resolveAiConfigInstance();
+  if (inst && typeof inst.read === 'function') {
+    return inst.read(true);
+  }
+  if (inst && typeof inst === 'object' && !inst.read) {
+    return inst;
+  }
   const { default: AIConfig } = await import('../commonconfig/ai_config.js');
-  return new AIConfig().read();
+  return new AIConfig().read(true);
 }
 
 export function stripAiFullPromptDumpMark(raw) {
@@ -27,47 +50,11 @@ export function rawMessageTextForAiTrigger(e) {
   return e.message.map((seg) => (seg?.type === 'text' ? (seg.text || '') : '')).join('');
 }
 
-export function resolveChatStream(plugin, config) {
-  const mergeList = config?.mergeStreams;
-  if (Array.isArray(mergeList) && mergeList.length > 0) {
-    const merged = plugin.getStream(CHAT_MERGED_NAME);
-    if (merged) return merged;
-    const loader = Bot.StreamLoader;
-    if (loader?.mergeStreams) {
-      return loader.mergeStreams({
-        name: CHAT_MERGED_NAME,
-        main: 'chat',
-        secondary: mergeList,
-        prefixSecondary: true,
-      }) ?? plugin.getStream('chat');
-    }
-  }
-  return plugin.getStream('chat');
-}
-
-export function scheduleChatStreamMerge(config) {
-  const secondaries = config?.mergeStreams;
-  if (!Array.isArray(secondaries) || !secondaries.length) return;
-  const doMerge = () => {
-    try {
-      const loader = Bot.StreamLoader;
-      if (!loader?.mergeStreams) {
-        setTimeout(doMerge, 1000);
-        return;
-      }
-      if (loader.getStream?.(CHAT_MERGED_NAME)) return;
-      loader.mergeStreams({
-        name: CHAT_MERGED_NAME,
-        main: 'chat',
-        secondary: secondaries,
-        prefixSecondary: true,
-      });
-      logger.mark(`[XRK-AI] 合并工作流 chat + [${secondaries.join(', ')}]`);
-    } catch (err) {
-      logger.error(`[XRK-AI] 合并工作流失败: ${err.message}`);
-    }
-  };
-  setTimeout(doMerge, 0);
+/**
+ * 解析 chat 主流。组合副流由 runChatAgent → process({ mergeStreams }) 唯一完成。
+ */
+export function resolveChatStream(plugin, _config) {
+  return plugin.getStream?.('chat') || StreamLoader.getStream?.('chat') || null;
 }
 
 export function isInAiWhitelist(e, config) {
@@ -135,7 +122,7 @@ export async function processMessageContent(e, config) {
   }
 }
 
-/** 走 AGT AIStream.process：mergeStreams + enableMemory/Database/Tools */
+/** 走 AGT AIStream.process：唯一热路径 mergeStreams */
 export async function runChatAgent(_plugin, e, {
   text,
   persona = '',
@@ -149,7 +136,7 @@ export async function runChatAgent(_plugin, e, {
     return false;
   }
 
-  const ms = config?.mergeStreams ?? [];
+  const ms = Array.isArray(config?.mergeStreams) ? config.mergeStreams : [];
   await stream.process(
     e,
     {
@@ -161,9 +148,6 @@ export async function runChatAgent(_plugin, e, {
     },
     {
       mergeStreams: ms,
-      enableMemory: ms.includes('memory'),
-      enableDatabase: ms.includes('database'),
-      enableTools: ms.includes('tools'),
     },
   );
   return true;

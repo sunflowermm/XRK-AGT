@@ -135,22 +135,23 @@ sequenceDiagram
 | `process(e, question, options)` | 工作流处理入口（单次对话 + MCP 工具调用） |
 
 **process 方法参数**：
-- `mergeStreams` - 要合并的主工作流名称列表（`device`、`chat`、`desktop`）
-- `enableMemory` - 是否启用记忆系统，自动整合 `memory` 工具工作流（默认 `false`）
-- `enableDatabase` - 是否启用知识库系统，自动整合 `database` 工具工作流（默认 `false`）
-- `enableTools` - 是否启用文件操作工具，自动整合 `tools` 工具工作流（默认 `false`）
-- `apiConfig` - LLM配置（可选，会与 `this.config` 合并）
+- `mergeStreams` - **唯一推荐**组合路径：副工作流名称列表（如 `memory`、`database`、`tools`、`desktop`）
+- `enableMemory` / `enableDatabase` / `enableTools` - 无 `mergeStreams` 时的兼容别名，映射为副流后仍走 `StreamLoader.mergeStreams`（**不再**原地 mutate 主单例）
+- 其余字段 - 作为 LLM `apiConfig` 覆盖（与 `this.config` 合并）
 
 **工作流分类**：
-- **主工作流**：`device`、`chat`、`desktop`（通过 `mergeStreams` 合并）
-- **工具工作流**：`memory`、`database`、`tools`（通过标志启用）
+- **对话主表面**：`chat`（及 `mergeStreams` 合成实例）
+- **能力副流**：`memory`、`database`、`tools`、`desktop` 等，按名列入 `mergeStreams`
+- **框架自研工具面**：声明 `frameworkToolSurface: true` 的流（如 `web`、`browser`）自动并入 chat 工具白名单，无需写入 `mergeStreams`
+
+**请求上下文**：优先 `runWithStreamRequestContext`（ALS）；`StreamLoader.currentEvent` 仅作遗留回退，计划移除。
 
 **调用流程**：
-1. `buildChatContext` - 构建基础消息数组
-2. `buildEnhancedContext` - RAG流程：检索历史对话和知识库
-3. `callAI` - 调用 LLM
-4. `storeMessageMemory` - 存储到 MemoryManager 短期记忆
-5. 自动发送回复（插件不需要再次调用 `reply()`）
+1. `buildChatContext` / chat 自定义上下文 - 构建消息
+2. `buildEnhancedContext` - 可选知识库钩子；长期记忆为简单 includes，**非**向量 embedding RAG
+3. `callAI` - 调用 LLM（含 MCP tool calling）
+4. 基类可 `storeMessageMemory` 写短期；chat 可见历史另有通路
+5. 发送回复（chat 走 reply 协议；基类可直接 `e.reply`）
 
 ## 完整API参考
 
@@ -164,51 +165,34 @@ sequenceDiagram
 - `e` - 事件对象（QQ/IM/Chatbot 等消息事件）
 - `question` - 用户问题（字符串或对象）
 - `options` - 选项对象
-  - `mergeStreams` - 要合并的主工作流名称数组（`device`、`chat`、`desktop`）
-  - `enableMemory` - 是否启用记忆系统（自动整合 `memory` 工具工作流）
-  - `enableDatabase` - 是否启用知识库系统（自动整合 `database` 工具工作流）
-  - `enableTools` - 是否启用文件操作工具（自动整合 `tools` 工具工作流）
-  - `apiConfig` - LLM配置覆盖（provider, model, temperature等）
+  - `mergeStreams` - 副工作流名称数组（推荐唯一组合入口）
+  - `enableMemory` / `enableDatabase` / `enableTools` - 兼容别名 → 并入副流列表
+  - 其它键 - LLM 配置覆盖（provider, model, temperature 等）
 
 **返回**：`Promise<string|null>` - AI回复文本
-
-**工作流分类**：
-- **主工作流**：`device`、`chat`、`desktop`（通过 `mergeStreams` 合并）
-- **工具工作流**：`memory`、`database`、`tools`（通过标志启用）
 
 **示例**：
 ```javascript
 // 基础调用（仅使用当前工作流）
 await stream.process(e, e.msg);
 
-// 启用工具工作流（记忆、知识库、文件操作）
+// 推荐：显式 mergeStreams
+await stream.process(e, e.msg, {
+  mergeStreams: ['memory', 'database', 'tools', 'desktop']
+});
+
+// 兼容别名（无 mergeStreams 时映射为同上副流，不 mutate 单例）
 await stream.process(e, e.msg, {
   enableMemory: true,
   enableDatabase: true,
   enableTools: true
 });
 
-// 合并主工作流（chat + desktop）
+// 自定义 LLM 字段与 merge 并列
 await stream.process(e, e.msg, {
-  mergeStreams: ['desktop']
-});
-
-// 完整示例：主工作流 + 工具工作流
-await stream.process(e, e.msg, {
-  mergeStreams: ['desktop'],  // 合并主工作流
-  enableMemory: true,         // 整合工具工作流
-  enableDatabase: true,      // 整合工具工作流
-  enableTools: true          // 整合工具工作流
-});
-
-// 自定义LLM配置
-await stream.process(e, e.msg, {
-  enableMemory: true,
-  apiConfig: {
-    provider: 'volcengine',
-    model: 'gpt-4',
-    temperature: 0.7
-  }
+  mergeStreams: ['memory', 'tools'],
+  provider: 'volcengine',
+  temperature: 0.7
 });
 ```
 
@@ -308,7 +292,7 @@ await stream.callAIStream(messages, {}, (delta) => {
 // ❌ 不推荐：在 init() 中主动合并
 async init() {
 const toolsStream = StreamLoader.getStream('tools');
-  this.merge(toolsStream);
+  // 已废弃：勿 this.merge()；请 process({ mergeStreams: ['tools'] })
 }
 
 // ✅ 推荐：通过调用参数控制合并
@@ -474,23 +458,9 @@ llm:
 
 ### MonitorService集成
 
-工作流执行自动记录：
-- 执行追踪（traceId）
-- Token使用统计
-- 成本统计
-- 错误日志
+基类 `AIStream.execute` 会用流名作为 `traceId` 记步骤与 token；`ChatStream` 覆盖 `execute` 后以自有路径为主。Monitor 为进程内轻量观测，**非** OpenTelemetry；勿当作完整 APM。
 
-**示例**：
-```javascript
-const traceId = MonitorService.startTrace(this.name, {
-  agentId: e?.user_id,
-  workflow: this.name
-});
-
-// ... 执行逻辑 ...
-
-MonitorService.endTrace(traceId, { success: true });
-```
+`recordTokens` 的 traceId 须与 `startTrace` 一致（流名，如 `chat`），勿使用 `chat.callAI` 这类找不到 trace 的键。
 
 ---
 

@@ -2,6 +2,7 @@ import path from 'path';
 import { spawn } from 'child_process';
 import BotUtil from '#utils/botutil.js';
 import paths from '#utils/paths.js';
+import { resolveQualifiedCoreModuleKey } from '#utils/core-fs.js';
 import { getAistreamConfigOptional } from '#utils/aistream-config.js';
 import { getStreamRequestContext } from './stream-request-context.js';
 import { MCPServer } from '#utils/mcp-server.js';
@@ -168,7 +169,7 @@ class StreamLoader {
    */
   async load(isRefresh = false) {
     if (!isRefresh && this.loaded) {
-      BotUtil.makeLog('debug', '⚠️ 工作流已加载，跳过', 'StreamLoader');
+      BotUtil.makeLog('debug', '工作流已加载，跳过', 'StreamLoader');
       return;
     }
 
@@ -196,8 +197,10 @@ class StreamLoader {
         return;
       }
 
+      this._streamDirsCache = await paths.getCoreSubDirs('stream');
       // 阶段1: 加载工作流类
       await FileLoader.forEachBatch(files, LOADER_BATCH_SIZE, (file) => this.loadStreamClass(file));
+      this._streamDirsCache = null;
 
       // 阶段2: 合并 Embedding/RAG 配置到各工作流
       this.applyEmbeddingConfig(getAistreamConfigOptional().embedding || {});
@@ -244,8 +247,23 @@ class StreamLoader {
         await stream.init();
       }
 
-      // 保存
+      // 文件键同时记 basename 与 Core 限定名，供热重载精确清理
+      const qualifiedFileKey = resolveQualifiedCoreModuleKey(
+        file,
+        this._streamDirsCache || [],
+        'stream'
+      );
       this.fileKeyToStreamName.set(streamName, stream.name);
+      if (qualifiedFileKey && qualifiedFileKey !== streamName) {
+        this.fileKeyToStreamName.set(qualifiedFileKey, stream.name);
+      }
+      if (this.streams.has(stream.name)) {
+        BotUtil.makeLog(
+          'warn',
+          `工作流名冲突，后加载覆盖: ${stream.name} ← ${qualifiedFileKey || streamName}`,
+          'StreamLoader'
+        );
+      }
       this.streams.set(stream.name, stream);
       this.streamClasses.set(stream.name, StreamClass);
 
@@ -354,7 +372,7 @@ class StreamLoader {
    * 重新加载工作流
    */
   async reload() {
-    BotUtil.makeLog('info', '🔄 开始重新加载...', 'StreamLoader');
+    BotUtil.makeLog('info', '开始重新加载...', 'StreamLoader');
     
     // 清理
     for (const stream of this.streams.values()) {
@@ -369,7 +387,7 @@ class StreamLoader {
     
     // 重新加载
     await this.load();
-    BotUtil.makeLog('success', '✅ 重新加载完成', 'StreamLoader');
+    BotUtil.makeLog('success', '重新加载完成', 'StreamLoader');
   }
 
   getStream(name) {
@@ -462,12 +480,14 @@ class StreamLoader {
     merged.secondaryStreams = secondaryStreams.map(s => s.name);
     merged._mergedStreams = [mainStream, ...secondaryStreams];
     merged.mcpTools = new Map();
+    // 禁止沿用主流失效的工具白名单缓存
+    merged._cachedToolStreamNames = null;
 
     const adoptMCPTools = (source, isPrimary) => {
       if (!source.mcpTools) return;
       for (const [tname, tconfig] of source.mcpTools.entries()) {
         const newName = (!isPrimary && prefixSecondary) ? `${source.name}.${tname}` : tname;
-        if (merged.mcpTools.has(newName)) continue; // 避免冲突覆盖
+        if (merged.mcpTools.has(newName)) continue;
         merged.mcpTools.set(newName, {
           ...tconfig,
           source: source.name,
@@ -481,24 +501,20 @@ class StreamLoader {
       adoptMCPTools(s, false);
     }
 
-    // 合并流执行时把 deviceId 同步到主/副流，避免 MCP 按名称调用 xiaozhi.xxx 时主工作流 _currentDeviceId 未设置导致 DEVICE_NOT_FOUND
-    const origExecute = merged.execute;
-    if (typeof origExecute === 'function') {
-      merged.execute = async function (deviceId, ...restArgs) {
-        for (const s of merged._mergedStreams || []) {
-          if (s) s._currentDeviceId = deviceId;
-        }
-        return origExecute.call(this, deviceId, ...restArgs);
-      };
-    }
-
     this.streams.set(mergedName, merged);
     return merged;
   }
 
-  /** 为单个工作流注册 MCP 工具（供插件 init 等动态合并后调用） */
+  /**
+   * 为单个工作流注册 MCP 工具（供插件 init 等动态合并后调用）
+   * 跳过合成实例；工具名已含 `.` 前缀时不再二次加 stream.name
+   */
   registerStreamTools(stream) {
     if (!this.mcpServer || !stream?.mcpTools?.size) return;
+    if (Array.isArray(stream._mergedStreams) && stream._mergedStreams.length > 0) {
+      BotUtil.makeLog('debug', `跳过合成流 registerStreamTools: ${stream.name}`, 'StreamLoader');
+      return;
+    }
     for (const [toolName, tool] of stream.mcpTools.entries()) {
       this._registerTool(this.mcpServer, stream, toolName, tool);
     }
@@ -508,7 +524,7 @@ class StreamLoader {
    * 清理所有资源
    */
   async cleanupAll() {
-    BotUtil.makeLog('info', '🧹 清理资源...', 'StreamLoader');
+    BotUtil.makeLog('info', '清理资源...', 'StreamLoader');
     
     await this._hotReload?.stop();
     this._hotReload = null;
@@ -528,7 +544,7 @@ class StreamLoader {
     this.fileKeyToStreamName.clear();
     this.loaded = false;
 
-    BotUtil.makeLog('success', '✅ 清理完成', 'StreamLoader');
+    BotUtil.makeLog('success', '清理完成', 'StreamLoader');
   }
 
   /**
@@ -549,7 +565,10 @@ class StreamLoader {
 
   _streamNameForFile(filePath) {
     const fileKey = path.basename(filePath, '.js')
-    return this.fileKeyToStreamName.get(fileKey) ?? fileKey
+    const qualified = resolveQualifiedCoreModuleKey(filePath, [], 'stream')
+    return this.fileKeyToStreamName.get(qualified)
+      ?? this.fileKeyToStreamName.get(fileKey)
+      ?? fileKey
   }
 
   /**
@@ -610,7 +629,11 @@ class StreamLoader {
 
   _registerTool(mcpServer, stream, toolName, tool) {
     if (!tool?.enabled || !mcpServer?.registerTool) return false;
-    const fullToolName = stream.name !== 'mcp' ? `${stream.name}.${toolName}` : toolName;
+    // 已是 stream.tool 或 remote 前缀则不再二次加名
+    const alreadyQualified = String(toolName).includes('.');
+    const fullToolName = stream.name === 'mcp' || alreadyQualified
+      ? toolName
+      : `${stream.name}.${toolName}`;
     const loader = this;
     mcpServer.registerTool(fullToolName, {
       description: tool.description || `执行${toolName}操作`,
@@ -647,9 +670,14 @@ class StreamLoader {
     if (!mcpServer) return;
     const seen = new Set();
     for (const stream of this.streams.values()) {
+      // 合成实例工具已带二次前缀风险；只从成分流注册，LLM 白名单按成分流名匹配
+      if (Array.isArray(stream?._mergedStreams) && stream._mergedStreams.length > 0) continue;
       if (!stream?.mcpTools?.size) continue;
       for (const [toolName, tool] of stream.mcpTools.entries()) {
-        const full = stream.name !== 'mcp' ? `${stream.name}.${toolName}` : toolName;
+        const alreadyQualified = String(toolName).includes('.');
+        const full = stream.name === 'mcp' || alreadyQualified
+          ? toolName
+          : `${stream.name}.${toolName}`;
         if (seen.has(full)) continue;
         if (this._registerTool(mcpServer, stream, toolName, tool)) seen.add(full);
       }
@@ -805,7 +833,8 @@ class StreamLoader {
 
     if (cfg.command) {
       // stdio 协议：通过子进程启动 MCP 服务器
-      const spawnShell = typeof cfg.shell === 'boolean' ? cfg.shell : true;
+      // 默认禁 shell（防命令注入）；需管道/特殊 shell 语法时在 mcp 配置显式 shell: true
+      const spawnShell = typeof cfg.shell === 'boolean' ? cfg.shell : false;
       const child = spawn(
         String(cfg.command),
         Array.isArray(cfg.args) ? cfg.args : [],

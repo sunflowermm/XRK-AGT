@@ -310,7 +310,7 @@ flowchart TB
     style Streams fill:#E3F2FD,stroke:#1976D2,stroke-width:2px
 ```
 
-> **说明**：若仓库中不存在 `stream/device.js`，则不会加载 `device` 工作流；自定义部署可自行添加该文件（`.gitignore` 中已预留白名单条目）。
+> **说明**：默认无 `stream/device.js`。设备 HTTP AI 入口在缺少 `device` 流时**回退 `chat`**；自定义部署可另加 `device` 流（`.gitignore` 中已预留白名单条目）。
 
 ### 1. chat 工作流
 

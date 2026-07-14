@@ -8,8 +8,14 @@ import {
 } from '#utils/db-connect-utils.js'
 import BotUtil from '#utils/botutil.js'
 import os from 'node:os'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
+import { access } from 'node:fs/promises'
 import { createClient } from 'redis'
 import { setRuntimeGlobal } from '#utils/runtime-globals.js'
+
+const PROJECT_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
+const ENSURE_REDIS_CMD = path.join(PROJECT_ROOT, 'scripts', 'ensure-redis.cmd')
 
 /** @type {import('redis').RedisClientType | null} */
 let globalClient = null
@@ -40,7 +46,9 @@ export default async function redisInit() {
     connectionUrl: redisUrl,
     createClient: () => createClient(clientConfig),
     onBeforeRetry: attemptRedisStart,
-    devHint: '手动启动: redis-server --daemonize yes'
+    devHint: process.platform === 'win32'
+      ? '手动启动: net start Memurai  或 scripts\\ensure-redis.cmd'
+      : '手动启动: redis-server --daemonize yes'
   })
 
   registerEventHandlers(client)
@@ -109,15 +117,33 @@ async function attemptRedisStart(retryCount) {
   if (process.env.NODE_ENV === 'production') return
 
   try {
-    const archOptions = await getArchitectureOptions()
-    const cmd = `redis-server --save 900 1 --save 300 10 --daemonize yes${archOptions}`
-
     BotUtil.makeLog('info', '尝试启动本地服务...', 'Redis')
-    await execCommandResult(cmd)
-    await common.sleep(2000 + retryCount * 1000)
+    if (process.platform === 'win32') {
+      await startRedisOnWindows()
+    } else {
+      const archOptions = await getArchitectureOptions()
+      await execCommandResult(
+        `redis-server --save 900 1 --save 300 10 --daemonize yes${archOptions}`
+      )
+    }
+    await common.sleep(1500 + retryCount * 1000)
   } catch (err) {
     const error = normalizeError(err)
     BotUtil.makeLog('debug', `启动失败: ${error.message}`, 'Redis')
+  }
+}
+
+/** Windows：复用 scripts/ensure-redis.cmd（Memurai / 原生 redis-server）。 */
+async function startRedisOnWindows() {
+  try {
+    await access(ENSURE_REDIS_CMD)
+  } catch {
+    throw new Error(`缺少 ${ENSURE_REDIS_CMD}`)
+  }
+  const result = await execCommandResult(`"${ENSURE_REDIS_CMD}"`)
+  const out = `${result.stdout}${result.stderr}`
+  if (result.error || !out.includes('127.0.0.1:6379 OK')) {
+    throw result.error || new Error(out.trim() || 'ensure-redis 失败')
   }
 }
 

@@ -1,22 +1,23 @@
 import StreamLoader from '#infrastructure/aistream/loader.js';
+import { getStreamRequestContext } from '#infrastructure/aistream/stream-request-context.js';
 
 /**
- * 在单次 stream 执行期间绑定 StreamLoader.currentEvent（供 MCP 工具读会话上下文）
+ * 遗留：在无 ALS 时绑定 StreamLoader.currentEvent。
+ * chat / 基类 execute 已用 runWithStreamRequestContext；有 ALS 时不再写 currentEvent。
+ * @deprecated 新代码只依赖 ALS。
  * @template T
  * @param {object|null} e
  * @param {() => Promise<T>} fn
  * @returns {Promise<T>}
  */
 export async function withStreamLoaderEvent(e, fn) {
-  let loader = null;
+  if (getStreamRequestContext()) {
+    return fn();
+  }
   try {
-    loader = StreamLoader;
-    if (loader) loader.currentEvent = e || null;
-    if (typeof Bot !== 'undefined' && Bot?.StreamLoader) {
-      Bot.StreamLoader.currentEvent = e || null;
-    }
+    StreamLoader.currentEvent = e || null;
     return await fn();
   } finally {
-    if (loader?.currentEvent === e) loader.currentEvent = null;
+    if (StreamLoader.currentEvent === e) StreamLoader.currentEvent = null;
   }
 }

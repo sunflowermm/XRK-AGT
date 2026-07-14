@@ -10,7 +10,10 @@ import { estimateTokensMixed } from '#utils/token-estimate.js';
 import { applyPromptCachePolicy } from '#utils/llm/prompt-cache-policy.js';
 import { resolveStreamLLMConfig } from '#utils/llm/llm-config-resolve.js';
 import { runWithLlmRetry } from '#utils/llm/llm-retry.js';
-import { getStreamRequestContext } from '#infrastructure/aistream/stream-request-context.js';
+import {
+  getStreamRequestContext,
+  runWithStreamRequestContext
+} from '#infrastructure/aistream/stream-request-context.js';
 import { collectAuxiliaryStreamPrompts, resolveToolStreamNames } from '#infrastructure/aistream/chat-tool-streams.js';
 import { unpackFactoryChatRaw } from '#utils/llm/llm-nonstream-reply.js';
 import { assembleChatLlmMessages, logLlmMessagePreview } from '#infrastructure/aistream/chat-pipeline.js';
@@ -33,6 +36,8 @@ export default class AIStream {
    * @param {number} options.priority - 优先级
    * @param {Object} options.config - 配置
    * @param {Object} options.embedding - Embedding配置
+   * @param {string[]} [options.capabilities] - 能力标签（如 tools/prompt）
+   * @param {boolean} [options.frameworkToolSurface] - 是否自动并入 chat 工具白名单
    */
   constructor(options = {}) {
     this.name = options.name || 'base-stream';
@@ -40,6 +45,8 @@ export default class AIStream {
     this.version = options.version || '1.0.5';
     this.author = options.author || 'unknown';
     this.priority = options.priority || 100;
+    this.capabilities = Array.isArray(options.capabilities) ? options.capabilities : [];
+    this.frameworkToolSurface = options.frameworkToolSurface === true;
 
     this.config = {
       enabled: true,
@@ -104,10 +111,9 @@ export default class AIStream {
   }
 
   /**
-   * 存储消息到 MemoryManager（短期记忆）
-   * @param {string} groupId - 群组ID
-   * @param {Object} message - 消息对象
-   * @returns {Promise<void>}
+   * 存储消息到 MemoryManager（短期记忆）。
+   * 注意：retrieveRelevantContexts 不再伪装成「可检索此短期记忆的 embedding RAG」；
+   * chat 真实历史由 ChatStream.messageHistory / memory 流负责。
    */
   async storeMessageMemory(groupId, message) {
     if (!this.embeddingConfig?.enabled) return;
@@ -124,7 +130,7 @@ export default class AIStream {
           nickname: message.nickname,
           time: message.time || Date.now(),
           messageId: message.message_id
-    }
+        }
       });
     } catch (e) {
       BotUtil.makeLog('debug', `[${this.name}] 存储消息失败: ${e.message}`, 'AIStream');
@@ -132,30 +138,23 @@ export default class AIStream {
   }
 
   /**
-   * 检索相关上下文（历史对话）
-   * @param {string} groupId - 群组ID
-   * @param {string} query - 查询文本
-   * @returns {Promise<Array<Object>>}
+   * 检索相关长期记忆（非向量 RAG）。默认关闭自动注入：embedding.enabled 时也只搜长期记忆。
+   * 短期记忆与 chat 历史请用各产品流自己的通路，勿假装已实现 embedding 检索。
    */
   async retrieveRelevantContexts(groupId, query) {
-    if (!query) return [];
+    if (!query || !this.embeddingConfig?.enabled) return [];
 
     try {
       const groupIdStr = String(groupId || '');
       const userId = groupIdStr.replace(/^memory_/, '');
       const memories = await MemoryManager.searchLongTermMemories(userId, query, 5);
-      
-      if (memories.length > 0) {
-        return memories.map(m => ({
-          message: m.content,
-          similarity: m.importance || 0.8,
-          time: m.timestamp,
-          userId: m.userId,
-          nickname: ''
-        }));
-      }
-
-      return [];
+      return memories.map((m) => ({
+        message: m.content,
+        similarity: m.importance || 0.8,
+        time: m.timestamp,
+        userId: m.userId,
+        nickname: ''
+      }));
     } catch (error) {
       BotUtil.makeLog('debug', `[${this.name}] 检索上下文失败: ${error.message}`, 'AIStream');
       return [];
@@ -319,14 +318,15 @@ export default class AIStream {
 
 
   /**
-   * 合并工作流
-   * @param {Object} stream - 要合并的工作流
-   * @param {Object} options - 选项
-   * @param {boolean} options.overwrite - 是否覆盖
-   * @param {string} options.prefix - 前缀
-   * @returns {Object}
+   * @deprecated 禁止业务侧原地 merge。请用 `process({ mergeStreams: ['other'] })` 或 `StreamLoader.mergeStreams`。
+   * 本方法仍会 mutate 当前实例工具表，仅保留兼容；新代码勿调用。
    */
   merge(stream, options = {}) {
+    BotUtil.makeLog(
+      'warn',
+      `[${this.name}] AIStream.merge() 已废弃，请改用 process({ mergeStreams }) / StreamLoader.mergeStreams`,
+      'AIStream'
+    );
     const { overwrite = false, prefix = '' } = options;
 
     if (!stream) {
@@ -340,7 +340,6 @@ export default class AIStream {
     let mergedCount = 0;
     let skippedCount = 0;
 
-    // 合并MCP工具
     if (stream.mcpTools) {
       for (const [name, tool] of stream.mcpTools.entries()) {
         const newName = prefix ? `${prefix}${name}` : name;
@@ -355,6 +354,7 @@ export default class AIStream {
       }
     }
 
+    this._cachedToolStreamNames = null;
     BotUtil.makeLog('debug', `[${this.name}] 合并 ${stream.name}: 成功 ${mergedCount}, 跳过 ${skippedCount}`, 'AIStream');
 
     return { mergedCount, skippedCount };
@@ -411,44 +411,7 @@ export default class AIStream {
     return [];
   }
 
-  /**
-   * 检查权限
-   * @param {string} permission - 权限类型
-   * @param {Object} context - 上下文
-   * @returns {Promise<boolean>}
-   */
-  async checkPermission(permission, context) {
-    const { e } = context;
-    if (!e?.isGroup) return false;
-    if (e.isMaster) return true;
-
-    try {
-      const member = e.group?.pickMember(e.self_id);
-      let info = null;
-      if (member) {
-        try {
-          info = await member.getInfo();
-        } catch {
-          info = null;
-        }
-      }
-      const role = info?.role || 'member';
-
-      switch (permission) {
-        case 'admin':
-        case 'mute':
-          return role === 'owner' || role === 'admin';
-        case 'owner':
-          return role === 'owner';
-        default:
-          return true;
-      }
-    } catch {
-      return false;
-    }
-  }
-
-  /** chat 白名单：合并副流 + web/browser 等框架自研 + remote-mcp.* */
+  /** chat 白名单：合并副流 + frameworkToolSurface 流 + remote-mcp.* */
   _getToolStreamNames() {
     if (this._cachedToolStreamNames) {
       return this._cachedToolStreamNames;
@@ -477,7 +440,8 @@ export default class AIStream {
       const content = typeof m.content === 'string' ? m.content : (m.content?.text || '');
       return sum + this.estimateTokens(content);
     }, 0);
-    MonitorService.recordTokens(`${this.name}.callAI`, { input: inputTokens });
+    const traceId = this.name;
+    MonitorService.recordTokens(traceId, { input: inputTokens });
 
     return runWithLlmRetry({
       label: this.name,
@@ -488,7 +452,7 @@ export default class AIStream {
         const raw = await client.chat(messages, overrides);
         const { text, usedReplyTool, toolRoundsExhausted, executedToolNames } = unpackFactoryChatRaw(raw);
         const content = text != null ? String(text) : '';
-        MonitorService.recordTokens(`${this.name}.callAI`, { output: this.estimateTokens(content) });
+        MonitorService.recordTokens(traceId, { output: this.estimateTokens(content) });
 
         if (toolRoundsExhausted) {
           return { content, executedToolNames, usedReplyTool, toolRoundsExhausted: true };
@@ -512,36 +476,42 @@ export default class AIStream {
    * @param {Function} onDelta - 增量回调
    * @returns {Promise<string>}
    */
-  async callAIStream(messages, apiConfig = {}, onDelta, _options = {}) {
-    const config = applyPromptCachePolicy(this.resolveLLMConfig(apiConfig), {
-      stream: this,
-      e: getStreamRequestContext()?.e ?? null,
-    });
+  async callAIStream(messages, apiConfig = {}, onDelta, options = {}) {
+    const run = async () => {
+      const config = applyPromptCachePolicy(this.resolveLLMConfig(apiConfig), {
+        stream: this,
+        e: getStreamRequestContext()?.e ?? options?.context?.e ?? null,
+      });
 
-    let fullText = '';
-    const wrapDelta = (delta) => {
-      if (!delta) return;
-      fullText += delta;
-      if (typeof onDelta === 'function') onDelta(delta);
+      let fullText = '';
+      const wrapDelta = (delta) => {
+        if (!delta) return;
+        fullText += delta;
+        if (typeof onDelta === 'function') onDelta(delta);
+      };
+
+      if (config.enableStream === false) {
+        const result = await this.callAI(messages, apiConfig);
+        if (result?.content) wrapDelta(result.content);
+        return result?.content || '';
+      }
+
+      return runWithLlmRetry({
+        label: this.name,
+        kind: 'AI流式调用',
+        run: async () => {
+          fullText = '';
+          const client = LLMFactory.createClient(config);
+          const overrides = this.buildCallOverrides(config, apiConfig, { stream: true });
+          await client.chatStream(messages, wrapDelta, overrides);
+          return fullText;
+        }
+      });
     };
 
-    if (config.enableStream === false) {
-      const result = await this.callAI(messages, apiConfig);
-      if (result?.content) wrapDelta(result.content);
-      return result?.content || '';
-    }
-
-    return runWithLlmRetry({
-      label: this.name,
-      kind: 'AI流式调用',
-      run: async () => {
-        fullText = '';
-        const client = LLMFactory.createClient(config);
-        const overrides = this.buildCallOverrides(config, apiConfig, { stream: true });
-        await client.chatStream(messages, wrapDelta, overrides);
-        return fullText;
-      }
-    });
+    if (getStreamRequestContext()) return run();
+    const e = options?.context?.e ?? null;
+    return runWithStreamRequestContext({ e, turnState: null }, run);
   }
 
   resolveLLMConfig(apiConfig = {}) {
@@ -583,99 +553,107 @@ export default class AIStream {
    * @returns {Promise<string|null>}
    */
   async execute(e, question, config) {
-    const traceId = MonitorService.startTrace(this.name, {
-      agentId: e?.user_id,
-      workflow: this.name,
-      userId: e?.user_id
-    });
+    const run = async () => {
+      const traceId = MonitorService.startTrace(this.name, {
+        agentId: e?.user_id,
+        workflow: this.name,
+        userId: e?.user_id
+      });
 
-    try {
-      const messages = await assembleChatLlmMessages(this, e, question);
-      MonitorService.addStep(traceId, { step: 'build_context', messages: messages.length });
-      logLlmMessagePreview(this, messages, 'AIStream');
+      try {
+        const messages = await assembleChatLlmMessages(this, e, question);
+        MonitorService.addStep(traceId, { step: 'build_context', messages: messages.length });
+        logLlmMessagePreview(this, messages, 'AIStream');
 
-      const result = await this.callAI(messages, config);
-      const responseText = result?.content ?? '';
-      MonitorService.addStep(traceId, { step: 'ai_call', responseLength: responseText?.length || 0 });
+        const result = await this.callAI(messages, config);
+        const responseText = result?.content ?? '';
+        MonitorService.addStep(traceId, { step: 'ai_call', responseLength: responseText?.length || 0 });
 
-      if (!responseText?.trim()) {
-        MonitorService.endTrace(traceId, { success: false, error: 'No response' });
+        if (!responseText?.trim()) {
+          MonitorService.endTrace(traceId, { success: false, error: 'No response' });
+          return null;
+        }
+
+        if (e?.reply) {
+          await e.reply(responseText.trim()).catch(err => {
+            BotUtil.makeLog('debug', `发送回复失败: ${err.message}`, 'AIStream');
+          });
+        }
+
+        if (this.embeddingConfig.enabled && e) {
+          const groupId = e.group_id || `private_${e.user_id}`;
+          this.storeMessageMemory(groupId, {
+            user_id: e.self_id,
+            nickname: e.bot?.nickname || e.bot?.info?.nickname || 'Bot',
+            message: responseText,
+            message_id: Date.now().toString(),
+            time: Date.now()
+          }).catch(() => { });
+        }
+
+        MonitorService.endTrace(traceId, { success: true, response: responseText });
+        return responseText;
+      } catch (error) {
+        MonitorService.recordError(traceId, error);
+        MonitorService.endTrace(traceId, { success: false, error: error.message });
+        BotUtil.makeLog('error',
+          `工作流执行失败[${this.name}]: ${error.message}`,
+          'AIStream'
+        );
         return null;
       }
+    };
 
-      if (e?.reply) {
-        await e.reply(responseText.trim()).catch(err => {
-          BotUtil.makeLog('debug', `发送回复失败: ${err.message}`, 'AIStream');
-        });
-      }
+    if (getStreamRequestContext()) return run();
+    return runWithStreamRequestContext({ e, turnState: null }, run);
+  }
 
-      if (this.embeddingConfig.enabled && e) {
-        const groupId = e.group_id || `private_${e.user_id}`;
-        this.storeMessageMemory(groupId, {
-          user_id: e.self_id,
-          nickname: e.bot?.nickname || e.bot?.info?.nickname || 'Bot',
-          message: responseText,
-          message_id: Date.now().toString(),
-          time: Date.now()
-        }).catch(() => { });
-      }
-
-      MonitorService.endTrace(traceId, { success: true, response: responseText });
-      return responseText;
-    } catch (error) {
-      MonitorService.recordError(traceId, error);
-      MonitorService.endTrace(traceId, { success: false, error: error.message });
-      BotUtil.makeLog('error',
-        `工作流执行失败[${this.name}]: ${error.message}`,
-        'AIStream'
-      );
-      return null;
+  /**
+   * 将 enable* 兼容别名归一为副流名列表（去重）。
+   * @param {{ mergeStreams?: string[], enableMemory?: boolean, enableDatabase?: boolean, enableTools?: boolean }} options
+   * @returns {string[]}
+   */
+  static resolveSecondaryStreamNames(options = {}) {
+    let secondary = Array.isArray(options.mergeStreams) ? [...options.mergeStreams] : [];
+    if (secondary.length === 0) {
+      if (options.enableMemory) secondary.push('memory');
+      if (options.enableDatabase) secondary.push('database');
+      if (options.enableTools) secondary.push('tools');
     }
+    return [...new Set(secondary.map((n) => String(n ?? '').trim()).filter(Boolean))];
   }
 
   /**
    * 处理请求（支持工作流合并）
-   * @param {Object} e - 事件对象
-   * @param {string|Object} question - 问题
-   * @param {Object} options - 选项
-   * @returns {Promise<string|null>}
+   * 唯一组合路径：mergeStreams → StreamLoader.mergeStreams。
+   * enableMemory/Database/Tools 仅作无 mergeStreams 时的兼容别名，映射为副流列表，不再原地 mutate 单例。
    */
   async process(e, question, options = {}) {
     try {
       const {
-        mergeStreams = [],
-        enableMemory = false,
-        enableDatabase = false,
-        enableTools = false,
+        mergeStreams: _ms,
+        enableMemory: _em,
+        enableDatabase: _ed,
+        enableTools: _et,
         ...apiConfig
       } = options;
 
+      const secondary = AIStream.resolveSecondaryStreamNames(options);
+
       let stream = this;
-      const needLoader = mergeStreams.length > 0 || enableMemory || enableDatabase || enableTools;
-
-      if (enableMemory || enableDatabase || enableTools) {
-        await this.autoMergeAuxiliaryStreams(stream, { enableMemory, enableDatabase, enableTools });
-      }
-
-      const streams = [this.name];
-      if (mergeStreams.length > 0) {
-        streams.push(...mergeStreams);
-      }
-
-      if (mergeStreams.length > 0 && needLoader) {
-        const mergedName = `${this.name}-${mergeStreams.join('-')}`;
+      if (secondary.length > 0) {
+        const mergedName = `${this.name}-${secondary.join('-')}`;
         stream = StreamLoader.getStream(mergedName) ||
           StreamLoader.mergeStreams({
             name: mergedName,
             main: this.name,
-            secondary: mergeStreams,
+            secondary,
             prefixSecondary: true
           });
       }
 
-      // 传递streams参数给LLM，用于工具权限控制
       if (!apiConfig.streams) {
-        apiConfig.streams = streams;
+        apiConfig.streams = [this.name, ...secondary];
       }
 
       return await stream.execute(e, question, apiConfig);
@@ -692,6 +670,8 @@ export default class AIStream {
       version: this.version,
       author: this.author,
       priority: this.priority,
+      capabilities: this.capabilities || [],
+      frameworkToolSurface: !!this.frameworkToolSurface,
       embedding: {
         enabled: this.embeddingConfig?.enabled || false,
         maxContexts: this.embeddingConfig?.maxContexts || 5
@@ -702,40 +682,6 @@ export default class AIStream {
         enabled: t.enabled
       }))
     };
-  }
-
-  async autoMergeAuxiliaryStreams(stream, options = {}) {
-    const streamNames = this.extractStreamNames(options);
-
-    for (const streamName of streamNames) {
-      try {
-        let auxStream = StreamLoader.getStream(streamName);
-        
-        if (!auxStream) {
-          const StreamClass = StreamLoader.getStreamClass(streamName);
-          if (StreamClass) {
-            auxStream = new StreamClass();
-            await auxStream.init();
-            StreamLoader.streams.set(streamName, auxStream);
-          } else {
-            BotUtil.makeLog('debug', `[${stream.name}] 工作流 ${streamName} 不存在，跳过`, 'AIStream');
-            continue;
-          }
-        }
-        
-        stream.merge(auxStream, { prefix: '' });
-      } catch (error) {
-        BotUtil.makeLog('warn', `[${stream.name}] 自动合并辅助工作流 ${streamName} 失败: ${error.message}`, 'AIStream');
-      }
-    }
-  }
-
-  extractStreamNames(options) {
-    const names = [];
-    if (options.enableMemory) names.push('memory');
-    if (options.enableDatabase) names.push('database');
-    if (options.enableTools) names.push('tools');
-    return [...new Set(names)];
   }
 
   /**

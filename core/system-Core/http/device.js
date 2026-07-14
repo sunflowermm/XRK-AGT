@@ -730,12 +730,22 @@ class DeviceManager {
             const workflowName = options.workflow || 'device';
 
             const streamName = workflowName || 'device';
-            const deviceStream = StreamLoader.getStream(streamName) || StreamLoader.getStream('device');
+            // 仓库无默认 device 流：回退 chat（设备场景可配 mergeStreams）
+            const deviceStream =
+              StreamLoader.getStream(streamName) ||
+              StreamLoader.getStream('device') ||
+              StreamLoader.getStream('chat');
             if (!deviceStream) {
-                // error: 工作流未加载是业务错误
-                BotUtil.makeLog('error', `❌ [AI] 工作流未加载: ${streamName}`, deviceId);
+                BotUtil.makeLog('error', `[AI] 工作流未加载: ${streamName}（且无 chat 回退）`, deviceId);
                 await this._sendAIError(deviceId);
                 return;
+            }
+            if (deviceStream.name !== streamName) {
+                BotUtil.makeLog(
+                  'debug',
+                  `[AI] 工作流 ${streamName} 不存在，回退 ${deviceStream.name}`,
+                  deviceId
+                );
             }
 
             const streamConfig = getLLMSettings({

@@ -70,17 +70,28 @@ export default {
 | 加载 | StreamLoader 单例 → `getStream(name)` |
 | 业务扩展 | 重写 `patchLLMConfig(merged, apiConfig)` 追加场景字段；request body 由各 `*LLMClient.buildBody` 按官方文档组装 |
 | 厂商协议 | `openai_llm` / `deepseek_llm` 等 **builtin** 独立客户端；`openai_compat_llm` 仅用于第三方 OpenAI 形态网关 |
+| 组合进 Agent | AI 助手或调用方 `process({ mergeStreams: ['my-stream'] })`；工具名 `my-stream.tool` |
+| 框架工具面 | 构造可选 `frameworkToolSurface: true` → 自动进 chat MCP 白名单（无需 merge）；可选 `capabilities: ['tools','prompt']` |
+| 联动插件 | stream MCP 可代发指令走 `PluginsLoader.deal`；会话 `e` 优先 ALS（`runWithStreamRequestContext`） |
 
 ```javascript
 import AIStream from '#infrastructure/aistream/aistream.js';
 
 export default class MyStream extends AIStream {
   constructor() {
-    super({ name: 'my-stream', description: '...' });
+    super({
+      name: 'my-stream',
+      description: '...',
+      capabilities: ['tools'],
+      // frameworkToolSurface: true, // 需要始终暴露给 chat 时再开
+    });
   }
   async init() {
     await super.init();
     this.registerMCPTool('tool_name', { description, inputSchema, handler });
+  }
+  buildSystemPrompt() {
+    return '用户需要某某能力时调用 my-stream.tool_name。';
   }
   async cleanup() { /* 热重载/停机 */ }
 }

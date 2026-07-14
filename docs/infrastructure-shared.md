@@ -18,7 +18,8 @@
 | `token-estimate.js` | `estimateTokensRough` / `estimateTokensMixed` |
 | `sse-openai.js` | `writeSSEChunk`、`createOpenAIChunk` |
 | `hot-reload-base.js` | chokidar 热重载唯一入口（`src/` 内除本文件外禁止直接 chokidar） |
-| `core-fs.js` | `resolveCoreModuleKey`（ApiLoader / 热重载 key：相对 `core/*/http/` 等子目录、无 `.js`）、`scanFiles` |
+| `core-fs.js` | `resolveCoreModuleKey` / `resolveQualifiedCoreModuleKey`（多 Core 防撞：`system-Core/admin`）；`scanFiles` |
+| `http/mount-core-www.js` | `mountCoreWwwStatic(app, staticOptions)`：挂载 `core/*/www` |
 | `string-array-utils.js` | 配置层字符串数组归一化 |
 
 引导、信号、路径等其余 `src/utils/` 模块见 [runtime-surface.md](runtime-surface.md)、[coding-style.md](coding-style.md)。
@@ -35,6 +36,9 @@
 2. 扫描：`FileLoader.getCoreSubDirFiles(subDir)` 或 `paths.getCoreDirs()`
 3. 加载：`FileLoader.importFresh(absPath)` + `forEachBatch(..., LOADER_BATCH_SIZE, ...)`
 4. 热重载：`this._hotReload = new HotReloadBase({ loggerName })`，`watch(true, { dirs|files, onAdd, onChange, onUnlink })`；销毁时 `_hotReload?.stop()`
+5. 模块 key 优先 `resolveQualifiedCoreModuleKey(file, dirs, subDir)`（如 `mongodb-Core/admin`），禁止仅 basename（多 Core 会互相覆盖）
+
+**不支持热重载（改完需重启）**：`events/`（ListenerLoader）、`tasker/`（TaskerLoader）。Bot 启动日志会打 debug 提示。
 
 ## HotReloadBase 语义（`src/utils/hot-reload-base.js`）
 
@@ -55,7 +59,9 @@
 - **ConfigLoader**：监视器回调用 **`reloadFile(绝对路径)`**，勿仅用 basename 调 `reload(name)`（多 Core 同名 schema 会歧义）。
 - **PluginsLoader**：`changePlugin(key, filePath)` 优先用监视器路径；`createTask()` 对 cron 指纹 `_taskScheduleKey` 去重，插件热更但 schedule 未变时不重建全部定时任务。
 - **ApiLoader / StreamLoader**：`onChange` 应基于监视器报告的 `filePath` 重载（Api 实例已缓存 `filePath` 时等价）。
+- **Bot.run watchSetup**：统一启动 Config / Stream / Plugins / **Api** 四监视器（Api 不再挂到 listener 阶段）。
 - **cfg（`config.js`）**：单文件 `files` 模式 + `shouldHandle: () => true`；YAML 原子写入同样受 hash / unlink 延迟保护。
+- **加载顺序**：`ConfigLoader.load` → 挂载 `ConfigManager` → 再并行 Stream / Plugins / Api（避免插件 init 读不到配置）。
 
 ### 排查「未手改却热更」
 

@@ -1,5 +1,7 @@
 /**
  * 停机时统一停止各 Loader 热重载与插件资源，避免 chokidar / 定时器泄漏。
+ * 覆盖：Plugins / Stream / Api / CommonConfig / Renderer / cfg。
+ * 不含 events / tasker（无热重载监视器）。
  */
 import PluginsLoader from '#infrastructure/plugins/loader.js';
 import ApiLoader from '#infrastructure/http/loader.js';
