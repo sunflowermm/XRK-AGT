@@ -124,7 +124,7 @@ cd XRK-AGT
 pnpm install
 ```
 
-**Redis**：框架内置数据库，启动前须可用。Docker 见下文；本机需自行安装 Redis。配置与生命周期见 **[docs/database.md](docs/database.md)**。
+**Redis**：框架内置数据库，启动前须可用。Windows / Unix 入口会跑 `node scripts/ensure-redis.mjs`（TCP 探测 + 本机拉起 Memurai / MSI Redis / `redis-server`）。Docker 见下文；配置与生命周期见 **[docs/database.md](docs/database.md)**。
 
 ### ⚙️ 3. 配置环境变量（可选）
 

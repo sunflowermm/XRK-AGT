@@ -1,30 +1,30 @@
 # Redis（框架内置数据库）
 
-> **代码位置**：`src/infrastructure/database/index.js`、`src/infrastructure/redis.js`  
-> **连接工具**：`src/utils/db-connect-utils.js`  
-> **说明**：XRK-AGT 启动时初始化 **Redis** 作为框架内置数据库；其它存储由业务 Core 自行引入。
+> **代码**：`src/infrastructure/redis.js` · `src/infrastructure/database/index.js`  
+> **本机拉起**：`scripts/ensure-redis.mjs`（`start.bat` / `start.sh` / 连接重试共用）  
+> Redis 为 Runtime **必需**；Mongo / Postgres / Vector 等由业务 Core 自行引入。
 
 ---
 
-## 在文档体系中的位置
+## 文档索引
 
 | 主题 | 文档 |
 |------|------|
-| 配置字段与路径 | 本文 + [config-base.md](config-base.md) · [app-dev.md §配置分类](app-dev.md#配置分类) |
-| Docker 编排与持久化目录 | [docker.md](docker.md) |
-| 分层与模块索引 | [底层架构设计.md](底层架构设计.md) |
-| 插件内访问 | [plugin-base.md §系统集成](plugin-base.md#系统集成) |
+| 配置字段与路径 | 本文 · [config-base.md](config-base.md) · [app-dev.md](app-dev.md) |
+| Docker | [docker.md](docker.md) |
+| 插件内访问 | [plugin-base.md](plugin-base.md) |
+| 启动链路 | [startup.md](startup.md) |
 
 ---
 
-## 用途（概览）
+## 用途
 
 | 存储 | 归属 | 典型用途 |
 |------|------|----------|
-| **Redis** | **Runtime 内置** | 进程/机器人状态（`AGT:restart:`、`AGT:shutdown:`）、插件计数与会话键、HTTP 控制面、重启插件上下文 |
-| **其它存储** | **业务 Core** | 企业自行部署（MongoDB 等），非 Runtime |
+| **Redis** | Runtime 内置 | `AGT:restart:` / `AGT:shutdown:`、插件计数与会话、HTTP 控制面 |
+| 其它 | 业务 Core | MongoDB 等，非 Runtime |
 
-插件与 HTTP 优先使用 **裸名 `redis`** 或 `getRedis()`。
+业务侧优先裸名 **`redis`** 或 `getRedis()`。
 
 ---
 
@@ -32,154 +32,123 @@
 
 ```mermaid
 sequenceDiagram
-    participant PL as Packageloader
+    participant Start as start.bat / start.sh
+    participant Ensure as ensure-redis.mjs
     participant IM as InitManager
-    participant DM as DatabaseManager
     participant R as redis.js
 
-    PL->>IM: init()
-    IM->>DM: initDatabases()
-    DM->>R: redisInit()
-    R-->>DM: setRuntimeGlobal('redis')
-    Note over IM: Redis 失败则阻断启动
-    IM->>IM: cfg.enableWatching() …
-    Note over PL: 关闭时 ProcessManager.cleanup
-    PL->>DM: closeDatabases()
+    Start->>Ensure: 探测 127.0.0.1:6379（必要时本机拉起）
+    Ensure-->>Start: OK / 中止
+    Start->>IM: node app.js
+    IM->>R: redisInit / connectWithRetry
+    Note over R: 失败且 host 为本机时再调 ensureRedisReady
+    R-->>IM: setRuntimeGlobal redis
 ```
 
-- **触发点**：`src/infrastructure/config/loader.js` → `InitManager.init()` 在 `setLog()`、`cfg.warmupConfigs()` 之后调用 `initDatabases()`。
-- **关闭**：`ProcessManager.cleanup()` → `closeDatabases()`（与 Ctrl+C 三击、`registerShutdownHook` 协同，见 [bot.md](bot.md)）。
+- **入口探测**：`start.bat` / `start.sh` → `node scripts/ensure-redis.mjs`（缺文件或不可达则中止）。
+- **运行时重试**：`redis.js` 在 `connectWithRetry` 失败且 `host` 为回环地址时，**同一模块** `ensureRedisReady` 再试；远程 host 不拉起本机进程。
+- **关闭**：`ProcessManager.cleanup()` → `closeDatabases()`。
+
+---
+
+## 本机探测与拉起（`scripts/ensure-redis.mjs`）
+
+| 步骤 | 行为 |
+|------|------|
+| 1. 探测 | Node `net` TCP（**不依赖** PowerShell / WSL / redis-cli） |
+| 2. Windows 服务 | `Memurai` → `Redis`（MSI 常见服务名）；坏掉的 ImagePath 静默跳过 |
+| 3. 可执行文件 | `%ProgramFiles%\Redis\redis-server.exe`、Memurai、`PATH` |
+| 4. Unix | `redis-server --daemonize yes`（须在 `PATH`） |
+
+环境变量：`XRK_REDIS_HOST`（默认 `127.0.0.1`）、`XRK_REDIS_PORT`（默认 `6379`）。
+
+薄包装 `scripts/ensure-redis.cmd` 仅转调 Node，便于手动双击；**逻辑只在 `.mjs`**。勿再整目录忽略 `scripts/`（gitignore 已白名单上述文件）。
+
+**推荐**：Windows 用 **Memurai Developer**（服务开机自启）。MSI「Redis for Windows」亦可。勿用 WSL Redis（localhost 转发易断）。Docker 见 [docker.md](docker.md)。
 
 ---
 
 ## 配置
 
-### 模板与运行时路径
-
-| 配置 | 默认模板 | 运行时（全局，不按端口） |
-|------|----------|--------------------------|
+| 配置 | 默认模板 | 运行时（全局） |
+|------|----------|----------------|
 | Redis | `config/default_config/redis.yaml` | `data/server_bots/redis.yaml` |
 
-首次运行由 ConfigBase 从 `default_config` 复制到 `data/server_bots/`。Web 控制台 / CommonConfig 亦可编辑（schema 在 `core/system-Core/commonconfig/system.js`）。
-
-### 主要字段
-
-**Redis**（`redis.yaml`）：`host`、`port`、`db`（0–15）、`username`、`password`、`options.connectTimeout`。
-
-### 读取方式
+字段：`host`、`port`、`db`（0–15）、`username`、`password`、`options.connectTimeout`。  
+CommonConfig schema：`core/system-Core/commonconfig/system.js`。
 
 ```javascript
-import cfg from '#infrastructure/config/config.js';
-
-const { host, port } = cfg.redis;
+import cfg from '#infrastructure/config/config.js'
+const { host, port } = cfg.redis
 ```
 
-业务代码在连接建立后使用客户端，而非重复拼 URL（连接串由 `redis.js` 内 `buildRedisUrl` 生成；Docker 下 `normalizeHost` 会将 `127.0.0.1` 映射为服务名 `redis`）。
-
----
-
-## 环境变量
+连接 URL 由 `buildRedisUrl` 生成；Docker 下 `normalizeHost` 可将 `127.0.0.1` 映射为服务名 `redis`。
 
 | 变量 | 作用 |
 |------|------|
-| `XRK_FAST_START=1` | 减少连接重试次数、缩短超时（测试/快速冒烟） |
+| `XRK_FAST_START=1` | 减少连接重试 / 缩短超时（冒烟） |
 
-Redis 在 `DatabaseManager.init()` 中连接失败会记 **error** 并阻断正常启动。
+连接失败记 error 并阻断启动（`finalizeDbConnectionFailure`）。
 
 ---
 
-## 在业务代码中使用
-
-### 推荐访问方式
+## 业务使用
 
 ```javascript
-// 插件 / 事件 / Tasker（连接已由框架建立）
-if (redis?.isOpen) {
-  await redis.set('my:key', 'value');
-}
+if (redis?.isOpen) await redis.set('my:key', 'value')
 ```
 
 ```javascript
-// HTTP API（推荐 import，便于判空）
-import { getRedis } from '#infrastructure/database/index.js';
+import { getRedis } from '#infrastructure/database/index.js'
 ```
-
-### 健康检查
 
 ```javascript
-import getDatabaseManager from '#infrastructure/database/index.js';
-
-const { redis } = await getDatabaseManager().getHealthStatus();
+import getDatabaseManager from '#infrastructure/database/index.js'
+const { redis: ok } = await getDatabaseManager().getHealthStatus()
 ```
-
-system-Core HTTP（如 `core/system-Core/http/core.js`）与 `src/modules/systemmonitor.js` 会引用上述能力做状态展示。
 
 ---
 
 ## 本地与 Docker
 
-| 场景 | Redis host | 数据目录 |
-|------|------------|----------|
-| 本机开发 | `127.0.0.1:6379` | 按本机 redis 安装 |
-| docker-compose | 服务名 `redis` | 卷 `redis-data` |
-
-连接失败时，非生产环境日志会提示手动启动命令。完整编排见 [docker.md](docker.md)。
-
-**Windows**（`start.bat` → `scripts/ensure-redis.cmd`，探测 `127.0.0.1:6379`）：
-
-1. 已在监听则直接通过  
-2. 依次尝试服务 **`Memurai`**、**`Redis`**（MSI「Redis for Windows」常用服务名）  
-3. 再试 `%ProgramFiles%\Redis\redis-server.exe` / Memurai 可执行文件 / PATH 上的 `redis-server`
-
-推荐 **Memurai Developer**（服务开机自启，CLI：`memurai-cli` 或 `%ProgramFiles%\Memurai\memurai-cli.exe`）。MSI Redis 亦可；勿用 WSL Redis（localhost 转发易断）。`ensure-redis.cmd` / `probe-redis-port.ps1` 已入库，勿再整目录忽略 `scripts/`。
+| 场景 | host | 说明 |
+|------|------|------|
+| 本机 | `127.0.0.1:6379` | `ensure-redis.mjs` 负责探测/拉起 |
+| docker-compose | 服务名 `redis` | 卷 `redis-data`；不跑本机服务拉起 |
 
 ---
 
 ## 连接实现要点
 
-- **重试**：`connectWithRetry`（`db-connect-utils.js`），默认最多 3 次；失败走 `finalizeDbConnectionFailure`（`process.exit(1)`）。
-- **日志脱敏**：`maskConnectionUrl` 隐藏 URL 中的密码。
-- **健康检查**：客户端就绪后定时 ping（间隔见 `redis.js` 内 `HEALTH_CHECK_INTERVAL`）。
+- 重试：`connectWithRetry`（`db-connect-utils.js`）
+- URL 脱敏：`maskConnectionUrl`
+- 健康检查：客户端就绪后定时 `ping`
 
-扩展连接行为应改 `redis.js` 或 `db-connect-utils.js`（基础设施层），**不要在 Core 重复实现连接池**。
+勿在 Core 重复造连接池。
 
 ---
 
 ## 其它数据库（业务 Core）
 
-MongoDB / Postgres / Qdrant（Vector）由 `core/<产品>/` 自行引入，**不在** Runtime `database/index.js` 初始化；亦无 `getMongoDb` 等 Runtime 导出。业务侧应：
-
-```javascript
-const { getDb } = await import('../../mongodb-Core/lib/index.js');
-```
-
-可选存储 Core（mongodb / postgres / vector）在服务未就绪或 npm 依赖未装时 **bootstrap 软失败**（warn，不阻断 AGT）。缺少 `mongodb` / `pg` 等包时，插件 Loader 会归类为「缺少 npm 依赖」并提示 `pnpm add`。
+Mongo / Postgres / Qdrant 由 `core/<产品>/` 引入，**不在** Runtime `database/index.js` 初始化。可选 Core 在依赖未装时 bootstrap **软失败**（不阻断 AGT）。
 
 ---
 
-## 常见问题
+## FAQ
 
-### Q: 可以不装 Redis 吗？
+**可以不装 Redis 吗？**  
+不可以。本机安装（Memurai / MSI / redis-server）或 `docker compose` 起 `redis`。
 
-不可以。Redis 为框架必需依赖；请本机安装或通过 `docker-compose` 启动 `redis` 服务。
+**配置改了要不要重启？**  
+要。连接仅在启动期建立。
 
-### Q: 配置改了要不要重启？
-
-全局 `redis.yaml` 变更后需**重启进程**（连接在启动期建立；热重载不负责重连数据库）。
-
-### Q: 和 `cfg.db` 的关系？
-
-CommonConfig 列表中含历史字段 `db`；当前框架内置连接以 **`redis.yaml`** 为准，无单独 `db.yaml` 模板。
+**和 `cfg.db`？**  
+历史字段；框架内置连接以 **`redis.yaml`** 为准。
 
 ---
 
 ## 相关文档
 
-- [app-dev.md](app-dev.md) — `cfg.redis` 与全局配置表
-- [docker.md](docker.md) — 容器、卷、环境变量
-- [config-base.md](config-base.md) — ConfigBase 读写与复制默认模板
-- [底层架构设计.md](底层架构设计.md) — 基础设施分层
+- [startup.md](startup.md) · [docker.md](docker.md) · [app-dev.md](app-dev.md) · [config-base.md](config-base.md)
 
----
-
-*最后更新：2026-07-13*
+*最后更新：2026-07-14*

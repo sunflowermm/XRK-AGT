@@ -89,7 +89,7 @@ Puppeteer 为可选渲染器；引导阶段不会自动下载浏览器。
 
 - [app-dev.md](app-dev.md) — Web 控制台、前后端协作、cfg 用法  
 - [bot.md](bot.md) — Bot 生命周期、中间件、关闭流程  
-- [database.md](database.md) — Redis  
+- [database.md](database.md) — Redis（含 `scripts/ensure-redis.mjs` 探测/拉起）  
 - [底层架构设计](底层架构设计.md) — 分层与工具模块表  
 
 ---

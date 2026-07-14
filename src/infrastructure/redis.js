@@ -1,21 +1,16 @@
 import cfg from './config/config.js'
 import common, { normalizeHost } from '#utils/common.js'
 import { normalizeError } from '#utils/normalize-error.js'
-import {
-  connectWithRetry,
-  detectArm64,
-  execCommandResult
-} from '#utils/db-connect-utils.js'
+import { connectWithRetry } from '#utils/db-connect-utils.js'
 import BotUtil from '#utils/botutil.js'
 import os from 'node:os'
 import path from 'node:path'
-import { fileURLToPath } from 'node:url'
-import { access } from 'node:fs/promises'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import { createClient } from 'redis'
 import { setRuntimeGlobal } from '#utils/runtime-globals.js'
 
 const PROJECT_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
-const ENSURE_REDIS_CMD = path.join(PROJECT_ROOT, 'scripts', 'ensure-redis.cmd')
+const ENSURE_REDIS_MJS = path.join(PROJECT_ROOT, 'scripts', 'ensure-redis.mjs')
 
 /** @type {import('redis').RedisClientType | null} */
 let globalClient = null
@@ -46,9 +41,8 @@ export default async function redisInit() {
     connectionUrl: redisUrl,
     createClient: () => createClient(clientConfig),
     onBeforeRetry: attemptRedisStart,
-    devHint: process.platform === 'win32'
-      ? '手动启动: net start Memurai / net start Redis  或 scripts\\ensure-redis.cmd'
-      : '手动启动: redis-server --daemonize yes'
+    devHint:
+      '本机拉起: node scripts/ensure-redis.mjs  |  Windows: net start Memurai / net start Redis  |  Unix: redis-server --daemonize yes'
   })
 
   registerEventHandlers(client)
@@ -113,37 +107,32 @@ function getOptimalPoolSize() {
   return finalSize
 }
 
+function isLoopbackHost(host) {
+  const h = String(host || '').trim().toLowerCase()
+  return h === '127.0.0.1' || h === 'localhost' || h === '::1' || h === '0.0.0.0'
+}
+
 async function attemptRedisStart(retryCount) {
   if (process.env.NODE_ENV === 'production') return
 
+  const host = cfg.redis?.host || '127.0.0.1'
+  const port = cfg.redis?.port || 6379
+  if (!isLoopbackHost(host)) {
+    BotUtil.makeLog('debug', `非本机 Redis（${host}），跳过本地拉起`, 'Redis')
+    return
+  }
+
   try {
-    BotUtil.makeLog('info', '尝试启动本地服务...', 'Redis')
-    if (process.platform === 'win32') {
-      await startRedisOnWindows()
-    } else {
-      const archOptions = await getArchitectureOptions()
-      await execCommandResult(
-        `redis-server --save 900 1 --save 300 10 --daemonize yes${archOptions}`
-      )
+    BotUtil.makeLog('info', '尝试启动本地 Redis...', 'Redis')
+    const { ensureRedisReady } = await import(pathToFileURL(ENSURE_REDIS_MJS).href)
+    const result = await ensureRedisReady({ host, port })
+    if (!result.ok) {
+      throw new Error(result.reason || 'ensure-redis 失败')
     }
-    await common.sleep(1500 + retryCount * 1000)
+    await common.sleep(500 + retryCount * 500)
   } catch (err) {
     const error = normalizeError(err)
     BotUtil.makeLog('debug', `启动失败: ${error.message}`, 'Redis')
-  }
-}
-
-/** Windows：复用 scripts/ensure-redis.cmd（Memurai / MSI Redis / redis-server）。 */
-async function startRedisOnWindows() {
-  try {
-    await access(ENSURE_REDIS_CMD)
-  } catch {
-    throw new Error(`缺少 ${ENSURE_REDIS_CMD}（勿将 ensure-redis.cmd 从仓中忽略）`)
-  }
-  const result = await execCommandResult(`"${ENSURE_REDIS_CMD}"`)
-  const out = `${result.stdout}${result.stderr}`
-  if (result.error || !out.includes('127.0.0.1:6379 OK')) {
-    throw result.error || new Error(out.trim() || 'ensure-redis 失败')
   }
 }
 
@@ -173,27 +162,6 @@ function startHealthCheck(client) {
     }
   }, REDIS_CONFIG.HEALTH_CHECK_INTERVAL)
   healthCheckTimer.unref?.()
-}
-
-async function getArchitectureOptions() {
-  if (!(await detectArm64())) return ''
-
-  try {
-    const { stdout: versionOutput } = await execCommandResult('redis-server -v')
-    const versionMatch = versionOutput.match(/v=(\d+)\.(\d+)/)
-    if (!versionMatch?.[1] || !versionMatch?.[2]) return ''
-
-    const majorVer = parseInt(versionMatch[1], 10)
-    const minorVer = parseInt(versionMatch[2], 10)
-
-    if (majorVer > 6 || (majorVer === 6 && minorVer >= 0)) {
-      return ' --ignore-warnings ARM64-COW-BUG'
-    }
-  } catch (err) {
-    const error = normalizeError(err)
-    BotUtil.makeLog('debug', `检查系统架构失败: ${error.message}`, 'Redis')
-  }
-  return ''
 }
 
 export async function closeRedis() {
