@@ -5,6 +5,8 @@
 
 本文档定义了所有 Tasker（任务层 / 事件生成器）最底层应该具备的属性和函数，这些是 Tasker 的基础接口，不包含任何特定 Tasker（如 OneBot、stdin、device）的专有逻辑。
 
+**可选基类实现**：`src/infrastructure/tasker/tasker-base.js`（`TaskerBase`）。
+
 ### 核心特性
 
 - ✅ **零配置扩展**：放置到任意 `core/*/tasker/` 目录即可自动加载

@@ -39,8 +39,20 @@ class CommonConfigRegistry {
     return resolveQualifiedCoreModuleKey(filePath, dirs, 'commonconfig');
   }
 
+  /**
+   * system.js 分域片段 / schema helpers：仅被 system.js 引用，不是独立 ConfigBase。
+   * 文件名形如 system-agt.js、system-schema-helpers.js。
+   */
+  _isSystemConfigFragment(filePath) {
+    const base = path.basename(filePath, '.js');
+    return base.startsWith('system-');
+  }
+
   async _loadConfig(filePath) {
     try {
+      if (this._isSystemConfigFragment(filePath)) {
+        return false;
+      }
       const dirs = this._configDirsCache ?? await paths.getCoreSubDirs('commonconfig');
       const key = resolveQualifiedCoreModuleKey(filePath, dirs, 'commonconfig');
       const module = await FileLoader.importFresh(filePath);
