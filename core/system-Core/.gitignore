@@ -76,6 +76,8 @@ stream/**
 !commonconfig
 commonconfig/**
 !commonconfig/system.js
+!commonconfig/system/
+!commonconfig/system/**
 !commonconfig/volcengine_llm.js
 !commonconfig/deepseek_llm.js
 !commonconfig/volcengine_asr.js

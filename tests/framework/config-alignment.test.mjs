@@ -11,11 +11,23 @@ import {
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const defaultConfigDir = path.join(root, 'config/default_config');
 const commonconfigDir = path.join(root, 'core/system-Core/commonconfig');
-/** system.js 门面 + system-*.js 分域 schema（split 后段字段不再集中在一个文件） */
-const systemSrc = fs.readdirSync(commonconfigDir)
-  .filter((f) => /^system(?:-[a-z0-9-]+)?\.js$/i.test(f))
-  .map((f) => fs.readFileSync(path.join(commonconfigDir, f), 'utf8'))
-  .join('\n');
+/** system.js 门面 + commonconfig/system/*.js 分域 schema */
+function collectSystemSchemaSources(dir) {
+  const out = [];
+  for (const name of fs.readdirSync(dir)) {
+    const full = path.join(dir, name);
+    const st = fs.statSync(full);
+    if (st.isDirectory() && name === 'system') {
+      out.push(...collectSystemSchemaSources(full));
+      continue;
+    }
+    if (st.isFile() && /^system(?:-[a-z0-9-]+)?\.js$/i.test(name)) {
+      out.push(fs.readFileSync(full, 'utf8'));
+    }
+  }
+  return out;
+}
+const systemSrc = collectSystemSchemaSources(commonconfigDir).join('\n');
 const allConfigNames = [...GLOBAL_CONFIGS, ...SERVER_CONFIGS];
 
 describe('配置三件套：默认模板与 system.js schema', () => {

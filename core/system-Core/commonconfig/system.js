@@ -5,16 +5,16 @@ import RuntimeUtil from '#utils/runtime-util.js';
 import runtimeConfig from '#infrastructure/config/config.js';
 import { mergeUniqueStrings } from '#utils/string-array-utils.js';
 
-import { agtConfig } from './system-agt.js';
-import { chatbotConfig } from './system-chatbot.js';
-import { serverConfig } from './system-server.js';
-import { deviceConfig } from './system-device.js';
-import { groupConfig } from './system-group.js';
-import { noticeConfig } from './system-notice.js';
-import { redisConfig } from './system-redis.js';
-import { aistreamConfig } from './system-aistream.js';
-import { monitorConfig } from './system-monitor.js';
-import { rendererConfig } from './system-renderer.js';
+import { agtConfig } from './system/system-agt.js';
+import { chatbotConfig } from './system/system-chatbot.js';
+import { serverConfig } from './system/system-server.js';
+import { deviceConfig } from './system/system-device.js';
+import { groupConfig } from './system/system-group.js';
+import { noticeConfig } from './system/system-notice.js';
+import { redisConfig } from './system/system-redis.js';
+import { aistreamConfig } from './system/system-aistream.js';
+import { monitorConfig } from './system/system-monitor.js';
+import { rendererConfig } from './system/system-renderer.js';
 
 /**
  * 系统配置管理
@@ -25,8 +25,7 @@ import { rendererConfig } from './system-renderer.js';
  * - 服务器配置（随端口变化）：server, chatbot, group
  *   存储位置：server_bots/{port}/
  *
- * Schema 分文件：system-agt.js / system-server.js / system-aistream.js 等；
- * 共享字段助手见 system-schema-helpers.js。
+ * Schema 分文件在 commonconfig/system/（不被 Loader 扫描为独立 ConfigBase）。
  */
 export default class SystemConfig extends ConfigBase {
   constructor() {
