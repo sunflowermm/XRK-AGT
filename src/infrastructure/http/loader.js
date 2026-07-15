@@ -94,6 +94,8 @@ class HttpApiLoader {
         detail = `模块未导出 ${classified.exportName}（Runtime database 仅 Redis；Mongo/PG/Vector 请用对应 Core）`;
       } else if (classified.kind === 'missing_package') {
         detail = `缺少依赖 ${classified.packageName || '未知'}，请 pnpm add 后重启`;
+      } else if (classified.kind === 'missing_file') {
+        detail = `缺少本地模块 ${classified.filePath || '未知'}（检查路径或未提交文件）`;
       }
       RuntimeUtil.makeLog('error', `加载API失败: ${filePath} - ${detail}`, 'HttpApiLoader', error);
       return false;

@@ -36,12 +36,27 @@ describe('module-import-error 分类', () => {
   });
 
   it('首个引号误匹配回退：导出错误不得当成依赖名', () => {
-    // 旧 packageTips 用 stack.match(/'(.+?)'/) 会把 #infrastructure/... 当成「缺少依赖」
     const err = new Error(
       "The requested module '#infrastructure/database/index.js' does not provide an export named 'getMongoDb'"
     );
     err.stack = err.message;
     assert.notEqual(extractMissingPackageName(err), '#infrastructure/database/index.js');
+  });
+
+  it('本地绝对路径缺失不是 npm 包', () => {
+    const err = new Error(
+      "Cannot find module 'C:\\Users\\x\\src\\infrastructure\\bot\\tasker.js' imported from C:\\Users\\x\\core\\Feishu.js"
+    );
+    const c = classifyModuleImportError(err);
+    assert.equal(c.kind, 'missing_file');
+    assert.equal(isMissingPackageError(err), false);
+    assert.equal(extractMissingPackageName(err), null);
+  });
+
+  it('相对路径缺失不是 npm 包', () => {
+    const err = new Error("Cannot find module './missing.js' imported from ./x.js");
+    assert.equal(classifyModuleImportError(err).kind, 'missing_file');
+    assert.equal(isMissingPackageError(err), false);
   });
 });
 

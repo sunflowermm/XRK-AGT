@@ -1,9 +1,10 @@
 /**
- * 分类 Node ESM / CJS 模块加载失败，供插件 Loader、API Loader、审计测试共用。
+ * Classify Node ESM/CJS module load failures for plugin/HTTP loaders and tests.
  * @param {unknown} err
  * @returns {{
- *   kind: 'missing_package' | 'missing_export' | 'other',
+ *   kind: 'missing_package' | 'missing_file' | 'missing_export' | 'other',
  *   packageName?: string,
+ *   filePath?: string,
  *   exportName?: string,
  *   message: string
  * }}
@@ -20,9 +21,13 @@ export function classifyModuleImportError(err) {
 
   m = text.match(/Cannot find module ['"]([^'"]+)['"]/i);
   if (m) {
+    const spec = m[1];
+    if (isLocalModuleSpecifier(spec)) {
+      return { kind: 'missing_file', filePath: spec, message };
+    }
     return {
       kind: 'missing_package',
-      packageName: normalizePackageSpecifier(m[1]),
+      packageName: normalizePackageSpecifier(spec),
       message
     };
   }
@@ -48,11 +53,27 @@ function isErrorLike(err) {
 }
 
 /**
+ * Absolute / relative / #alias specs are not npm package names.
+ * @param {string} spec
+ */
+function isLocalModuleSpecifier(spec) {
+  if (!spec) return false;
+  if (spec.startsWith('.') || spec.startsWith('/') || spec.startsWith('#') || pathIsAbsolute(spec)) {
+    return true;
+  }
+  // Windows path without drive letter is rare; UNC handled in pathIsAbsolute
+  if (spec.includes('\\') || /[/\\]\.(js|mjs|cjs|json|node)$/i.test(spec)) {
+    return true;
+  }
+  return false;
+}
+
+/**
  * @param {string} spec
  * @returns {string}
  */
 function normalizePackageSpecifier(spec) {
-  if (!spec || spec.startsWith('.') || spec.startsWith('/') || spec.startsWith('#') || pathIsAbsolute(spec)) {
+  if (!spec || isLocalModuleSpecifier(spec)) {
     return spec;
   }
   if (spec.startsWith('@')) {
@@ -64,7 +85,7 @@ function normalizePackageSpecifier(spec) {
 
 /** @param {string} p */
 function pathIsAbsolute(p) {
-  return /^[a-zA-Z]:[\\/]/.test(p) || p.startsWith('\\\\');
+  return /^[a-zA-Z]:[\\/]/.test(p) || p.startsWith('\\\\') || p.startsWith('/');
 }
 
 /**

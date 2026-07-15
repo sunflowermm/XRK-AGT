@@ -35,15 +35,14 @@ http/**
 !http/core.js
 !http/device.js
 !http/files.js
-!http/loader.js
 !http/plugin.js
 !http/stdin.js
 !http/write.js
 !http/config.js
 !http/ai.js
 !http/mcp.js
-!http/mcp-server.js
 !http/notice.js
+!http/ai-workspace.js
 
 !lib
 lib/**
@@ -65,7 +64,6 @@ events/**
 !stream
 stream/**
 !stream/chat.js
-!stream/device.js
 !stream/desktop.js
 !stream/memory.js
 !stream/tools.js
@@ -100,7 +98,6 @@ commonconfig/**
 !commonconfig/shared/
 !commonconfig/shared/**
 
-!http/ai-workspace.js
 !lib/ai-workspace-runtime.js
 !lib/ai-workspace-context.js
 !lib/ai-workspace-audit.js

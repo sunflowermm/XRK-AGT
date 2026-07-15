@@ -5,7 +5,6 @@ import * as fsSync from 'fs';
 import { EventEmitter } from "events";
 import express from "express";
 import http from "node:http";
-import https from "node:https";
 import dgram from 'node:dgram';
 import { WebSocketServer } from "ws";
 import compression from 'compression';
@@ -304,118 +303,6 @@ export default class AgentRuntime extends EventEmitter {
   }
 
   /**
-   * 加载域名SSL证书
-   */
-  async _loadDomainCertificates() {
-    return runtimeProxy.loadDomainCertificates(this);
-  }
-
-  /**
-   * 创建HTTPS代理服务器
-   * 支持HTTP/2和SNI多域名
-   */
-  async _createHttpsProxyServer() {
-    return runtimeProxy.createHttpsProxyServer(this);
-  }
-
-  /**
-   * 创建代理选项（统一方法）
-   * @param {Object} domainConfig - 域名配置
-   * @returns {Object} 代理选项
-   */
-  _createProxyOptions(domainConfig) {
-    return runtimeProxy.createProxyOptions(this, domainConfig);
-  }
-
-  /**
-   * 创建域名专用代理中间件
-   * @param {Object} domainConfig - 域名配置
-   * @returns {Function} 代理中间件
-   */
-  _createProxyMiddleware(domainConfig) {
-    return runtimeProxy.createDomainProxyMiddleware(this, domainConfig);
-  }
-
-  /**
-   * 处理代理请求（统一入口）
-   * @param {Object} req - Express请求对象
-   * @param {Object} res - Express响应对象
-   * @param {Function} next - Express next函数
-   * @param {Object} domainConfig - 域名配置
-   * @param {string} hostname - 主机名
-   * @param {string} targetUrl - 目标URL
-   */
-  _handleProxyRequest(req, res, next, domainConfig, hostname, targetUrl) {
-    return runtimeProxy.handleProxyRequest(this, req, res, next, domainConfig, hostname, targetUrl);
-  }
-
-  /**
-   * 获取或创建代理中间件（带缓存）
-   * @param {Object} domainConfig - 域名配置
-   * @param {string} targetUrl - 目标URL
-   * @returns {Function} 代理中间件
-   */
-  _getOrCreateProxyMiddleware(domainConfig, targetUrl) {
-    return runtimeProxy.getOrCreateProxyMiddleware(this, domainConfig, targetUrl);
-  }
-
-  /**
-   * 管理代理连接数（统一方法）
-   * @param {string} domain - 域名
-   * @param {string} targetUrl - 目标URL
-   * @param {string} operation - 操作：'increment' 或 'decrement'
-   */
-  _manageProxyConnection(domain, targetUrl, operation) {
-    return runtimeProxy.manageProxyConnection(this, domain, targetUrl, operation);
-  }
-
-  /**
-   * 处理代理请求开始（统一回调）
-   * @param {Object} proxyReq - 代理请求对象
-   * @param {Object} req - Express请求对象
-   * @param {Object} domainConfig - 域名配置
-   */
-  _handleProxyRequestStart(proxyReq, req, domainConfig) {
-    return runtimeProxy.handleProxyRequestStart(this, proxyReq, req, domainConfig);
-  }
-
-  /**
-   * 处理代理响应（统一回调）
-   * @param {Object} proxyRes - 代理响应对象
-   * @param {Object} req - Express请求对象
-   * @param {Object} res - Express响应对象
-   * @param {Object} domainConfig - 域名配置
-   */
-  _handleProxyResponse(proxyRes, req, res, domainConfig) {
-    return runtimeProxy.handleProxyResponse(this, proxyRes, req, res, domainConfig);
-  }
-
-  /**
-   * 处理代理错误（统一回调）
-   * @param {Error} err - 错误对象
-   * @param {Object} req - Express请求对象
-   * @param {Object} res - Express响应对象
-   * @param {Object} domainConfig - 域名配置
-   */
-  _handleProxyError(err, req, res, domainConfig) {
-    return runtimeProxy.handleProxyError(this, err, req, res, domainConfig);
-  }
-
-  /**
-   * 查找域名配置（支持通配符）
-   */
-  _findDomainConfig(hostname) {
-    return runtimeProxy.findDomainConfig(this, hostname);
-  }
-
-  /**
-   * 查找通配符SSL证书
-   */
-  _findWildcardContext(servername) {
-    return runtimeProxy.findWildcardContext(this, servername);
-  }
-
-  /**
    * 挂载 HTTP 业务层方法到 AgentRuntime 实例（文档：docs/runtime-surface.md）
    */
   _mountHttpBusinessMethods() {
@@ -459,15 +346,6 @@ export default class AgentRuntime extends EventEmitter {
     this._httpBusinessCfgSig = sig;
     this.httpBusiness = new HTTPBusinessLayer(serverCfg);
     this._mountHttpBusinessMethods();
-  }
-
-  /**
-   * 提取客户端真实IP（考虑CDN和代理）
-   * @param {Object} req - Express请求对象
-   * @returns {string} 客户端IP
-   */
-  _extractClientIP(req) {
-    return runtimeProxy.extractClientIP(this, req);
   }
 
   /**
@@ -1699,13 +1577,6 @@ export default class AgentRuntime extends EventEmitter {
    */
   async startProxyServers() {
     return runtimeProxy.startProxyServers(this);
-  }
-
-  /**
-   * 显示代理信息
-   */
-  async _displayProxyInfo() {
-    return runtimeProxy.displayProxyInfo(this);
   }
 
   /**
