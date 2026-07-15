@@ -54,17 +54,17 @@ export default class OneBotEnhancer extends EnhancerBase {
 
     const atList = []
     let atBot = false
-    const selfId = e.self_id || e.bot?.self_id
+    const selfId = e.self_id || e.bot?.self_id || e.bot?.uin
 
     for (const seg of e.message) {
-      if (seg.type === 'at') {
-        const qq = seg.qq || seg.user_id
-        if (qq) {
-          atList.push(String(qq))
-          if (selfId && (String(qq) === String(selfId) || qq === 'all')) {
-            atBot = true
-          }
-        }
+      if (seg?.type !== 'at') continue
+      // OneBot / NapCat 多为 { type:'at', data:{ qq } }，少数扁平 { qq }
+      const qq = seg.qq ?? seg.user_id ?? seg.data?.qq ?? seg.data?.user_id
+      if (qq == null || qq === '') continue
+      const qqStr = String(qq)
+      atList.push(qqStr)
+      if (selfId != null && (qqStr === String(selfId) || qqStr === 'all')) {
+        atBot = true
       }
     }
 

@@ -104,9 +104,9 @@ export async function processMessageContent(e, config) {
       } catch { /* ignore */ }
     }
     for (const seg of message) {
-      if (seg.type === 'text') content += seg.text || '';
+      if (seg.type === 'text') content += seg.text || seg.data?.text || '';
       else if (seg.type === 'at') {
-        const qq = seg.qq ?? seg.user_id ?? seg.data?.qq;
+        const qq = seg.qq ?? seg.user_id ?? seg.data?.qq ?? seg.data?.user_id;
         if (qq != null && String(qq) !== String(e.self_id)) {
           content += `@${qq} `;
         }

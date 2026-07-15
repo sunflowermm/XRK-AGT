@@ -23,6 +23,7 @@ const SUITES = {
     'config-alignment.test.mjs',
     'module-inventory.test.mjs',
     'module-import-error.test.mjs',
+    'onebot-atbot.test.mjs',
     'lsy-user-store-mongo.test.mjs',
     'safe-os-network.test.mjs',
     'monitor-safety.test.mjs',

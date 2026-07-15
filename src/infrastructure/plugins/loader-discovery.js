@@ -389,8 +389,13 @@ export const discoveryMethods = {
   },
 
   wrapPluginAccept(plugin, meta) {
-    const accept = typeof PluginBase.accept === 'function' ? plugin.accept.bind(plugin) : async () => true
-    return async (event) => this.isAdapterAllowed(meta?.taskers, event) ? await accept(event) : false
+    // 必须取「实例」上的 accept（Enhancer/插件覆盖）；PluginBase.accept 是类静态、恒为 undefined
+    const accept =
+      typeof plugin.accept === 'function'
+        ? plugin.accept.bind(plugin)
+        : async () => true
+    return async (event) =>
+      this.isAdapterAllowed(meta?.taskers, event) ? await accept(event) : false
   },
 
   /**

@@ -158,14 +158,20 @@ export class EventNormalizer {
     if (!e.raw_message && Array.isArray(e.message) && e.message.length > 0) {
       e.raw_message = e.message
         .map(seg => {
-          if (seg.type === 'text') return seg.text || ''
-          if (seg.type === 'at') return `[CQ:at,qq=${seg.qq || seg.user_id || ''}]`
-          if (seg.type === 'image') return `[CQ:image,file=${seg.url || seg.file || ''}]`
-          if (seg.type === 'face') return `[CQ:face,id=${seg.id || ''}]`
-          if (seg.type === 'reply') return `[CQ:reply,id=${seg.id || ''}]`
-          if (seg.type === 'record') return `[CQ:record,file=${seg.file || ''}]`
-          if (seg.type === 'video') return `[CQ:video,file=${seg.file || ''}]`
-          if (seg.type === 'file') return `[CQ:file,file=${seg.file || ''}]`
+          if (seg.type === 'text') return seg.text || seg.data?.text || ''
+          if (seg.type === 'at') {
+            const qq = seg.qq ?? seg.user_id ?? seg.data?.qq ?? seg.data?.user_id ?? ''
+            return `[CQ:at,qq=${qq}]`
+          }
+          if (seg.type === 'image') {
+            const file = seg.url || seg.file || seg.data?.url || seg.data?.file || ''
+            return `[CQ:image,file=${file}]`
+          }
+          if (seg.type === 'face') return `[CQ:face,id=${seg.id ?? seg.data?.id ?? ''}]`
+          if (seg.type === 'reply') return `[CQ:reply,id=${seg.id ?? seg.data?.id ?? ''}]`
+          if (seg.type === 'record') return `[CQ:record,file=${seg.file || seg.data?.file || ''}]`
+          if (seg.type === 'video') return `[CQ:video,file=${seg.file || seg.data?.file || ''}]`
+          if (seg.type === 'file') return `[CQ:file,file=${seg.file || seg.data?.file || ''}]`
           return `[${seg.type}]`
         })
         .join('')
