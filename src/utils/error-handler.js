@@ -1,4 +1,4 @@
-import BotUtil from './botutil.js';
+import RuntimeUtil from './runtime-util.js';
 import chalk from 'chalk';
 import { normalizeError } from './normalize-error.js';
 
@@ -39,21 +39,21 @@ export const ErrorCodes = {
  * 统一错误处理类
  * 提供标准化的错误处理、分类和恢复机制
  */
-export class BotError extends Error {
+export class RuntimeError extends Error {
   constructor(message, code = ErrorCodes.SYSTEM_ERROR, context = {}) {
     super(message);
-    this.name = 'BotError';
+    this.name = 'RuntimeError';
     this.code = code;
     this.context = context;
     this.timestamp = Date.now();
-    Error.captureStackTrace(this, BotError);
+    Error.captureStackTrace(this, RuntimeError);
   }
 
   /**
-   * 从普通错误创建BotError
+   * 从普通错误创建RuntimeError
    */
   static fromError(error, code = ErrorCodes.SYSTEM_ERROR, context = {}) {
-    if (error instanceof BotError) {
+    if (error instanceof RuntimeError) {
       return error;
     }
 
@@ -64,7 +64,7 @@ export class BotError extends Error {
       stack: typeof normalized.stack === 'string' ? normalized.stack : undefined
     };
 
-    const botError = new BotError(normalized.message || '未知错误', code, { ...context, original: safeOriginal });
+    const botError = new RuntimeError(normalized.message || '未知错误', code, { ...context, original: safeOriginal });
 
     if (normalized.stack) botError.stack = normalized.stack;
 
@@ -119,12 +119,12 @@ export class ErrorHandler {
 
   /**
    * 处理错误
-   * @param {Error|BotError} error - 错误对象
+   * @param {Error|RuntimeError} error - 错误对象
    * @param {Object} context - 上下文信息
    * @param {boolean} shouldLog - 是否记录日志
    */
   handle(error, context = {}, shouldLog = true) {
-    const botError = BotError.fromError(error, error.code, {
+    const botError = RuntimeError.fromError(error, error.code, {
       ...context,
       ...error.context
     });
@@ -181,10 +181,10 @@ export class ErrorHandler {
       ? `\n上下文: ${JSON.stringify(error.context, null, 2)}`
       : '';
     
-    BotUtil.makeLog(level, chalk.red(`✗ ${logMessage}${contextStr}`), 'ErrorHandler');
+    RuntimeUtil.makeLog(level, chalk.red(`✗ ${logMessage}${contextStr}`), 'ErrorHandler');
     
     if (severity === 'critical' && error.stack) {
-      BotUtil.makeLog('debug', chalk.gray(error.stack), 'ErrorHandler');
+      RuntimeUtil.makeLog('debug', chalk.gray(error.stack), 'ErrorHandler');
     }
   }
 
@@ -197,7 +197,7 @@ export class ErrorHandler {
       try {
         return strategy(error);
       } catch (recoveryError) {
-        BotUtil.makeLog('error', 
+        RuntimeUtil.makeLog('error', 
           `恢复策略执行失败: ${recoveryError.message}`, 
           'ErrorHandler'
         );

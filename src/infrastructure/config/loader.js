@@ -1,4 +1,4 @@
-import cfg from './config.js';
+import runtimeConfig from './config.js';
 import chalk from 'chalk';
 import setLog from '#infrastructure/log.js';
 import { initDatabases, closeDatabases } from '#infrastructure/database/index.js';
@@ -23,7 +23,7 @@ const CONFIG = {
 /** 瞬时 socket 错误：只记日志，不拖垮进程（Redis/QQ 断线常见） */
 const TRANSIENT_NETWORK_CODES = ['ECONNRESET', 'ECONNREFUSED', 'ETIMEDOUT', 'PROTOCOL_CONNECTION_LOST', 'ENOTFOUND', 'EAI_AGAIN', 'EAI_NONAME'];
 
-let packageloaderPromise = null;
+let bootstrapPackagesPromise = null;
 
 class ProcessManager {
   tap = new SignalTapState();
@@ -39,8 +39,8 @@ class ProcessManager {
     this._restarting = true;
     logger.mark(chalk.yellow('重启中...'));
     await this.cleanup();
-    if (getRuntimeGlobal('Bot')) {
-      await getRuntimeGlobal('Bot').closeServer({ fast: true }).catch(() => {});
+    if (getRuntimeGlobal('AgentRuntime')) {
+      await getRuntimeGlobal('AgentRuntime').closeServer({ fast: true }).catch(() => {});
     }
     process.exit(EXIT_RESTART);
   }
@@ -53,7 +53,7 @@ class ProcessManager {
     if (isShuttingDown()) return;
     setShuttingDown(true);
     logger.mark(chalk.yellow('正在关闭...'));
-    const bot = getRuntimeGlobal('Bot');
+    const bot = getRuntimeGlobal('AgentRuntime');
     if (bot) {
       await bot.closeServer().catch((err) => logger.error(`关闭失败: ${err.message}`));
     } else {
@@ -147,7 +147,7 @@ class InitManager {
    * @returns {Promise<void>}
    */
   async startMonitoring() {
-    const monitorConfig = cfg.monitor;
+    const monitorConfig = runtimeConfig.monitor;
     if (!monitorConfig.enabled) return;
 
     setTimeout(() => {
@@ -167,12 +167,12 @@ class InitManager {
 
   async init() {
     await setLog();
-    cfg.warmupConfigs();
+    runtimeConfig.warmupConfigs();
     logger.mark(chalk.cyan('XRK-AGT 初始化中...'));
 
     this.setupEnvironment();
     await initDatabases();
-    cfg.enableWatching();
+    runtimeConfig.enableWatching();
     await this.processManager.updateTitle();
     await this.startMonitoring();
 
@@ -181,12 +181,12 @@ class InitManager {
   }
 }
 
-export default async function Packageloader() {
-  if (!packageloaderPromise) {
-    packageloaderPromise = new InitManager().init().catch((error) => {
-      packageloaderPromise = null;
+export default async function bootstrapRuntimePackages() {
+  if (!bootstrapPackagesPromise) {
+    bootstrapPackagesPromise = new InitManager().init().catch((error) => {
+      bootstrapPackagesPromise = null;
       throw error;
     });
   }
-  return packageloaderPromise;
+  return bootstrapPackagesPromise;
 }

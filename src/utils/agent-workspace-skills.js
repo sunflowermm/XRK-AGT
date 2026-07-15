@@ -247,12 +247,12 @@ function applySkillsPromptLimits(skills, limits) {
 
 /**
  * @param {string} workspaceRootResolved 已 realpath 的工作区根
- * @param {object} cfg agentWorkspace 中与 skills 相关字段
+ * @param {object} runtimeConfig agentWorkspace 中与 skills 相关字段
  * @returns {string} XML 技能目录或空串
  */
-export function buildSkillsPromptFromWorkspace(workspaceRootResolved, cfg = {}) {
-  const limits = resolveSkillLimits(cfg);
-  const skillRoots = resolveSkillRoots(cfg);
+export function buildSkillsPromptFromWorkspace(workspaceRootResolved, runtimeConfig = {}) {
+  const limits = resolveSkillLimits(runtimeConfig);
+  const skillRoots = resolveSkillRoots(runtimeConfig);
 
   const merged = new Map();
   for (const rel of skillRoots) {

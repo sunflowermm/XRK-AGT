@@ -1,5 +1,5 @@
 import path from 'path';
-import { BotError, ErrorCodes } from './error-handler.js';
+import { RuntimeError, ErrorCodes } from './error-handler.js';
 import { isPathInside, realpathSyncOrResolve } from './path-guards.js';
 
 /**
@@ -13,7 +13,7 @@ export class InputValidator {
    */
   static validatePath(filePath, baseDir = process.cwd()) {
     if (!filePath || typeof filePath !== 'string') {
-      throw new BotError('路径必须是字符串', ErrorCodes.INVALID_INPUT);
+      throw new RuntimeError('路径必须是字符串', ErrorCodes.INVALID_INPUT);
     }
 
     // 规范化路径
@@ -21,7 +21,7 @@ export class InputValidator {
     
     // 防止路径遍历攻击
     if (normalized.includes('..') || path.isAbsolute(normalized)) {
-      throw new BotError(
+      throw new RuntimeError(
         `无效的路径: ${filePath} (检测到路径遍历尝试)`,
         ErrorCodes.PATH_TRAVERSAL
       );
@@ -32,7 +32,7 @@ export class InputValidator {
     const baseResolved = path.resolve(baseDir);
     
     if (!resolved.startsWith(baseResolved)) {
-      throw new BotError(
+      throw new RuntimeError(
         `路径超出允许范围: ${filePath}`,
         ErrorCodes.INVALID_PATH
       );
@@ -46,17 +46,17 @@ export class InputValidator {
    */
   static assertPathUnderRoots(filePath, allowedRoots) {
     if (!filePath || typeof filePath !== 'string') {
-      throw new BotError('路径必须是字符串', ErrorCodes.INVALID_INPUT);
+      throw new RuntimeError('路径必须是字符串', ErrorCodes.INVALID_INPUT);
     }
     const normalized = path.normalize(filePath);
     if (!path.isAbsolute(normalized)) {
-      throw new BotError('只支持绝对路径', ErrorCodes.INVALID_PATH);
+      throw new RuntimeError('只支持绝对路径', ErrorCodes.INVALID_PATH);
     }
     const resolved = realpathSyncOrResolve(normalized);
     const roots = (allowedRoots || []).map((r) => realpathSyncOrResolve(r));
     const allowed = roots.some((base) => isPathInside(base, resolved));
     if (!allowed) {
-      throw new BotError('访问被拒绝：路径不在允许的数据目录内', ErrorCodes.INVALID_PATH);
+      throw new RuntimeError('访问被拒绝：路径不在允许的数据目录内', ErrorCodes.INVALID_PATH);
     }
     return resolved;
   }
@@ -67,7 +67,7 @@ export class InputValidator {
    */
   static validateCommand(command) {
     if (!command || typeof command !== 'string') {
-      throw new BotError('命令必须是字符串', ErrorCodes.INVALID_INPUT);
+      throw new RuntimeError('命令必须是字符串', ErrorCodes.INVALID_INPUT);
     }
 
     const dangerousPatterns = [
@@ -84,7 +84,7 @@ export class InputValidator {
 
     for (const pattern of dangerousPatterns) {
       if (pattern.test(command)) {
-        throw new BotError(
+        throw new RuntimeError(
           `禁止执行危险命令: ${command}`,
           ErrorCodes.INVALID_COMMAND
         );
@@ -99,12 +99,12 @@ export class InputValidator {
    */
   static validateUserId(userId) {
     if (!userId) {
-      throw new BotError('用户ID不能为空', ErrorCodes.INVALID_INPUT);
+      throw new RuntimeError('用户ID不能为空', ErrorCodes.INVALID_INPUT);
     }
 
     const idStr = String(userId);
     if (!/^\d+$/.test(idStr)) {
-      throw new BotError(`无效的用户ID格式: ${userId}`, ErrorCodes.INVALID_INPUT);
+      throw new RuntimeError(`无效的用户ID格式: ${userId}`, ErrorCodes.INVALID_INPUT);
     }
 
     return idStr;
@@ -117,7 +117,7 @@ export class InputValidator {
     const portNum = parseInt(port, 10);
     
     if (isNaN(portNum) || portNum < 1 || portNum > 65535) {
-      throw new BotError(
+      throw new RuntimeError(
         `无效的端口号: ${port} (范围: 1-65535)`,
         ErrorCodes.INVALID_INPUT
       );
@@ -131,7 +131,7 @@ export class InputValidator {
    */
   static validateUrl(url) {
     if (!url || typeof url !== 'string') {
-      throw new BotError('URL必须是字符串', ErrorCodes.INVALID_INPUT);
+      throw new RuntimeError('URL必须是字符串', ErrorCodes.INVALID_INPUT);
     }
 
     try {
@@ -139,7 +139,7 @@ export class InputValidator {
       
       // 只允许 http 和 https
       if (!['http:', 'https:'].includes(urlObj.protocol)) {
-        throw new BotError(
+        throw new RuntimeError(
           `不支持的协议: ${urlObj.protocol}`,
           ErrorCodes.INVALID_INPUT
         );
@@ -147,8 +147,8 @@ export class InputValidator {
 
       return url;
     } catch (error) {
-      if (error instanceof BotError) throw error;
-      throw new BotError(`无效的URL格式: ${url}`, ErrorCodes.INVALID_INPUT);
+      if (error instanceof RuntimeError) throw error;
+      throw new RuntimeError(`无效的URL格式: ${url}`, ErrorCodes.INVALID_INPUT);
     }
   }
 
@@ -157,13 +157,13 @@ export class InputValidator {
    */
   static validateJson(jsonString) {
     if (!jsonString || typeof jsonString !== 'string') {
-      throw new BotError('JSON必须是字符串', ErrorCodes.INVALID_INPUT);
+      throw new RuntimeError('JSON必须是字符串', ErrorCodes.INVALID_INPUT);
     }
 
     try {
       return JSON.parse(jsonString);
     } catch (error) {
-      throw new BotError(
+      throw new RuntimeError(
         `无效的JSON格式: ${error.message}`,
         ErrorCodes.INVALID_INPUT
       );
@@ -195,11 +195,11 @@ export class InputValidator {
    */
   static validateApiKey(apiKey) {
     if (!apiKey || typeof apiKey !== 'string') {
-      throw new BotError('API密钥必须是字符串', ErrorCodes.INVALID_INPUT);
+      throw new RuntimeError('API密钥必须是字符串', ErrorCodes.INVALID_INPUT);
     }
 
     if (apiKey.length < 16 || apiKey.length > 256) {
-      throw new BotError(
+      throw new RuntimeError(
         'API密钥长度必须在16-256字符之间',
         ErrorCodes.INVALID_INPUT
       );

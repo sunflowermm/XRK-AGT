@@ -22,7 +22,7 @@ export const makeForwardMsg = (e, msg = [], dec = '') => {
 
   return e?.group?.makeForwardMsg?.(forwardMsg) 
     ?? e?.friend?.makeForwardMsg?.(forwardMsg) 
-    ?? Bot.makeForwardMsg?.(forwardMsg)
+    ?? AgentRuntime.makeForwardMsg?.(forwardMsg)
 }
 
 /**

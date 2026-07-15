@@ -9,7 +9,7 @@ const DATA_URL_CACHE = new Map();
 
 function getServerPublicUrl() {
   try {
-    const base = Bot?.url;
+    const base = AgentRuntime?.url;
     return base ? String(base).replace(/\/+$/, '') : '';
   } catch {
     return '';
@@ -37,7 +37,7 @@ function parseDataUrl(dataUrl) {
 /**
  * 下载图片并返回 { mimeType, base64 }
  * - 支持 data URL：直接解析
- * - 支持相对路径：通过 Bot.url 转成绝对 URL 后下载
+ * - 支持相对路径：通过 AgentRuntime.url 转成绝对 URL 后下载
  */
 export async function fetchAsBase64(url, { timeoutMs = 30000 } = {}) {
   const raw = String(url ?? '').trim();

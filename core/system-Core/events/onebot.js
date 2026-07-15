@@ -7,7 +7,7 @@ export default class OneBotEvent extends EventListenerBase {
   }
 
   async init() {
-    const bot = this.bot || Bot
+    const bot = this.bot || AgentRuntime
     for (const t of ['message', 'notice', 'request']) {
       bot.on(`onebot.${t}`, (e) => this.handleEvent(e))
     }
@@ -15,14 +15,14 @@ export default class OneBotEvent extends EventListenerBase {
 
   /** 前置校验与标记，标准化由 loader 统一执行 */
   normalizeEventBase(e) {
-    e.bot = e.bot || (e.self_id ? Bot[e.self_id] : null)
+    e.bot = e.bot || (e.self_id ? AgentRuntime[e.self_id] : null)
     if (!e.bot) {
-      Bot.makeLog('warn', `Bot对象不存在，忽略事件：${e.self_id}`, e.self_id)
+      AgentRuntime.makeLog('warn', `AgentRuntime对象不存在，忽略事件：${e.self_id}`, e.self_id)
       return false
     }
     this.ensureEventId(e)
     if (!this.markProcessed(e)) {
-      Bot.makeLog('debug', `事件已处理，跳过：${e.event_id}`, e.self_id)
+      AgentRuntime.makeLog('debug', `事件已处理，跳过：${e.event_id}`, e.self_id)
       return false
     }
     this.markAdapter(e, { isOneBot: true })
@@ -62,7 +62,7 @@ export default class OneBotEvent extends EventListenerBase {
           }
         }
         // warn: 发送方法缺失需要关注
-        Bot.makeLog("warn", `无法发送消息：找不到合适的发送方法`, e.self_id)
+        AgentRuntime.makeLog("warn", `无法发送消息：找不到合适的发送方法`, e.self_id)
         return false
       } catch (error) {
         errorHandler.handle(
@@ -71,7 +71,7 @@ export default class OneBotEvent extends EventListenerBase {
           true
         )
         // debug: 发送失败是技术细节
-        Bot.makeLog("debug", `回复消息失败: ${error.message}`, e.self_id)
+        AgentRuntime.makeLog("debug", `回复消息失败: ${error.message}`, e.self_id)
         return false
       }
     }
@@ -93,7 +93,7 @@ export default class OneBotEvent extends EventListenerBase {
         { context: 'handleEvent', selfId: e?.self_id, code: ErrorCodes.SYSTEM_ERROR },
         true
       )
-      Bot.makeLog("error", `处理OneBot事件失败: ${error.message}`, e?.self_id, error)
+      AgentRuntime.makeLog("error", `处理OneBot事件失败: ${error.message}`, e?.self_id, error)
     }
   }
 

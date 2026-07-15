@@ -1,6 +1,6 @@
 # Server 服务器架构文档
 
-> **文件位置**：`src/bot.js`  
+> **文件位置**：`src/agent-runtime.js`  
 > **说明**：XRK-AGT 的 Server 层是系统的核心服务层，提供统一的 HTTP/HTTPS/WebSocket 服务、反向代理、静态文件服务、安全中间件等能力，支持快速搭建各种通讯协议的客户端或服务端。  
 > **注意**：本文档中所有 `{端口}` 或 `localhost:{端口}` 的占位符表示实际端口号，由启动配置决定（通过 `bot.run({ port: 端口号 })` 指定）。HTTP 端口由启动时指定；**HTTPS 端口默认使用 `HTTP端口 + https.portOffset`（默认 1）**，也可通过 `https.port` 显式指定。
 
@@ -26,11 +26,11 @@
 
 ## 架构总览
 
-`Bot`（`src/bot.js`）统一承载 HTTP/HTTPS/WebSocket、中间件、路由与可选反向代理。Runtime 与 Core 分层见 **[底层架构设计](底层架构设计.md)**；启动见 **[startup.md](startup.md)**。本文只讲 **Server 层**。
+`AgentRuntime`（`src/agent-runtime.js`）统一承载 HTTP/HTTPS/WebSocket、中间件、路由与可选反向代理。Runtime 与 Core 分层见 **[底层架构设计](底层架构设计.md)**；启动见 **[startup.md](startup.md)**。本文只讲 **Server 层**。
 
 **请求路径**：客户端 →（可选反向代理）→ Express → 中间件 → 路由（系统 / API / 静态）→ `core/*/` 业务。
 
-**WebSocket**：`Upgrade` 后由 `Bot.wsf[path]` 路由到 Tasker 处理器。
+**WebSocket**：`Upgrade` 后由 `AgentRuntime.wsf[path]` 路由到 Tasker 处理器。
 
 ---
 
@@ -38,7 +38,7 @@
 
 ### 1. 统一的服务器架构
 
-- **单一入口**：所有HTTP/HTTPS/WebSocket请求统一由 `Bot` 类管理
+- **单一入口**：所有HTTP/HTTPS/WebSocket请求统一由 `AgentRuntime` 类管理
 - **分层设计**：清晰的中间件层、路由层、业务层分离
 - **事件驱动**：基于 EventEmitter，支持生命周期事件
 
@@ -430,7 +430,7 @@ flowchart LR
     Client["💻 WebSocket客户端<br/>浏览器/应用"] --> Upgrade["🔄 HTTP Upgrade请求<br/>GET /path HTTP/1.1<br/>Upgrade: websocket<br/>Connection: Upgrade"]
     Upgrade --> Server("🌐 HTTP服务器<br/>监听upgrade事件<br/>server.on('upgrade')")
     Server --> Auth["🔐 认证检查<br/>✅ 同HTTP认证机制<br/>🔑 API Key验证"]
-    Auth -->|"认证通过"| PathCheck("📍 路径检查<br/>查找Bot.wsf[path]<br/>匹配处理器")
+    Auth -->|"认证通过"| PathCheck("📍 路径检查<br/>查找AgentRuntime.wsf[path]<br/>匹配处理器")
     PathCheck -->|"找到处理器"| Handler["⚙️ 路径处理器<br/>/OneBotv11 → OneBot Handler<br/>/device → Device Handler<br/>/custom → 自定义 Handler"]
     Handler --> WS["🔌 WebSocket连接建立<br/>双向通信<br/>实时数据交换"]
     
@@ -460,7 +460,7 @@ sequenceDiagram
     Client->>Server: 📨 HTTP Upgrade请求<br/>GET /ws HTTP/1.1<br/>Upgrade: websocket<br/>Connection: Upgrade
     Server->>Auth: 🔍 检查认证<br/>同HTTP认证机制<br/>API Key验证
     Auth->>Server: ✅ 认证通过<br/>允许连接
-    Server->>Path: 🔎 查找路径处理器<br/>Bot.wsf['/ws']
+    Server->>Path: 🔎 查找路径处理器<br/>AgentRuntime.wsf['/ws']
     Path->>Handler: ⚙️ 调用处理器<br/>注册的WebSocket处理函数
     Handler->>Client: 🔌 WebSocket连接建立<br/>101 Switching Protocols
     
@@ -493,7 +493,7 @@ websocket:
 
 ```javascript
 // Tasker注册WebSocket路径
-Bot.wsf['OneBotv11'].push((ws, ...args) => {
+AgentRuntime.wsf['OneBotv11'].push((ws, ...args) => {
   ws.on('message', data => {
     // 处理消息
   });
@@ -502,9 +502,9 @@ Bot.wsf['OneBotv11'].push((ws, ...args) => {
 
 ### WebSocket 认证
 
-- **统一认证链路**：WebSocket 升级阶段复用 `Bot.checkApiAuthorization(req)` 逻辑
+- **统一认证链路**：WebSocket 升级阶段复用 `AgentRuntime.checkApiAuthorization(req)` 逻辑
 - **127 回环免鉴权**：仅 `127.*` / `::ffff:127.*` 自动放行
-- **路径级例外**：`Bot.wsf[path]` 中声明 `skipAuth: true` 时可跳过系统级 API Key
+- **路径级例外**：`AgentRuntime.wsf[path]` 中声明 `skipAuth: true` 时可跳过系统级 API Key
 
 ---
 
@@ -763,7 +763,7 @@ export default {
 
 ## 安全与中间件
 
-**鉴权总览**：Server 层不做 HTTP 路由的统一鉴权拦截；system-Core HTTP 在模块内调用 `Bot.checkApiAuthorization(req)`，其他 Core 按需自行实现；WebSocket 升级阶段默认走统一 API Key 校验链路。详见 **[鉴权与认证（AUTH）](AUTH.md)**。
+**鉴权总览**：Server 层不做 HTTP 路由的统一鉴权拦截；system-Core HTTP 在模块内调用 `AgentRuntime.checkApiAuthorization(req)`，其他 Core 按需自行实现；WebSocket 升级阶段默认走统一 API Key 校验链路。详见 **[鉴权与认证（AUTH）](AUTH.md)**。
 
 ### 安全中间件栈
 
@@ -850,7 +850,7 @@ auth:
 
 | 平台/协议 | SDK名称 | 适配度 | 说明 | 推荐使用场景 |
 |----------|---------|--------|------|------------|
-| **OneBot v11** | `oicq` / `icqq` | ⭐⭐⭐⭐⭐ | 完全支持，官方推荐 | QQ机器人开发 |
+| **OneBot v11** | Tasker（`OneBotv11` 等） | ⭐⭐⭐⭐⭐ | 协议适配，无捆绑 oicq/icqq | QQ / 兼容实现 |
 | **OneBot v11** | `go-cqhttp` | ⭐⭐⭐⭐⭐ | 通过WebSocket连接 | 稳定生产环境 |
 | **WebSocket** | `ws` | ⭐⭐⭐⭐⭐ | 原生支持 | 实时通讯 |
 | **HTTP/HTTPS** | `express` | ⭐⭐⭐⭐⭐ | 核心框架 | REST API |
@@ -860,24 +860,9 @@ auth:
 
 ### SDK 集成示例
 
-#### 1. OneBot v11 (oicq/icqq)
+#### 1. OneBot v11
 
-```javascript
-// core/system-Core/tasker/OneBotv11.js
-import { createClient } from 'oicq';
-
-class OneBotv11Tasker {
-  load() {
-    const client = createClient(this.qq);
-    client.on('message', (e) => {
-      Bot.em('onebot.message', {
-        event_id: `onebot_${Date.now()}`,
-        // ... 事件数据
-      });
-    });
-  }
-}
-```
+通过 core/*/tasker/ 适配（如 system-Core/tasker/OneBotv11.js），向 AgentRuntime.em 派发标准化事件；**不依赖** oicq/icqq npm 包。消息段用全局 msgSegment。
 
 #### 2. WebSocket 客户端
 
@@ -960,11 +945,11 @@ export default class MyWebSocketTasker {
   path = 'myws'
 
   load() {
-    Bot.wsf[this.path].push((ws, req) => {
+    AgentRuntime.wsf[this.path].push((ws, req) => {
       ws.on('message', (data) => {
         // 处理消息
         const message = JSON.parse(data);
-        Bot.em('myws.message', {
+        AgentRuntime.em('myws.message', {
           event_id: `myws_${Date.now()}`,
           message: message
         });
@@ -1008,7 +993,7 @@ export default class MyTCPTasker {
     const server = net.createServer((socket) => {
       socket.on('data', (data) => {
         // 处理TCP数据
-        Bot.em('tcp.message', {
+        AgentRuntime.em('tcp.message', {
           event_id: `tcp_${Date.now()}`,
           data: data.toString()
         });
@@ -1157,7 +1142,7 @@ performance:
 
 ## 架构说明
 
-Bot 作为单一 HTTP/WS 入口，可选内置反向代理与 [HTTP 业务层](http-business-layer.md)（重定向、CDN、负载均衡）。HTTP 业务层方法已挂载到运行时 `Bot` 实例，例如 `bot.handleRedirect(req, res)`、`bot.getProxyStats()`。
+AgentRuntime 作为单一 HTTP/WS 入口，可选内置反向代理与 [HTTP 业务层](http-business-layer.md)（重定向、CDN、负载均衡）。HTTP 业务层方法已挂载到运行时 `AgentRuntime` 实例，例如 `bot.handleRedirect(req, res)`、`bot.getProxyStats()`。
 
 ---
 
@@ -1236,7 +1221,7 @@ A: 反向代理可以：
 
 ### Q: 如何添加自定义中间件？
 
-A: 在 `Bot` 类的 `_setupMiddleware` 方法中添加，或通过插件系统扩展。
+A: 在 `AgentRuntime` 类的 `_setupMiddleware` 方法中添加，或通过插件系统扩展。
 
 ### Q: WebSocket连接失败怎么办？
 
@@ -1271,7 +1256,7 @@ XRK-AGT 的 Server 层提供了：
 ## 相关文档
 
 - **[HTTP业务层文档](http-business-layer.md)** - 重定向、CDN、负载均衡详细说明
-- **[Bot 主类文档](bot.md)** - Bot 生命周期、中间件与认证
+- **[AgentRuntime 主类文档](agent-runtime.md)** - AgentRuntime 生命周期、中间件与认证
 - **[HTTP API 基类文档](http-api.md)** - HTTP API 基类说明
 - **[system-Core 特性](system-core.md)** - system-Core 内置模块完整说明 ⭐
 - **[框架可扩展性指南](框架可扩展性指南.md)** - 扩展开发完整指南

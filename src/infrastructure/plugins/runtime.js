@@ -6,7 +6,7 @@ import lodash from "lodash"
 import fs from "node:fs/promises"
 import path from "node:path"
 import common from "#utils/common.js"
-import cfg from "#infrastructure/config/config.js"
+import runtimeConfig from "#infrastructure/config/config.js"
 import RendererLoader from "#infrastructure/renderer/loader.js"
 import Handler from "./handler.js";
 
@@ -87,7 +87,7 @@ const extensionRegistry = new RuntimeExtensionRegistry()
  * @class Runtime
  * @example
  * // 在插件中使用Runtime
- * export default class MyPlugin extends plugin {
+ * export default class MyPlugin extends PluginBase {
  *   async test(e) {
  *     // 获取运行时实例
  *     const runtime = await Runtime.init(e);
@@ -150,8 +150,8 @@ export default class Runtime {
     return this._extensions[name]
   }
 
-  get cfg() {
-    return cfg
+  get runtimeConfig() {
+    return runtimeConfig
   }
 
   get common() {
@@ -170,21 +170,21 @@ export default class Runtime {
    * @param plugin plugin key
    * @param path html文件路径，相对于plugin resources目录
    * @param data 渲染数据
-   * @param cfg 渲染配置
-   * @param cfg.retType 返回值类型
+   * @param runtimeConfig 渲染配置
+   * @param runtimeConfig.retType 返回值类型
    * * default/空：自动发送图片，返回true
    * * msgId：自动发送图片，返回msg id
    * * base64: 不自动发送图像，返回图像base64数据
-   * @param cfg.beforeRender({data}) 可改写渲染的data数据
+   * @param runtimeConfig.beforeRender({data}) 可改写渲染的data数据
    * @returns {Promise<boolean>}
    */
-  async render(plugin, tplPath, data = {}, cfg = {}) {
+  async render(plugin, tplPath, data = {}, runtimeConfig = {}) {
     const cleanPath = String(tplPath || '').replace(/\.html$/, '')
     const parts = lodash.filter(cleanPath.split("/"), Boolean)
     const normalizedPath = parts.join("/") || "index"
     
     // 创建目录
-    await Bot.mkdir(`trash/html/${plugin}/${normalizedPath}`)
+    await AgentRuntime.mkdir(`trash/html/${plugin}/${normalizedPath}`)
     
     // 自动计算pluResPath
     const resourcesPath = path.join("resources", plugin)
@@ -213,13 +213,13 @@ export default class Runtime {
     }
     
     // 处理beforeRender
-    if (cfg.beforeRender) {
-      data = cfg.beforeRender({ data }) || data
+    if (runtimeConfig.beforeRender) {
+      data = runtimeConfig.beforeRender({ data }) || data
     }
     
     // 保存模板数据（开发模式）
     if (process.argv.includes("dev")) {
-      const saveDir = await Bot.mkdir(`trash/ViewData/${plugin}`)
+      const saveDir = await AgentRuntime.mkdir(`trash/ViewData/${plugin}`)
       const file = `${saveDir}/${data._htmlPath.split("/").join("_")}.json`
       await fs.writeFile(file, JSON.stringify(data))
     }
@@ -230,20 +230,20 @@ export default class Runtime {
       throw new Error('未加载到可用渲染器(puppeteer/playwright)，请检查 src/renderers 与 agt.browser.renderer')
     }
     const img = await renderer.render(`${plugin}/${normalizedPath}`, data)
-    const base64 = img ? segment.image(img) : null
-    if (cfg.retType === "base64") {
+    const base64 = img ? msgSegment.image(img) : null
+    if (runtimeConfig.retType === "base64") {
       return base64
     }
     
     let ret = true
     if (base64) {
-      if (cfg.recallMsg) {
+      if (runtimeConfig.recallMsg) {
         ret = await this.e.reply(base64, false, {})
       } else {
         ret = await this.e.reply(base64)
       }
     }
-    return cfg.retType === "msgId" ? ret : true
+    return runtimeConfig.retType === "msgId" ? ret : true
   }
 
   /**

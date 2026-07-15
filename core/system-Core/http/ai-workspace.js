@@ -1,7 +1,7 @@
 import path from 'node:path';
 import fs from 'node:fs/promises';
 import multer from 'multer';
-import cfg from '#infrastructure/config/config.js';
+import runtimeConfig from '#infrastructure/config/config.js';
 import { HttpResponse } from '#utils/http-utils.js';
 import {
   normalizePresetId,
@@ -30,8 +30,8 @@ function parsePresetId(req) {
   return normalizePresetId(String(raw ?? '').trim() || getConfiguredDefaultWorkspaceId());
 }
 
-function resolveBaseUrl(Bot, req) {
-  const raw = Bot?.url || Bot?.getServerUrl?.() || `${req.protocol}://${req.get('host')}`;
+function resolveBaseUrl(AgentRuntime, req) {
+  const raw = AgentRuntime?.url || AgentRuntime?.getServerUrl?.() || `${req.protocol}://${req.get('host')}`;
   return String(raw).replace(/\/+$/, '');
 }
 
@@ -111,7 +111,7 @@ export default {
     {
       method: 'POST',
       path: '/api/ai/workspace/files/upload',
-      handler: HttpResponse.asyncHandler(async (req, res, Bot) => {
+      handler: HttpResponse.asyncHandler(async (req, res, AgentRuntime) => {
         ensureAuditHook();
         const workspace = parsePresetId(req);
         const subdir = String(req.query.dir ?? req.body?.dir ?? '').trim();
@@ -120,7 +120,7 @@ export default {
         if (!contentType.includes('multipart/form-data')) {
           return HttpResponse.validationError(res, '请使用 multipart/form-data 上传');
         }
-        const maxFileSize = cfg?.server?.limits?.fileSize || '100mb';
+        const maxFileSize = runtimeConfig?.server?.limits?.fileSize || '100mb';
         let destDir;
         try {
           const listed = listWorkspaceFiles(ctx.fileRootAbs, subdir);
@@ -138,7 +138,7 @@ export default {
           return HttpResponse.error(res, new Error(e?.message || '上传失败'), 400, 'ai.workspace.upload');
         }
         if (!files.length) return HttpResponse.validationError(res, '没有文件');
-        const baseUrl = resolveBaseUrl(Bot, req);
+        const baseUrl = resolveBaseUrl(AgentRuntime, req);
         const relDir = String(subdir || '').replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
         const uploaded = files.map((f) => {
           const name = path.basename(f.filename || f.originalname || 'file');

@@ -1,12 +1,12 @@
 import path from 'node:path';
-import BotUtil from '#utils/botutil.js';
+import RuntimeUtil from '#utils/runtime-util.js';
 import paths from '#utils/paths.js';
 import { findInCoreSubDirs, resolveQualifiedCoreModuleKey } from '#utils/core-fs.js';
 import { FileLoader } from '#utils/file-loader.js';
 import { HotReloadBase } from '#utils/hot-reload-base.js';
 import { LOADER_BATCH_SIZE } from '#utils/loader-constants.js';
 
-class ConfigLoader {
+class CommonConfigRegistry {
   configs = new Map();
   loaded = false;
   _hotReload = null;
@@ -14,7 +14,7 @@ class ConfigLoader {
 
   async load() {
     const startTime = Date.now();
-    BotUtil.makeLog('info', '开始加载配置管理器...', 'ConfigLoader');
+    RuntimeUtil.makeLog('info', '开始加载配置管理器...', 'CommonConfigRegistry');
 
     const allFiles = await FileLoader.getCoreSubDirFiles('commonconfig', {
       ext: '.js',
@@ -26,10 +26,10 @@ class ConfigLoader {
     this._configDirsCache = null;
 
     this.loaded = true;
-    BotUtil.makeLog(
+    RuntimeUtil.makeLog(
       'info',
       `配置管理器加载完成: ${this.configs.size}个, 耗时${Date.now() - startTime}ms`,
-      'ConfigLoader'
+      'CommonConfigRegistry'
     );
     return this.configs;
   }
@@ -45,7 +45,7 @@ class ConfigLoader {
       const key = resolveQualifiedCoreModuleKey(filePath, dirs, 'commonconfig');
       const module = await FileLoader.importFresh(filePath);
       if (!module.default) {
-        BotUtil.makeLog('warn', `无效的配置模块: ${key}`, 'ConfigLoader');
+        RuntimeUtil.makeLog('warn', `无效的配置模块: ${key}`, 'CommonConfigRegistry');
         return false;
       }
 
@@ -56,15 +56,15 @@ class ConfigLoader {
       configInstance.key = key;
       configInstance.filePath = filePath;
       this.configs.set(key, configInstance);
-      // 短名别名：仅在未占用时写入，便于 ConfigManager.get('ai_config')
+      // 短名别名：仅在未占用时写入，便于 CommonConfigRegistry.get('ai_config')
       const shortName = path.basename(filePath, '.js');
       if (!this.configs.has(shortName)) {
         this.configs.set(shortName, configInstance);
       }
-      BotUtil.makeLog('debug', `加载配置: ${configInstance.displayName ?? key}`, 'ConfigLoader');
+      RuntimeUtil.makeLog('debug', `加载配置: ${configInstance.displayName ?? key}`, 'CommonConfigRegistry');
       return true;
     } catch (error) {
-      BotUtil.makeLog('error', `加载配置失败: ${filePath} - ${error.message}`, 'ConfigLoader', error);
+      RuntimeUtil.makeLog('error', `加载配置失败: ${filePath} - ${error.message}`, 'CommonConfigRegistry', error);
       return false;
     }
   }
@@ -104,7 +104,7 @@ class ConfigLoader {
   async reload(name) {
     const configPath = findInCoreSubDirs(await paths.getCoreSubDirs('commonconfig'), name.includes('/') ? path.basename(name) : name);
     if (!configPath) {
-      BotUtil.makeLog('error', `配置重载失败: ${name} 文件不存在`, 'ConfigLoader');
+      RuntimeUtil.makeLog('error', `配置重载失败: ${name} 文件不存在`, 'CommonConfigRegistry');
       return false;
     }
     return this.reloadFile(configPath);
@@ -120,7 +120,7 @@ class ConfigLoader {
         'commonconfig'
       );
       this.configs.get(key)?.clearCache?.();
-      BotUtil.makeLog('info', `配置已重载: ${key}`, 'ConfigLoader');
+      RuntimeUtil.makeLog('info', `配置已重载: ${key}`, 'CommonConfigRegistry');
     }
     return ok;
   }
@@ -143,7 +143,7 @@ class ConfigLoader {
     if (this._hotReload?.watcher) return;
 
     try {
-      const hotReload = new HotReloadBase({ loggerName: 'ConfigLoader' });
+      const hotReload = new HotReloadBase({ loggerName: 'CommonConfigRegistry' });
       const configDirs = await paths.getCoreSubDirs('commonconfig');
       if (configDirs.length === 0) return;
 
@@ -161,9 +161,9 @@ class ConfigLoader {
       });
       if (started) this._hotReload = hotReload;
     } catch (error) {
-      BotUtil.makeLog('error', '启动 CommonConfig 文件监视失败', 'ConfigLoader', error);
+      RuntimeUtil.makeLog('error', '启动 CommonConfig 文件监视失败', 'CommonConfigRegistry', error);
     }
   }
 }
 
-export default new ConfigLoader();
+export default new CommonConfigRegistry();

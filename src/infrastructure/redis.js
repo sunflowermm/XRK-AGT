@@ -1,8 +1,8 @@
-import cfg from './config/config.js'
+import runtimeConfig from './config/config.js'
 import common, { normalizeHost } from '#utils/common.js'
 import { normalizeError } from '#utils/normalize-error.js'
 import { connectWithRetry } from '#utils/db-connect-utils.js'
-import BotUtil from '#utils/botutil.js'
+import RuntimeUtil from '#utils/runtime-util.js'
 import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
@@ -31,7 +31,7 @@ export default async function redisInit() {
 
   const fastStart = process.env.XRK_FAST_START === '1'
   const maxRetries = fastStart ? 1 : REDIS_CONFIG.MAX_RETRIES
-  const redisUrl = buildRedisUrl(cfg.redis)
+  const redisUrl = buildRedisUrl(runtimeConfig.redis)
   const clientConfig = buildClientConfig(redisUrl, fastStart)
 
   const client = await connectWithRetry({
@@ -65,7 +65,7 @@ function buildRedisUrl(redisConfig) {
 }
 
 function buildClientConfig(redisUrl, fastStart = false) {
-  const options = cfg.redis?.options || {}
+  const options = runtimeConfig.redis?.options || {}
   const connectTimeout = fastStart
     ? 2000
     : (options.connectTimeout ?? REDIS_CONFIG.CONNECT_TIMEOUT)
@@ -103,7 +103,7 @@ function getOptimalPoolSize() {
     Math.min(poolSize, REDIS_CONFIG.MAX_POOL_SIZE)
   )
 
-  BotUtil.makeLog('debug', `系统资源: CPU=${cpuCount}核, 内存=${memoryGB.toFixed(2)}GB, 连接池大小=${finalSize}`, 'Redis')
+  RuntimeUtil.makeLog('debug', `系统资源: CPU=${cpuCount}核, 内存=${memoryGB.toFixed(2)}GB, 连接池大小=${finalSize}`, 'Redis')
   return finalSize
 }
 
@@ -115,15 +115,15 @@ function isLoopbackHost(host) {
 async function attemptRedisStart(retryCount) {
   if (process.env.NODE_ENV === 'production') return
 
-  const host = cfg.redis?.host || '127.0.0.1'
-  const port = cfg.redis?.port || 6379
+  const host = runtimeConfig.redis?.host || '127.0.0.1'
+  const port = runtimeConfig.redis?.port || 6379
   if (!isLoopbackHost(host)) {
-    BotUtil.makeLog('debug', `非本机 Redis（${host}），跳过本地拉起`, 'Redis')
+    RuntimeUtil.makeLog('debug', `非本机 Redis（${host}），跳过本地拉起`, 'Redis')
     return
   }
 
   try {
-    BotUtil.makeLog('info', '尝试启动本地 Redis...', 'Redis')
+    RuntimeUtil.makeLog('info', '尝试启动本地 Redis...', 'Redis')
     const { ensureRedisReady } = await import(pathToFileURL(ENSURE_REDIS_MJS).href)
     const result = await ensureRedisReady({ host, port })
     if (!result.ok) {
@@ -132,7 +132,7 @@ async function attemptRedisStart(retryCount) {
     await common.sleep(500 + retryCount * 500)
   } catch (err) {
     const error = normalizeError(err)
-    BotUtil.makeLog('debug', `启动失败: ${error.message}`, 'Redis')
+    RuntimeUtil.makeLog('debug', `启动失败: ${error.message}`, 'Redis')
   }
 }
 
@@ -141,11 +141,11 @@ let healthCheckTimer = null
 function registerEventHandlers(client) {
   // 勿在 error 里再手动 connect：与 socket reconnectStrategy 双重重连会打架刷 console
   client.on('error', (/** @type {any} */ err) => {
-    BotUtil.makeLog('warn', normalizeError(err).message, 'Redis')
+    RuntimeUtil.makeLog('warn', normalizeError(err).message, 'Redis')
   })
-  client.on('ready', () => BotUtil.makeLog('debug', '就绪', 'Redis'))
-  client.on('reconnecting', () => BotUtil.makeLog('debug', '正在重新连接...', 'Redis'))
-  client.on('end', () => BotUtil.makeLog('warn', '连接已关闭', 'Redis'))
+  client.on('ready', () => RuntimeUtil.makeLog('debug', '就绪', 'Redis'))
+  client.on('reconnecting', () => RuntimeUtil.makeLog('debug', '正在重新连接...', 'Redis'))
+  client.on('end', () => RuntimeUtil.makeLog('warn', '连接已关闭', 'Redis'))
 }
 
 function startHealthCheck(client) {
@@ -158,7 +158,7 @@ function startHealthCheck(client) {
     try {
       await client.ping()
     } catch (err) {
-      BotUtil.makeLog('debug', `健康检查失败: ${normalizeError(err).message}`, 'Redis')
+      RuntimeUtil.makeLog('debug', `健康检查失败: ${normalizeError(err).message}`, 'Redis')
     }
   }, REDIS_CONFIG.HEALTH_CHECK_INTERVAL)
   healthCheckTimer.unref?.()

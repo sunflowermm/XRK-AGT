@@ -9,7 +9,7 @@ import path from 'node:path';
 import { pipeline } from 'node:stream/promises';
 import { Readable } from 'node:stream';
 import { getAistreamConfigOptional } from '#utils/aistream-config.js';
-import cfg from '#infrastructure/config/config.js';
+import runtimeConfig from '#infrastructure/config/config.js';
 import { normalizeError } from '#utils/normalize-error.js';
 import { SUBSERVER_RUNTIME_CATALOG } from '#utils/subserver-runtimes.js';
 
@@ -40,7 +40,7 @@ function resolveRuntimeEntry(subserverRoot, id) {
 
 /** @returns {string} */
 export function getSubserverDefaultRuntime() {
-  const root = cfg.subserver ?? getAistreamConfigOptional().subserver ?? {};
+  const root = runtimeConfig.subserver ?? getAistreamConfigOptional().subserver ?? {};
   const id = root.default;
   if (id && SUBSERVER_RUNTIME_CATALOG[id]) return id;
   return 'pyserver';
@@ -50,7 +50,7 @@ export function getSubserverDefaultRuntime() {
  * @param {string} [runtimeId]
  */
 export function getSubserverConfig(runtimeId) {
-  const root = cfg.subserver ?? {};
+  const root = runtimeConfig.subserver ?? {};
   const id = runtimeId || getSubserverDefaultRuntime();
   const catalog = SUBSERVER_RUNTIME_CATALOG[id] || SUBSERVER_RUNTIME_CATALOG.pyserver;
 
@@ -117,7 +117,7 @@ export function formatSubserverError(err, runtime) {
 
   const code = errorCauseCode(error);
   if (code === 'ECONNREFUSED') {
-    return `子服务端可能未启动，连接被拒绝${suffix}\n请启动对应 runtime 并在 CommonConfig → AIStream → 子服务端 核对地址端口`;
+    return `子服务端可能未启动，连接被拒绝${suffix}\n请启动对应 runtime 并在 CommonConfig → AiWorkflow → 子服务端 核对地址端口`;
   }
   if (code === 'ECONNRESET') {
     return `子服务端连接被重置，可能正在重启或处理超时${suffix}`;

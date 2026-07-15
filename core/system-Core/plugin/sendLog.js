@@ -2,7 +2,7 @@ import fs from "node:fs/promises"
 import path from "node:path"
 import lodash from "lodash"
 import moment from "moment"
-import cfg from '#infrastructure/config/config.js'
+import runtimeConfig from '#infrastructure/config/config.js'
 
 // 模块级配置
 const levelConfig = {
@@ -21,7 +21,7 @@ let logDir = "logs"
 let maxPerForward = 30
 let maxLineLength = 300
 
-export class sendLog extends plugin {
+export class sendLog extends PluginBase {
   constructor() {
     super({
       name: "发送日志",
@@ -39,8 +39,8 @@ export class sendLog extends plugin {
   }
 
   async init() {
-    // 从cfg配置读取，充分利用配置系统
-    const agtCfg = cfg.agt || {}
+    // 从runtimeConfig配置读取，充分利用配置系统
+    const agtCfg = runtimeConfig.agt || {}
     const logSendCfg = agtCfg.logging?.send || {}
     lineNum = logSendCfg.defaultLines || 120
     maxNum = logSendCfg.maxLines || 1000
@@ -129,7 +129,7 @@ export class sendLog extends plugin {
       messages.push({
         message: headerInfo,
         nickname: "📋 日志信息",
-        user_id: Bot.uin
+        user_id: AgentRuntime.uin
       })
       
       if (keyWord || filterLevel) {
@@ -137,7 +137,7 @@ export class sendLog extends plugin {
         messages.push({
           message: statsInfo,
           nickname: "📊 筛选统计",
-          user_id: Bot.uin
+          user_id: AgentRuntime.uin
         })
       }
     }
@@ -145,7 +145,7 @@ export class sendLog extends plugin {
     messages.push({
       message: `📦 第 ${batchNum}/${totalBatches} 批\n📍 日志范围: #${startIdx + 1} - #${startIdx + batchLogs.length}\n共 ${batchLogs.length} 条日志`,
       nickname: `批次 ${batchNum}/${totalBatches}`,
-      user_id: Bot.uin
+      user_id: AgentRuntime.uin
     })
     
     batchLogs.forEach((log, idx) => {
@@ -156,7 +156,7 @@ export class sendLog extends plugin {
       messages.push({
         message: this.truncateLog(log),
         nickname: nickname,
-        user_id: Bot.uin
+        user_id: AgentRuntime.uin
       })
     })
     
@@ -164,7 +164,7 @@ export class sendLog extends plugin {
       messages.push({
         message: this.buildUsageInfo(),
         nickname: "💡 使用说明",
-        user_id: Bot.uin
+        user_id: AgentRuntime.uin
       })
     }
     
@@ -389,7 +389,7 @@ export class sendLog extends plugin {
 
   buildUsageInfo() {
     const platformInfo = logger.platform?.() || {}
-    const agtCfg = cfg.agt || {}
+    const agtCfg = runtimeConfig.agt || {}
     const logCfg = agtCfg.logging || {}
     
     return [
@@ -419,7 +419,7 @@ export class sendLog extends plugin {
     const msgs = msgList.map((msg, i) => ({
       message: msg.message,
       nickname: msg.nickname || "日志系统",
-      user_id: String(msg.user_id || Bot.uin.toString()),
+      user_id: String(msg.user_id || AgentRuntime.uin.toString()),
       time: Math.floor(Date.now() / 1000) - (msgList.length - i) * 2
     }))
     
@@ -427,9 +427,9 @@ export class sendLog extends plugin {
       const makeForward = e.group?.makeForwardMsg || 
                          e.friend?.makeForwardMsg || 
                          e.bot?.makeForwardMsg ||
-                         Bot.makeForwardMsg
+                         AgentRuntime.makeForwardMsg
       
-      const context = e.group || e.friend || e.bot || Bot
+      const context = e.group || e.friend || e.bot || AgentRuntime
       return await makeForward.call(context, msgs)
     } catch (error) {
       logger.error(`[sendLog] 生成转发消息失败: ${error.message}`, error)
@@ -451,7 +451,7 @@ export class sendLog extends plugin {
       const forwardMsg = await this.makeForwardMsg(this.e, [{
         message: errorInfo,
         nickname: "错误提示",
-        user_id: Bot.uin
+        user_id: AgentRuntime.uin
       }])
       
       await this.e.reply(forwardMsg || `❌ ${errorMsg}`)

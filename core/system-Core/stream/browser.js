@@ -1,6 +1,6 @@
-import AIStream from '#infrastructure/aistream/aistream.js';
-import StreamLoader from '#infrastructure/aistream/loader.js';
-import BotUtil from '#utils/botutil.js';
+import AiWorkflow from '#infrastructure/ai-workflow/ai-workflow.js';
+import AiStreamLoader from '#infrastructure/ai-workflow/loader.js';
+import RuntimeUtil from '#utils/runtime-util.js';
 import { isPathInside } from '#utils/path-guards.js';
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -12,7 +12,7 @@ import {
 } from '../lib/crawl/index.js';
 
 function resolveBrowserScreenshotSavePath(relPath) {
-  const ws = StreamLoader.getStream('tools')?.workspace;
+  const ws = AiStreamLoader.getStream('tools')?.workspace;
   if (!ws || typeof relPath !== 'string' || !relPath.trim()) return null;
   const root = path.resolve(ws);
   const target = path.resolve(root, relPath.trim().replace(/^\/+/, ''));
@@ -21,7 +21,7 @@ function resolveBrowserScreenshotSavePath(relPath) {
 }
 
 /** Playwright 受控浏览器 MCP。 */
-export default class BrowserStream extends AIStream {
+export default class BrowserStream extends AiWorkflow {
   /** @type {PlaywrightAgentSession | null} */
   session = null;
 
@@ -68,7 +68,7 @@ export default class BrowserStream extends AIStream {
     };
     this.session = await PlaywrightAgentSession.launch(launchOpts);
     this.attachScreenshotHelperIfConfigured();
-    BotUtil.makeLog(
+    RuntimeUtil.makeLog(
       'info',
       `[${this.name}] Playwright 已启动 (${rt.browserType}, headless=${rt.headless}${rt.wsEndpoint ? ', remote' : ''})`,
       'BrowserStream'
@@ -89,7 +89,7 @@ export default class BrowserStream extends AIStream {
       });
       this.session.attachScreenshotHelper(helper);
     } catch (e) {
-      BotUtil.makeLog(
+      RuntimeUtil.makeLog(
         'warn',
         `[${this.name}] 截图字体助手未启用: ${e?.message || e}`,
         'BrowserStream'
@@ -101,7 +101,7 @@ export default class BrowserStream extends AIStream {
     if (this.session) {
       await this.session.close().catch(() => {});
       this.session = null;
-      BotUtil.makeLog('debug', `[${this.name}] Playwright 已关闭`, 'BrowserStream');
+      RuntimeUtil.makeLog('debug', `[${this.name}] Playwright 已关闭`, 'BrowserStream');
     }
   }
 
@@ -130,7 +130,7 @@ export default class BrowserStream extends AIStream {
           return this.successResponse({ message: '浏览器会话已就绪' });
         } catch (e) {
           const msg = e?.message || String(e);
-          BotUtil.makeLog('error', `[${this.name}] browser_start: ${msg}`, 'BrowserStream');
+          RuntimeUtil.makeLog('error', `[${this.name}] browser_start: ${msg}`, 'BrowserStream');
           return this.errorResponse('BROWSER_START_FAILED', msg);
         }
       },
@@ -172,7 +172,7 @@ export default class BrowserStream extends AIStream {
             return this.errorResponse('SSRF_BLOCKED', e.message);
           }
           const msg = e?.message || String(e);
-          BotUtil.makeLog('error', `[${this.name}] browser_goto: ${msg}`, 'BrowserStream');
+          RuntimeUtil.makeLog('error', `[${this.name}] browser_goto: ${msg}`, 'BrowserStream');
           return this.errorResponse('BROWSER_GOTO_FAILED', msg);
         }
       },

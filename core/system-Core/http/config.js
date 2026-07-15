@@ -2,19 +2,19 @@
  * 配置管理API
  * 提供统一的配置文件读写接口
  */
-import BotUtil from '#utils/botutil.js';
-import cfg from '#infrastructure/config/config.js';
-import ConfigLoader from '#infrastructure/commonconfig/loader.js';
+import RuntimeUtil from '#utils/runtime-util.js';
+import runtimeConfig from '#infrastructure/config/config.js';
+import CommonConfigRegistry from '#infrastructure/commonconfig/loader.js';
 import { HttpResponse } from '#utils/http-utils.js';
 
-const getConfig = (name) => ConfigLoader?.get(name);
+const getConfig = (name) => CommonConfigRegistry?.get(name);
 
-/** CommonConfig 写入后清 cfg 内存缓存，使 LLMFactory 等立即读到新 providers[] */
+/** CommonConfig 写入后清 runtimeConfig 内存缓存，使 LLMFactory 等立即读到新 providers[] */
 function invalidateRuntimeCfgCache(configName) {
-  if (!cfg?.config || !configName) return;
-  delete cfg.config[`global.${configName}`];
-  const port = cfg.port;
-  if (port) delete cfg.config[`server.${port}.${configName}`];
+  if (!runtimeConfig?.config || !configName) return;
+  delete runtimeConfig.config[`global.${configName}`];
+  const port = runtimeConfig.port;
+  if (port) delete runtimeConfig.config[`server.${port}.${configName}`];
 }
 
 const resolveConfigInstance = (name, keyPath) => {
@@ -38,7 +38,7 @@ export default {
       method: 'GET',
       path: '/api/config/list',
       handler: HttpResponse.asyncHandler(async (req, res) => {
-        let configList = (global.ConfigManager?.getList?.() || []);
+        let configList = (global.CommonConfigRegistry?.getList?.() || []);
         // 确保 system 配置排在第一位，其余按名称排序，提升前端展示的一致性
         configList = configList.slice().sort((a, b) => {
         if (a.name === 'system') return -1;
@@ -121,7 +121,7 @@ export default {
         // 校验并写入
         const valid = await config.validate(merged);
         if (!valid.valid) {
-          BotUtil.makeLog('warn', `配置验证失败 [${name}${keyPath ? '/' + keyPath : ''}]: ${valid.errors.join('; ')}`, 'ConfigAPI');
+          RuntimeUtil.makeLog('warn', `配置验证失败 [${name}${keyPath ? '/' + keyPath : ''}]: ${valid.errors.join('; ')}`, 'ConfigAPI');
           return HttpResponse.validationError(res, `校验失败: ${valid.errors.join('; ')}`);
         }
         await config.write(merged, { backup, validate });
@@ -138,7 +138,7 @@ export default {
         const configName = req.params?.name;
         const { path: keyPath } = req.query || {};
         if (!configName) return HttpResponse.validationError(res, '配置名称不能为空');
-        if (!global.ConfigManager) return HttpResponse.error(res, new Error('配置管理器未初始化'), 503, 'config.read');
+        if (!global.CommonConfigRegistry) return HttpResponse.error(res, new Error('配置管理器未初始化'), 503, 'config.read');
         const { config, error } = resolveConfigInstance(configName, keyPath);
         if (error) return HttpResponse.notFound(res, error);
         let data;
@@ -161,7 +161,7 @@ export default {
           return HttpResponse.validationError(res, '配置名称不能为空');
         }
 
-        if (!global.ConfigManager) return HttpResponse.error(res, new Error('配置管理器未初始化'), 503, 'config.write');
+        if (!global.CommonConfigRegistry) return HttpResponse.error(res, new Error('配置管理器未初始化'), 503, 'config.write');
         const config = getConfig(configName);
         if (!config) return HttpResponse.notFound(res, `配置 ${configName} 不存在`);
         let result;
@@ -232,7 +232,7 @@ export default {
       method: 'POST',
       path: '/api/config/clear-cache',
       handler: HttpResponse.asyncHandler(async (req, res) => {
-        global.ConfigManager.clearAllCache();
+        global.CommonConfigRegistry.clearAllCache();
         HttpResponse.success(res, null, '已清除所有配置缓存');
       }, 'config.clear-cache')
     }

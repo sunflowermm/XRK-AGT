@@ -75,7 +75,7 @@ class SystemMonitor extends EventEmitter {
     /**
      * 启动监控（配置经 `normalizeMonitorConfig` 安全合并）。
      *
-     * @param {unknown} [config] 原始 `cfg.monitor`
+     * @param {unknown} [config] 原始 `runtimeConfig.monitor`
      * @returns {Promise<void>}
      */
     async start(config) {

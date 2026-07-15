@@ -30,7 +30,7 @@ description: 编写或审查 core/src 代码时，确保使用 Node 26 稳定 AP
 | 下载文件 | `fetch` + `Readable.fromWeb` + `pipeline`（见 `subserver-client.fetchSubserverToPath`） | 自写 `node-fetch` pipeline |
 | 路径匹配 | `new URLPattern({ pathname })` | 手写 regex fallback、`globalThis.URLPattern ?` |
 | URL-safe Base64 | `buf.toBase64({ alphabet: 'base64url' })`、`Uint8Array.fromBase64(s, { alphabet: 'base64url' })` | 手写 base64url 替换 |
-| 文件 glob | `import { glob } from 'glob'`（`botutil.glob` 已封装） | 动态加载 fast-glob、自写 `#getGlobLib` |
+| 文件 glob | `import { glob } from 'glob'`（`RuntimeUtil.glob` 已封装） | 动态加载 fast-glob、自写 `#getGlobLib` |
 
 ## 基础设施（`src/**/*.js`）
 
@@ -63,7 +63,7 @@ export default {
 ```javascript
 } catch (err) {
   const error = normalizeError(err);
-  BotUtil.makeLog('error', error.message, 'MyStream');
+  RuntimeUtil.makeLog('error', error.message, 'MyStream');
 }
 ```
 

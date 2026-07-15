@@ -1,7 +1,7 @@
 import path from 'path';
 import fs from 'fs';
-import AIStream from '#infrastructure/aistream/aistream.js';
-import BotUtil from '#utils/botutil.js';
+import AiWorkflow from '#infrastructure/ai-workflow/ai-workflow.js';
+import RuntimeUtil from '#utils/runtime-util.js';
 import { errorHandler, ErrorCodes } from '#utils/error-handler.js';
 import { PARSEABLE_EMOTIONS, QQ_EMOJI_REACTION_IDS, EMOJI_REACTION_TYPES } from '#utils/emotion-utils.js';
 import {
@@ -12,12 +12,12 @@ import {
   formatUserVisibleDuplicateAck,
   isOverlappingUserVisible
 } from '#utils/chat-user-visible-ack.js';
-import { withStreamLoaderEvent } from '#infrastructure/aistream/stream-loader-context.js';
+import { withAiStreamLoaderEvent } from '#infrastructure/ai-workflow/stream-loader-context.js';
 import {
   getStreamRequestContext,
   runWithStreamRequestContext
-} from '#infrastructure/aistream/stream-request-context.js';
-import { assembleChatLlmMessages, logLlmMessagePreview } from '#infrastructure/aistream/chat-pipeline.js';
+} from '#infrastructure/ai-workflow/stream-request-context.js';
+import { assembleChatLlmMessages, logLlmMessagePreview } from '#infrastructure/ai-workflow/chat-pipeline.js';
 import { BaseTools } from '#utils/base-tools.js';
 import { getAistreamConfigOptional } from '#utils/aistream-config.js';
 import { resolveConfiguredWorkspace } from '../lib/ai-workspace-runtime.js';
@@ -46,7 +46,7 @@ function stripLegacyToolUsagePrefix(text) {
 }
 
 /** 聊天工作流：群聊/互动/群管 MCP 工具 */
-export default class ChatStream extends AIStream {
+export default class ChatStream extends AiWorkflow {
   static emotionImages = {};
   static messageHistory = new Map();
   static cleanupTimer = null;
@@ -87,7 +87,7 @@ export default class ChatStream extends AIStream {
     await super.init();
     
     try {
-      await BotUtil.mkdir(EMOTIONS_DIR);
+      await RuntimeUtil.mkdir(EMOTIONS_DIR);
       await this.loadEmotionImages();
       this.registerAllFunctions();
       
@@ -100,7 +100,7 @@ export default class ChatStream extends AIStream {
         { context: 'ChatStream.init', code: ErrorCodes.SYSTEM_ERROR },
         true
       );
-      BotUtil.makeLog('error', 
+      RuntimeUtil.makeLog('error', 
         `[${this.name}] 初始化失败: ${botError.message}`, 
         'ChatStream'
       );
@@ -115,7 +115,7 @@ export default class ChatStream extends AIStream {
     for (const emotion of PARSEABLE_EMOTIONS) {
       const emotionDir = path.join(EMOTIONS_DIR, emotion);
       try {
-        await BotUtil.mkdir(emotionDir);
+        await RuntimeUtil.mkdir(emotionDir);
         const files = await fs.promises.readdir(emotionDir);
         const imageFiles = files.filter(file => 
           /\.(jpg|jpeg|png|gif)$/i.test(file)
@@ -216,7 +216,7 @@ export default class ChatStream extends AIStream {
       if (result?.success === false) {
         return this._relayPrivateFail(targetQq, result.error || result.raw || '私聊发送失败');
       }
-      if (delay > 0) await BotUtil.sleep(delay);
+      if (delay > 0) await RuntimeUtil.sleep(delay);
       return result;
     } catch (err) {
       return this._relayPrivateFail(targetQq, err);
@@ -242,11 +242,11 @@ export default class ChatStream extends AIStream {
       const { displayText, segments } = resolveOutgoingMessage(part, { fallbackReplyId: null });
       const segs = [...(segments || [])];
       if (i === 0 && imagePaths.length) {
-        for (const p of imagePaths) segs.unshift(segment.image(p));
+        for (const p of imagePaths) segs.unshift(msgSegment.image(p));
       }
       const payload = buildOutboundSegments({ replyId: null, segments: segs });
       if (!payload.length && !imagePaths.length) continue;
-      await friend.sendMsg(payload.length ? payload : [segment.image(imagePaths[0])]);
+      await friend.sendMsg(payload.length ? payload : [msgSegment.image(imagePaths[0])]);
       totalSent++;
       if (displayText) allSentContent.push(displayText);
     }
@@ -256,7 +256,7 @@ export default class ChatStream extends AIStream {
   async _relayPrivateImageSend(friend, absPath, text = '') {
     const caption = String(text ?? '').trim();
     if (!caption) {
-      await friend.sendMsg([segment.image(absPath)]);
+      await friend.sendMsg([msgSegment.image(absPath)]);
       return { totalSent: 1, allSentContent: [] };
     }
     const forbidden = replyContentForbidden(caption);
@@ -288,7 +288,7 @@ export default class ChatStream extends AIStream {
   _getTurnState(context) {
     const turn = context?.turnState ?? getStreamRequestContext()?.turnState;
     if (turn) return turn;
-    BotUtil.makeLog('warn', '[ChatStream] 无请求级 turnState，reply 队列可能串线', 'ChatStream');
+    RuntimeUtil.makeLog('warn', '[ChatStream] 无请求级 turnState，reply 队列可能串线', 'ChatStream');
     return createUserVisibleTurnState();
   }
 
@@ -301,7 +301,7 @@ export default class ChatStream extends AIStream {
   async _wrapHandler(fn, delay = 300) {
     try {
       const result = await fn();
-      if (delay > 0) await BotUtil.sleep(delay);
+      if (delay > 0) await RuntimeUtil.sleep(delay);
       return result;
     } catch (error) {
       return { success: false, error: error.message };
@@ -407,7 +407,7 @@ export default class ChatStream extends AIStream {
             const payload = buildOutboundSegments({ replyId, imagePaths: [image], segments });
             await e.reply(payload);
           } else {
-            await e.reply(segment.image(image));
+            await e.reply(msgSegment.image(image));
           }
           const where = formatSessionWhere(e);
           this.recordAIResponse(e, `[表情:${t}]${text ? ` ${text}` : ''}`);
@@ -465,7 +465,7 @@ export default class ChatStream extends AIStream {
           const mid = args.messageId != null ? String(args.messageId).trim() : '';
           const payload = [];
           if (mid) payload.push({ type: 'reply', id: mid });
-          payload.push(segment.image(resolved.absPath));
+          payload.push(msgSegment.image(resolved.absPath));
           await e.reply(payload);
           const where = formatSessionWhere(e);
           this.recordAIResponse(e, `[图片:${resolved.displayName}]`);
@@ -691,7 +691,7 @@ export default class ChatStream extends AIStream {
           if (e.group?.setEmojiLike) {
             const result = await e.group.setEmojiLike(msgId, emojiId, true);
             if (result !== undefined) {
-              await BotUtil.sleep(200);
+              await RuntimeUtil.sleep(200);
               return { success: true, message: '表情回应成功', data: { msgId, emojiId, emojiType } };
             }
           }
@@ -1218,12 +1218,12 @@ export default class ChatStream extends AIStream {
           const group = context.e.group;
           if (group && typeof group.getBanList === 'function') {
             const banList = await group.getBanList();
-            BotUtil.makeLog('debug', `群禁言列表: ${JSON.stringify(banList)}`, 'ChatStream');
+            RuntimeUtil.makeLog('debug', `群禁言列表: ${JSON.stringify(banList)}`, 'ChatStream');
             return { success: true, data: banList };
           }
           return { success: false, error: 'API不可用' };
         }, 0).catch(error => {
-          BotUtil.makeLog('warn', `获取禁言列表失败: ${error.message}`, 'ChatStream');
+          RuntimeUtil.makeLog('warn', `获取禁言列表失败: ${error.message}`, 'ChatStream');
           return { success: false, error: error.message };
         });
       },
@@ -1566,7 +1566,7 @@ export default class ChatStream extends AIStream {
             });
           }
 
-          BotUtil.makeLog(
+          RuntimeUtil.makeLog(
             'debug',
             `[chat.getFriendList] 好友数量: ${friends.length}`,
             'ChatStream'
@@ -1646,7 +1646,7 @@ export default class ChatStream extends AIStream {
             return { success: false, error: '当前适配器不支持获取群成员列表' };
           }
 
-          BotUtil.makeLog(
+          RuntimeUtil.makeLog(
             'debug',
             `[chat.getGroupMembers] 群 ${e.group_id} 成员数量: ${members.length}`,
             'ChatStream'
@@ -1843,7 +1843,7 @@ export default class ChatStream extends AIStream {
       let messageId = e.message_id ?? e.real_id ?? e.messageId ?? e.id ?? e.source?.id ?? ChatStream.getReplySegmentId(e);
       if (!messageId) {
         messageId = `temp_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
-        BotUtil.makeLog('debug', `消息ID缺失，使用临时ID: ${messageId}`, 'ChatStream');
+        RuntimeUtil.makeLog('debug', `消息ID缺失，使用临时ID: ${messageId}`, 'ChatStream');
       } else {
         messageId = String(messageId);
       }
@@ -1866,7 +1866,7 @@ export default class ChatStream extends AIStream {
         this.storeMessageMemory(historyKey, msgData).catch(() => {});
       }
     } catch (error) {
-      BotUtil.makeLog('debug', `记录消息失败: ${error.message}`, 'ChatStream');
+      RuntimeUtil.makeLog('debug', `记录消息失败: ${error.message}`, 'ChatStream');
     }
   }
 
@@ -1888,7 +1888,7 @@ export default class ChatStream extends AIStream {
   recordAIResponse(e, text) {
     if (!text || !text.trim()) return;
 
-    const botName = e.bot?.nickname || e.bot?.info?.nickname || e.bot?.name || 'Bot';
+    const botName = e.bot?.nickname || e.bot?.info?.nickname || e.bot?.name || 'AgentRuntime';
     const msgData = {
       user_id: e.self_id,
       nickname: botName,
@@ -1915,7 +1915,7 @@ export default class ChatStream extends AIStream {
     const persona =
       question?.persona ||
       '你是群里一起聊天的伙伴：像真人一样接话，听得懂玩笑和气氛，该正经说清、该闲聊就短打。';
-    const botName = e?.bot?.nickname || e?.bot?.info?.nickname || e?.bot?.name || 'Bot';
+    const botName = e?.bot?.nickname || e?.bot?.info?.nickname || e?.bot?.name || 'AgentRuntime';
 
     const lines = [
       `# ${botName}`,
@@ -1949,7 +1949,7 @@ export default class ChatStream extends AIStream {
   _buildVolatileTurnContext(e, question) {
     if (!e) return '';
     const dateStr = question?.dateStr || new Date().toLocaleString('zh-CN');
-    const botName = e.bot?.nickname || e.bot?.info?.nickname || e.bot?.name || 'Bot';
+    const botName = e.bot?.nickname || e.bot?.info?.nickname || e.bot?.name || 'AgentRuntime';
     const botRole = question?.botRole || '';
     const sessionLine = e.isGroup && e.group_id
       ? `${botName}｜QQ ${e.self_id}｜群 ${e.group_id}${botRole ? `｜${botRole}` : ''}`
@@ -2008,7 +2008,7 @@ export default class ChatStream extends AIStream {
           }
         }
       } catch (err) {
-        Bot.makeLog('debug', `[ChatStream] _extractImagesFromEvent 获取被回复图片失败: ${err?.message}`, 'ChatStream');
+        AgentRuntime.makeLog('debug', `[ChatStream] _extractImagesFromEvent 获取被回复图片失败: ${err?.message}`, 'ChatStream');
       }
     }
 
@@ -2183,14 +2183,14 @@ export default class ChatStream extends AIStream {
         const limited = merged.length > 50 ? merged.slice(-50) : merged;
         ChatStream.messageHistory.set(historyKey, limited);
 
-        BotUtil.makeLog(
+        RuntimeUtil.makeLog(
           'debug',
           `[ChatStream.syncHistoryFromAdapter] key=${historyKey}, 原有=${history.length}, 新增=${newMessages.length}, 合并后=${limited.length}`,
           'ChatStream'
         );
       }
     } catch (error) {
-      BotUtil.makeLog(
+      RuntimeUtil.makeLog(
         'debug',
         `[ChatStream.syncHistoryFromAdapter] 获取聊天记录失败: ${error.message}`,
         'ChatStream'
@@ -2248,7 +2248,7 @@ export default class ChatStream extends AIStream {
       if (!summary?.trim()) return;
       const msgData = {
         user_id: e.self_id,
-        nickname: e.bot?.nickname || e.bot?.info?.nickname || e.bot?.name || 'Bot',
+        nickname: e.bot?.nickname || e.bot?.info?.nickname || e.bot?.name || 'AgentRuntime',
         message: summary.trim(),
         message_id: `tool_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
         time: Date.now(),
@@ -2262,7 +2262,7 @@ export default class ChatStream extends AIStream {
       if (history.length > 50) history.shift();
       ChatStream.messageHistory.set(historyKey, history);
     } catch (err) {
-      BotUtil.makeLog('debug', `recordToolCallResult: ${err?.message}`, 'ChatStream');
+      RuntimeUtil.makeLog('debug', `recordToolCallResult: ${err?.message}`, 'ChatStream');
     }
   }
 
@@ -2374,7 +2374,7 @@ export default class ChatStream extends AIStream {
 
   async execute(e, question, config) {
     return runWithStreamRequestContext({ e, turnState: createUserVisibleTurnState() }, () =>
-      withStreamLoaderEvent(e, async () => {
+      withAiStreamLoaderEvent(e, async () => {
         try {
           if (e) this.recordMessage(e);
 
@@ -2396,7 +2396,7 @@ export default class ChatStream extends AIStream {
           }
           return trimmed || '';
         } catch (error) {
-          BotUtil.makeLog('error', `工作流执行失败[${this.name}]: ${error.message}`, 'ChatStream');
+          RuntimeUtil.makeLog('error', `工作流执行失败[${this.name}]: ${error.message}`, 'ChatStream');
           return null;
         }
       })
@@ -2554,7 +2554,7 @@ export default class ChatStream extends AIStream {
       await e.reply(payload);
 
       if (i < parts.length - 1) {
-        await BotUtil.sleep(randomRange(800, 1500));
+        await RuntimeUtil.sleep(randomRange(800, 1500));
       }
     }
   }
@@ -2581,10 +2581,10 @@ export default class ChatStream extends AIStream {
         ChatStream.messageHistory.delete(key);
         result.cleared.history = true;
       }
-      BotUtil.makeLog('debug', `[ChatStream] clearConversation scope=${key}`, 'ChatStream');
+      RuntimeUtil.makeLog('debug', `[ChatStream] clearConversation scope=${key}`, 'ChatStream');
     } catch (error) {
       result.success = false;
-      BotUtil.makeLog('error', `[ChatStream] clearConversation: ${error.message}`, 'ChatStream');
+      RuntimeUtil.makeLog('error', `[ChatStream] clearConversation: ${error.message}`, 'ChatStream');
     }
     return result;
   }

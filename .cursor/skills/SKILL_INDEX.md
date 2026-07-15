@@ -17,11 +17,11 @@
 ## XRK 核心技能
 
 - **`xrk-node-runtime`**：Node 26 API 与禁止旧写法（**写 Core/src 前必读**）⭐ — 其它 XRK skill 的「Node 26」节均指向此 skill
-- `xrk-aistream`：AIStream、RAG、子服务回退相关能力。
+- `xrk-aistream`：AiWorkflow、RAG、子服务回退相关能力。
 - `xrk-app-dev`：从应用视角理解启动与前后端协作。
 - `xrk-auth`：401、127 回环例外、API Key 鉴权问题。
-- `xrk-bot`：Bot 运行时、事件总线、HTTP/WS 启动流程。
-- `xrk-botutil`：日志、缓存、文件、网络等工具复用。
+- `xrk-agent-runtime`：AgentRuntime 运行时、事件总线、HTTP/WS 启动流程。
+- `xrk-runtime-util`：日志、缓存、文件、网络等工具复用。
 - `xrk-config`：配置字段、schema 与消费代码一致性。
 - `xrk-docker`：Docker/Compose 部署与容器问题排查。
 - `xrk-docs`：文档导航与权威入口定位。

@@ -9,7 +9,7 @@ const { execSync } = require('child_process')
 
 let uping = false
 
-export class update extends plugin {
+export class update extends PluginBase {
   constructor() {
     super({
       name: '更新',

@@ -6,13 +6,13 @@ import { getAistreamConfigOptional } from '#utils/aistream-config.js';
 const MAX_AUDIT_BYTES = 512_000;
 
 function isAuditEnabled() {
-  const cfg = getAistreamConfigOptional();
-  return cfg?.workspace?.audit?.enabled !== false;
+  const runtimeConfig = getAistreamConfigOptional();
+  return runtimeConfig?.workspace?.audit?.enabled !== false;
 }
 
 function getAuditMaxEntries() {
-  const cfg = getAistreamConfigOptional();
-  const n = Number(cfg?.workspace?.audit?.maxEntries);
+  const runtimeConfig = getAistreamConfigOptional();
+  const n = Number(runtimeConfig?.workspace?.audit?.maxEntries);
   if (Number.isFinite(n) && n >= 10) return Math.min(500, Math.floor(n));
   return 200;
 }

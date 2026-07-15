@@ -101,7 +101,7 @@ agentWorkspace:
   maxRulesChars: 12000
   maxAgentMdChars: 12000
 
-# RAG / 记忆增强（StreamLoader.applyEmbeddingConfig 合并到各工作流 embeddingConfig）
+# RAG / 记忆增强（AiStreamLoader.applyEmbeddingConfig 合并到各工作流 embeddingConfig）
 embedding:
   enabled: true
   maxContexts: 5
@@ -194,11 +194,11 @@ tools:
     workspace: ""              # 空=data/ai-workspace/{workspace.defaultId}；agent:xxx；project；~/；绝对/相对路径
     maxReadChars: 500000       # read 返回正文最大字符，超出截断并标注
     grepMaxResults: 100
-    runEnabled: true
+    runEnabled: false            # 默认关闭 shell run；开启后 loopback 也强制 API Key
     runTimeoutMs: 120000
     maxCommandOutputChars: 200000
 
-# 多语言子服务端（CommonConfig → AIStream → 子服务端）
+# 多语言子服务端（CommonConfig → AiWorkflow → 子服务端）
 subserver:
   default: pyserver
   timeout: 30000

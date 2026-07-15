@@ -1,4 +1,4 @@
-import AIStream from '#infrastructure/aistream/aistream.js';
+import AiWorkflow from '#infrastructure/ai-workflow/ai-workflow.js';
 import { getAistreamConfigOptional } from '#utils/aistream-config.js';
 import path from 'path';
 import { BaseTools } from '#utils/base-tools.js';
@@ -12,7 +12,7 @@ const IS_WINDOWS = process.platform === 'win32';
  *
  * MCP：read / grep / search_replace / write / delete_file / list_files / run
  */
-export default class ToolsStream extends AIStream {
+export default class ToolsStream extends AiWorkflow {
   constructor() {
     super({
       name: 'tools',

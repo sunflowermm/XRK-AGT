@@ -1,5 +1,5 @@
 import { MCPToolAdapter } from './mcp-tool-adapter.js';
-import BotUtil from '../botutil.js';
+import RuntimeUtil from '../runtime-util.js';
 
 /**
  * 获取下游工具名称集合
@@ -39,7 +39,7 @@ export async function partitionAndExecuteToolCalls(toolCalls, overrides, { build
 
   // 日志：显示工具分区结果
   if (toolCalls.length > 0) {
-    BotUtil.makeLog(
+    RuntimeUtil.makeLog(
       'info',
       `[工具分区] 总计 ${toolCalls.length} 个调用 | 中游 ${midstreamCalls.length} 个: [${midstreamCalls.map(getToolName).join(', ') || '无'}] | 下游 ${downstreamCalls.length} 个: [${downstreamCalls.map(getToolName).join(', ') || '无'}]`,
       'tool-partition'
@@ -48,7 +48,7 @@ export async function partitionAndExecuteToolCalls(toolCalls, overrides, { build
 
   // 情况1：仅有下游工具，全部透传
   if (downstreamCalls.length > 0 && midstreamCalls.length === 0) {
-    BotUtil.makeLog('info', '[工具分区] 仅有下游工具，透传给客户端执行', 'tool-partition');
+    RuntimeUtil.makeLog('info', '[工具分区] 仅有下游工具，透传给客户端执行', 'tool-partition');
     return null;
   }
 
@@ -69,7 +69,7 @@ export async function partitionAndExecuteToolCalls(toolCalls, overrides, { build
 
   // 情况3：同时有中游和下游工具，中游已执行，下游透传
   if (downstreamCalls.length > 0) {
-    BotUtil.makeLog('info', '[工具分区] 中游工具已执行，下游工具透传给客户端', 'tool-partition');
+    RuntimeUtil.makeLog('info', '[工具分区] 中游工具已执行，下游工具透传给客户端', 'tool-partition');
     return null;
   }
 

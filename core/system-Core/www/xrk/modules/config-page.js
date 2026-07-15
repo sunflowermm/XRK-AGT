@@ -330,7 +330,7 @@ export const configPageMethods = {
       : (this._configState.selectedChild ?? null);
     if (!name) return;
 
-    const target = this._configState.list.find(cfg => cfg.name === name);
+    const target = this._configState.list.find(runtimeConfig => runtimeConfig.name === name);
     if (!target) return;
 
     const sameSelection = this._configState.selected?.name === name
@@ -426,9 +426,9 @@ export const configPageMethods = {
       }
       
     const keyword = this._configState.filter;
-    const filtered = this._configState.list.filter(cfg => {
+    const filtered = this._configState.list.filter(runtimeConfig => {
       if (!keyword) return true;
-      const text = `${cfg.name} ${cfg.displayName ?? ''} ${cfg.description ?? ''}`.toLowerCase();
+      const text = `${runtimeConfig.name} ${runtimeConfig.displayName ?? ''} ${runtimeConfig.description ?? ''}`.toLowerCase();
       return text.includes(keyword);
     });
   
@@ -446,22 +446,22 @@ export const configPageMethods = {
       return;
     }
   
-    list.innerHTML = filtered.map(cfg => {
-      const title = this.escapeHtml(cfg.displayName || cfg.name);
-      const desc = this.escapeHtml(cfg.description ?? cfg.filePath ?? '');
+    list.innerHTML = filtered.map(runtimeConfig => {
+      const title = this.escapeHtml(runtimeConfig.displayName || runtimeConfig.name);
+      const desc = this.escapeHtml(runtimeConfig.description ?? runtimeConfig.filePath ?? '');
       return `
       <div
-        class="config-item ${this._configState.selected?.name === cfg.name ? 'active' : ''}"
-        data-name="${this.escapeHtml(cfg.name)}"
+        class="config-item ${this._configState.selected?.name === runtimeConfig.name ? 'active' : ''}"
+        data-name="${this.escapeHtml(runtimeConfig.name)}"
         role="button"
         tabindex="0"
-        aria-pressed="${this._configState.selected?.name === cfg.name ? 'true' : 'false'}"
+        aria-pressed="${this._configState.selected?.name === runtimeConfig.name ? 'true' : 'false'}"
       >
         <div class="config-item-meta">
           <div class="config-name">${title}</div>
           <p class="config-desc">${desc}</p>
           </div>
-        ${cfg.name === 'system' ? '<span class="config-tag">多文件</span>' : ''}
+        ${runtimeConfig.name === 'system' ? '<span class="config-tag">多文件</span>' : ''}
           </div>
     `;
     }).join('');
@@ -479,7 +479,7 @@ export const configPageMethods = {
       return;
     }
   
-    const config = this._configState.list.find(cfg => cfg.name === name);
+    const config = this._configState.list.find(runtimeConfig => runtimeConfig.name === name);
     if (!config) return;
   
     this._configState.selected = config;
@@ -1152,7 +1152,7 @@ export const configPageMethods = {
     const path = field.path;
     const value = this._configState.values[path];
     const dirty = this._configState.dirty[path];
-    const inputId = `cfg-${path.replace(/[^a-zA-Z0-9]/g, '_')}`;
+    const inputId = `runtimeConfig-${path.replace(/[^a-zA-Z0-9]/g, '_')}`;
   
     const label = this.escapeHtml(meta.label || path);
     const dense = this.isConfigDense();

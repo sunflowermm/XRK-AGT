@@ -1,6 +1,6 @@
 /**
  * 运行时全局挂载（globalThis）
- * - Node ESM 下业务代码裸写 Bot / segment / cfg 等即解析于此
+ * - Node ESM 下业务代码裸写 AgentRuntime / msgSegment / runtimeConfig 等即解析于此
  * - 见 docs/runtime-surface.md「全局标识符写法」
  */
 export function setRuntimeGlobal(name, value) {

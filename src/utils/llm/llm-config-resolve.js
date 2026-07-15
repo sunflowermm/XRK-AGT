@@ -1,4 +1,4 @@
-import BotUtil from '#utils/botutil.js';
+import RuntimeUtil from '#utils/runtime-util.js';
 import { getAistreamConfigOptional } from '#utils/aistream-config.js';
 import LLMFactory from '#factory/llm/LLMFactory.js';
 import { pickFirstDefined, pickTrimmed, pickNonEmptyUrl, shallowMergePlain } from '#utils/coerce-pick.js';
@@ -9,7 +9,7 @@ import { pickFirstDefined, pickTrimmed, pickNonEmptyUrl, shallowMergePlain } fro
  * 职责边界：
  * - 此处只做 apiConfig → stream.config → providers[] → aistream.llm 的字段合并
  * - 各厂商官方/兼容协议的 body、SSE、鉴权由 factory/*LLMClient 按官方文档实现
- * - 业务工作流通过 AIStream.patchLLMConfig() 追加场景字段，勿在此写厂商 body 逻辑
+ * - 业务工作流通过 AiWorkflow.patchLLMConfig() 追加场景字段，勿在此写厂商 body 逻辑
  */
 
 function defaultProvider() {
@@ -23,7 +23,7 @@ function assignDefined(target, fields) {
 }
 
 /**
- * @param {object} stream - AIStream 实例
+ * @param {object} stream - AiWorkflow 实例
  * @param {object} [apiConfig={}]
  */
 export function resolveStreamLLMConfig(stream, apiConfig = {}) {
@@ -34,37 +34,37 @@ export function resolveStreamLLMConfig(stream, apiConfig = {}) {
   const providerRaw = (apiConfig.provider || stream.config?.provider || llm.Provider || llm.provider || '').toLowerCase();
   const provider = providerRaw || defaultProvider();
   if (providerRaw && !LLMFactory.hasProvider(providerRaw)) {
-    BotUtil.makeLog('warn', `[AIStream] 不支持的 LLM 提供商: ${providerRaw}`, 'AIStream');
+    RuntimeUtil.makeLog('warn', `[AiWorkflow] 不支持的 LLM 提供商: ${providerRaw}`, 'AiWorkflow');
   }
 
   const providerConfig = LLMFactory.getProviderConfig(provider) || {};
-  const cfg = stream.config || {};
+  const runtimeConfig = stream.config || {};
 
   const apiKey = pickTrimmed(
     apiConfig.apiKey,
     apiConfig.api_key,
-    cfg.apiKey,
-    cfg.api_key,
+    runtimeConfig.apiKey,
+    runtimeConfig.api_key,
     providerConfig.apiKey,
     providerConfig.api_key
   ) || undefined;
   const baseUrl = pickNonEmptyUrl(
     apiConfig.baseUrl,
     apiConfig.base_url,
-    cfg.baseUrl,
-    cfg.base_url,
+    runtimeConfig.baseUrl,
+    runtimeConfig.base_url,
     providerConfig.baseUrl,
     providerConfig.base_url
   );
 
-  const headers = shallowMergePlain(providerConfig.headers, cfg.headers, apiConfig.headers);
-  const extraBody = shallowMergePlain(providerConfig.extraBody, cfg.extraBody, apiConfig.extraBody);
-  const proxy = shallowMergePlain(providerConfig.proxy, cfg.proxy, apiConfig.proxy);
+  const headers = shallowMergePlain(providerConfig.headers, runtimeConfig.headers, apiConfig.headers);
+  const extraBody = shallowMergePlain(providerConfig.extraBody, runtimeConfig.extraBody, apiConfig.extraBody);
+  const proxy = shallowMergePlain(providerConfig.proxy, runtimeConfig.proxy, apiConfig.proxy);
 
   // 先 spread 保留 providers[] 中的厂商扩展字段（thinkingType、region、deployment 等）
   const merged = {
     ...providerConfig,
-    ...cfg,
+    ...runtimeConfig,
     ...apiConfig
   };
 
@@ -75,7 +75,7 @@ export function resolveStreamLLMConfig(stream, apiConfig = {}) {
     timeout: pick(
       apiConfig.timeout,
       apiConfig.timeoutMs,
-      cfg.timeout,
+      runtimeConfig.timeout,
       providerConfig.timeout,
       llm.timeout,
       ai.global?.maxTimeout
@@ -83,8 +83,8 @@ export function resolveStreamLLMConfig(stream, apiConfig = {}) {
     model: pick(
       apiConfig.model,
       apiConfig.chatModel,
-      cfg.model,
-      cfg.chatModel,
+      runtimeConfig.model,
+      runtimeConfig.chatModel,
       providerConfig.model,
       providerConfig.chatModel
     ),
@@ -93,8 +93,8 @@ export function resolveStreamLLMConfig(stream, apiConfig = {}) {
       apiConfig.max_tokens,
       apiConfig.max_completion_tokens,
       apiConfig.maxCompletionTokens,
-      cfg.maxTokens,
-      cfg.max_tokens,
+      runtimeConfig.maxTokens,
+      runtimeConfig.max_tokens,
       providerConfig.maxTokens,
       providerConfig.max_tokens,
       llm.maxTokens,
@@ -103,8 +103,8 @@ export function resolveStreamLLMConfig(stream, apiConfig = {}) {
     topP: pick(
       apiConfig.topP,
       apiConfig.top_p,
-      cfg.topP,
-      cfg.top_p,
+      runtimeConfig.topP,
+      runtimeConfig.top_p,
       providerConfig.topP,
       providerConfig.top_p,
       llm.topP,
@@ -113,8 +113,8 @@ export function resolveStreamLLMConfig(stream, apiConfig = {}) {
     presencePenalty: pick(
       apiConfig.presencePenalty,
       apiConfig.presence_penalty,
-      cfg.presencePenalty,
-      cfg.presence_penalty,
+      runtimeConfig.presencePenalty,
+      runtimeConfig.presence_penalty,
       providerConfig.presencePenalty,
       providerConfig.presence_penalty,
       llm.presencePenalty,
@@ -123,8 +123,8 @@ export function resolveStreamLLMConfig(stream, apiConfig = {}) {
     frequencyPenalty: pick(
       apiConfig.frequencyPenalty,
       apiConfig.frequency_penalty,
-      cfg.frequencyPenalty,
-      cfg.frequency_penalty,
+      runtimeConfig.frequencyPenalty,
+      runtimeConfig.frequency_penalty,
       providerConfig.frequencyPenalty,
       providerConfig.frequency_penalty,
       llm.frequencyPenalty,
@@ -132,15 +132,15 @@ export function resolveStreamLLMConfig(stream, apiConfig = {}) {
     ),
     temperature: pick(
       apiConfig.temperature,
-      cfg.temperature,
+      runtimeConfig.temperature,
       providerConfig.temperature,
       llm.temperature
     ),
     enableTools: pick(
       apiConfig.enableTools,
       apiConfig.enable_tools,
-      cfg.enableTools,
-      cfg.enable_tools,
+      runtimeConfig.enableTools,
+      runtimeConfig.enable_tools,
       providerConfig.enableTools,
       providerConfig.enable_tools,
       llm.enableTools,
@@ -150,8 +150,8 @@ export function resolveStreamLLMConfig(stream, apiConfig = {}) {
     enableStream: pick(
       apiConfig.enableStream,
       apiConfig.enable_stream,
-      cfg.enableStream,
-      cfg.enable_stream,
+      runtimeConfig.enableStream,
+      runtimeConfig.enable_stream,
       providerConfig.enableStream,
       providerConfig.enable_stream,
       llm.enableStream,
@@ -160,8 +160,8 @@ export function resolveStreamLLMConfig(stream, apiConfig = {}) {
     tool_choice: pick(
       apiConfig.tool_choice,
       apiConfig.toolChoice,
-      cfg.tool_choice,
-      cfg.toolChoice,
+      runtimeConfig.tool_choice,
+      runtimeConfig.toolChoice,
       providerConfig.tool_choice,
       providerConfig.toolChoice,
       llm.tool_choice,
@@ -170,8 +170,8 @@ export function resolveStreamLLMConfig(stream, apiConfig = {}) {
     toolChoice: pick(
       apiConfig.tool_choice,
       apiConfig.toolChoice,
-      cfg.tool_choice,
-      cfg.toolChoice,
+      runtimeConfig.tool_choice,
+      runtimeConfig.toolChoice,
       providerConfig.tool_choice,
       providerConfig.toolChoice,
       llm.tool_choice,
@@ -180,8 +180,8 @@ export function resolveStreamLLMConfig(stream, apiConfig = {}) {
     parallel_tool_calls: pick(
       apiConfig.parallel_tool_calls,
       apiConfig.parallelToolCalls,
-      cfg.parallel_tool_calls,
-      cfg.parallelToolCalls,
+      runtimeConfig.parallel_tool_calls,
+      runtimeConfig.parallelToolCalls,
       providerConfig.parallel_tool_calls,
       providerConfig.parallelToolCalls,
       llm.parallel_tool_calls,
@@ -190,8 +190,8 @@ export function resolveStreamLLMConfig(stream, apiConfig = {}) {
     parallelToolCalls: pick(
       apiConfig.parallel_tool_calls,
       apiConfig.parallelToolCalls,
-      cfg.parallel_tool_calls,
-      cfg.parallelToolCalls,
+      runtimeConfig.parallel_tool_calls,
+      runtimeConfig.parallelToolCalls,
       providerConfig.parallel_tool_calls,
       providerConfig.parallelToolCalls,
       llm.parallel_tool_calls,
@@ -199,19 +199,19 @@ export function resolveStreamLLMConfig(stream, apiConfig = {}) {
     ),
     maxToolRounds: pick(
       apiConfig.maxToolRounds,
-      cfg.maxToolRounds,
+      runtimeConfig.maxToolRounds,
       providerConfig.maxToolRounds,
       llm.maxToolRounds
     ),
     mcpToolMode: pick(
       apiConfig.mcpToolMode,
-      cfg.mcpToolMode,
+      runtimeConfig.mcpToolMode,
       providerConfig.mcpToolMode,
       llm.mcpToolMode
     ),
     promptCache: pick(
       apiConfig.promptCache,
-      cfg.promptCache,
+      runtimeConfig.promptCache,
       llm.promptCache
     )
   });

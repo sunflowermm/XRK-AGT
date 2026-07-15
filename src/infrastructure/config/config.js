@@ -2,7 +2,7 @@ import YAML from 'yaml';
 import fs from 'fs';
 import path from 'path';
 import paths from '#utils/paths.js';
-import BotUtil from '#utils/botutil.js';
+import RuntimeUtil from '#utils/runtime-util.js';
 import { HotReloadBase } from '#utils/hot-reload-base.js';
 import { normalizeError } from '#utils/normalize-error.js';
 import { isShuttingDown } from '#utils/runtime-globals.js';
@@ -26,7 +26,7 @@ function getRendererLoader() {
  * - 全局配置：存储在 server_bots/ 根目录
  * - 服务器配置：存储在 server_bots/{port}/
  */
-class Cfg {
+class RuntimeConfig {
   config = {};
   _port = null;
   _configHotReload = null;
@@ -76,19 +76,19 @@ class Cfg {
 
     try {
       const { config, watchFile } = loadYamlFromCandidates([file, defaultFile], name);
-      // 必须先写入缓存再 watch：watch 内 makeLog 会读 cfg.agt，否则会递归 getGlobalConfig
+      // 必须先写入缓存再 watch：watch 内 makeLog 会读 runtimeConfig.agt，否则会递归 getGlobalConfig
       this.config[key] = config;
       if (watchFile) this.watch(watchFile, name, key);
       return this.config[key];
     } catch (error) {
-      BotUtil.makeLog('error', `[配置解析失败][${name}] ${error?.message || error}`, LOG_TAG, true);
+      RuntimeUtil.makeLog('error', `[配置解析失败][${name}] ${error?.message || error}`, LOG_TAG, true);
       return this.config[key] = {};
     }
   }
 
   getServerConfig(name) {
     if (this.GLOBAL_CONFIGS.includes(name)) {
-      BotUtil.makeLog('warn', `[配置警告] ${name} 是全局配置，应使用 getGlobalConfig() 或 cfg.${name} 访问`, LOG_TAG);
+      RuntimeUtil.makeLog('warn', `[配置警告] ${name} 是全局配置，应使用 getGlobalConfig() 或 runtimeConfig.${name} 访问`, LOG_TAG);
       return {};
     }
     
@@ -110,7 +110,7 @@ class Cfg {
     const defaultFile = path.join(this.PATHS.DEFAULT_CONFIG, `${name}.yaml`);
 
     if (fileExistsSync(defaultFile) && copyFileIfMissingSync(defaultFile, file)) {
-      BotUtil.makeLog('mark', `[自动生成配置] ${name}.yaml -> ${file}`, LOG_TAG);
+      RuntimeUtil.makeLog('mark', `[自动生成配置] ${name}.yaml -> ${file}`, LOG_TAG);
     }
 
     try {
@@ -119,7 +119,7 @@ class Cfg {
       if (watchFile) this.watch(watchFile, name, key);
       return this.config[key];
     } catch (error) {
-      BotUtil.makeLog('error', `[服务器配置解析失败][${name}] ${error?.message || error}`, LOG_TAG, true);
+      RuntimeUtil.makeLog('error', `[服务器配置解析失败][${name}] ${error?.message || error}`, LOG_TAG, true);
       return this.config[key] = {};
     }
   }
@@ -137,7 +137,7 @@ class Cfg {
   get redis() { return this.getGlobalConfig('redis'); }
   // aistream 为随端口配置（server_bots/{port}/aistream.yaml）
   get aistream() { return this.getServerConfig('aistream'); }
-  /** 子服务端连接（host/port/timeout/runtimes）；Bot.callSubserver 读取 */
+  /** 子服务端连接（host/port/timeout/runtimes）；AgentRuntime.callSubserver 读取 */
   get subserver() { return this.aistream?.subserver ?? {}; }
 
   get server() { return this.getServerConfig('server'); }
@@ -166,9 +166,9 @@ class Cfg {
 
   get master() {
     const masters = {};
-    if (Bot.uin) {
+    if (AgentRuntime.uin) {
       const masterList = this.masterQQ.map(qq => String(qq));
-      Bot.uin.forEach(botUin => {
+      AgentRuntime.uin.forEach(botUin => {
         masters[botUin] = masterList;
       });
     }
@@ -187,7 +187,7 @@ class Cfg {
     if (!this._port) {
       try {
         const { config } = loadYamlFromCandidates([defaultFile], `renderer.${type}`);
-        BotUtil.makeLog('debug', `[渲染器] port 未设置，仅用默认配置: ${type}`, LOG_TAG);
+        RuntimeUtil.makeLog('debug', `[渲染器] port 未设置，仅用默认配置: ${type}`, LOG_TAG);
         return config;
       } catch {
         return {};
@@ -204,9 +204,9 @@ class Cfg {
     this.config[key] = config;
     if (fileExistsSync(serverFile)) {
       this.watch(serverFile, `renderer.${type}`, key);
-      BotUtil.makeLog('debug', `[渲染器] 已合并 ${type} 服务器配置: ${serverFile}`, LOG_TAG);
+      RuntimeUtil.makeLog('debug', `[渲染器] 已合并 ${type} 服务器配置: ${serverFile}`, LOG_TAG);
     } else {
-      BotUtil.makeLog('debug', `[渲染器] 无服务器覆盖: ${serverFile}`, LOG_TAG);
+      RuntimeUtil.makeLog('debug', `[渲染器] 无服务器覆盖: ${serverFile}`, LOG_TAG);
     }
     return this.config[key];
   }
@@ -255,7 +255,7 @@ class Cfg {
     const isGlobal = this.GLOBAL_CONFIGS.includes(name);
     const configDir = isGlobal ? this.getGlobalConfigDir() : this.getConfigDir();
     if (!configDir) {
-      BotUtil.makeLog('error', '[配置保存失败] 无效的端口号', LOG_TAG);
+      RuntimeUtil.makeLog('error', '[配置保存失败] 无效的端口号', LOG_TAG);
       return false;
     }
 
@@ -267,10 +267,10 @@ class Cfg {
       this.config[key] = data;
       fs.mkdirSync(configDir, { recursive: true });
       fs.writeFileSync(file, YAML.stringify(data), 'utf8');
-      BotUtil.makeLog('mark', `[保存${configType}配置文件][${name}]`, LOG_TAG);
+      RuntimeUtil.makeLog('mark', `[保存${configType}配置文件][${name}]`, LOG_TAG);
       return true;
     } catch (error) {
-      BotUtil.makeLog('error', `[${configType}配置保存失败][${name}] ${error?.message || error}`, LOG_TAG, true);
+      RuntimeUtil.makeLog('error', `[${configType}配置保存失败][${name}] ${error?.message || error}`, LOG_TAG, true);
       return false;
     }
   }
@@ -305,14 +305,14 @@ class Cfg {
           this._configHotReload = null;
         }
         this._rollbackWatch(key, resolved);
-        BotUtil.makeLog('warn', `[配置文件监视启动失败][${name}] ${resolved}`, LOG_TAG);
+        RuntimeUtil.makeLog('warn', `[配置文件监视启动失败][${name}] ${resolved}`, LOG_TAG);
       });
       return;
     }
 
     if (!this._configHotReload.addTargets(resolved)) {
       this._rollbackWatch(key, resolved);
-      BotUtil.makeLog('warn', `[配置文件监视追加失败][${name}] ${resolved}`, LOG_TAG);
+      RuntimeUtil.makeLog('warn', `[配置文件监视追加失败][${name}] ${resolved}`, LOG_TAG);
     }
   }
 
@@ -333,12 +333,12 @@ class Cfg {
         const type = key.split('.').pop();
         await getRendererLoader().then((loader) => loader.reloadRenderer(type));
       }
-      BotUtil.makeLog('mark', `[修改配置文件][${name}]`, LOG_TAG);
+      RuntimeUtil.makeLog('mark', `[修改配置文件][${name}]`, LOG_TAG);
       const handler = this[`change_${name}`];
       if (handler) await handler();
     } catch (err) {
       const error = normalizeError(err);
-      BotUtil.makeLog('error', `[配置热更新失败][${name}] ${error.message}`, LOG_TAG, error);
+      RuntimeUtil.makeLog('error', `[配置热更新失败][${name}] ${error.message}`, LOG_TAG, error);
     }
   }
 
@@ -356,7 +356,7 @@ class Cfg {
       const log = await import('#infrastructure/log.js');
       log.default();
     } catch (error) {
-      BotUtil.makeLog('error', `[AGT配置变更处理失败] ${error?.message || error}`, LOG_TAG, true);
+      RuntimeUtil.makeLog('error', `[AGT配置变更处理失败] ${error?.message || error}`, LOG_TAG, true);
     }
   }
 
@@ -373,4 +373,4 @@ class Cfg {
   }
 }
 
-export default new Cfg();
+export default new RuntimeConfig();

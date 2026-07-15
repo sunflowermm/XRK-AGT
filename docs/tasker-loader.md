@@ -4,7 +4,7 @@
 > **Loader 模式**：[infrastructure-shared.md](infrastructure-shared.md) · **规范**：[tasker-base-spec.md](tasker-base-spec.md)  
 > **可扩展性**：[框架可扩展性指南](框架可扩展性指南.md)
 
-`TaskerLoader` 负责从所有 `core/*/tasker` 目录动态加载各类 Tasker（事件生成器，如 QQ OneBotv11 等），并与 `Bot` 主类配合，为整个系统提供统一的事件入口。
+`TaskerLoader` 负责从所有 `core/*/tasker` 目录动态加载各类 Tasker（事件生成器，如 QQ OneBotv11 等），并与 `AgentRuntime` 主类配合，为整个系统提供统一的事件入口。
 
 Loader 扫描与热重载模式见 [infrastructure-shared.md](infrastructure-shared.md) · 事件命名见 [事件系统标准化文档.md](事件系统标准化文档.md)。
 
@@ -27,12 +27,12 @@ Loader 扫描与热重载模式见 [infrastructure-shared.md](infrastructure-sha
 - 扫描所有 `core/*/tasker` 目录中的所有 `.js` 文件（如 `core/system-Core/tasker/`、`core/my-core/tasker/` 等）。
 - 使用 `import()` 动态载入 Tasker 模块。
 - 通过 Tasker 内部代码将自身注册到：
-  - `Bot.tasker`：Tasker 列表。
-  - `Bot.wsf[path]`：WebSocket 路径与处理函数映射。
+  - `AgentRuntime.tasker`：Tasker 列表。
+  - `AgentRuntime.wsf[path]`：WebSocket 路径与处理函数映射。
 - 提供加载过程的统计与日志：
   - 扫描数量、加载成功/失败数量、实际注册数量、错误列表等。
 
-> Tasker 文件通常不需要直接依赖 `TaskerLoader`，只要在模块内调用 `Bot.tasker.push(...)` 即可被框架识别。
+> Tasker 文件通常不需要直接依赖 `TaskerLoader`，只要在模块内调用 `AgentRuntime.tasker.push(...)` 即可被框架识别。
 
 ---
 
@@ -42,7 +42,7 @@ Loader 扫描与热重载模式见 [infrastructure-shared.md](infrastructure-sha
 
 ---
 
-## 加载流程：`load(bot = Bot)`
+## 加载流程：`load(bot = AgentRuntime)`
 
 **Tasker加载完整流程**:
 
@@ -93,17 +93,17 @@ flowchart TB
 ```mermaid
 flowchart TB
     subgraph TaskerFile["Tasker文件<br/>core/*/tasker/OneBotv11.js"]
-        A[模块顶层执行<br/>Bot.tasker.push]
+        A[模块顶层执行<br/>AgentRuntime.tasker.push]
         B[Tasker类实现<br/>load方法]
         C[WebSocket处理<br/>message方法]
     end
     
     subgraph EventFlow["事件流向"]
         D[外部平台连接<br/>WebSocket]
-        E[Bot.wsConnect<br/>路径分发]
+        E[AgentRuntime.wsConnect<br/>路径分发]
         F[Tasker解析上报]
-        G[Bot.em触发事件]
-        H[PluginsLoader处理]
+        G[AgentRuntime.em触发事件]
+        H[PluginLoader处理]
     end
     
     A --> B
@@ -121,13 +121,13 @@ flowchart TB
 
 **Tasker文件典型结构**：
 
-- 模块顶层：`Bot.tasker.push(new OneBotv11Tasker())`
+- 模块顶层：`AgentRuntime.tasker.push(new OneBotv11Tasker())`
 - Tasker类方法：
-  - `load()` - 向 `Bot.wsf[path]` 注册 WebSocket 消息处理函数
-  - `message(wsMessage, ws)` - 解析上报并调用 `Bot.em` 触发事件
+  - `load()` - 向 `AgentRuntime.wsf[path]` 注册 WebSocket 消息处理函数
+  - `message(wsMessage, ws)` - 解析上报并调用 `AgentRuntime.em` 触发事件
   - 各种 send/get 接口封装（发送消息、获取列表等）
 
-`Bot.wsf[path]` 的元素可以是：
+`AgentRuntime.wsf[path]` 的元素可以是：
 
 - 直接的函数：`(ws, req, ...args) => { ... }`（简写形式，默认需要系统级 API Key）；
 - 或对象：`{ handler: (ws, req, ...args) => { ... }, skipAuth: true }`  
@@ -136,9 +136,9 @@ flowchart TB
 **事件流向**：
 
 1. 外部平台通过 WebSocket 与 XRK-AGT 建立连接
-2. `Bot.wsConnect` 根据路径选择对应的 Tasker 处理函数
+2. `AgentRuntime.wsConnect` 根据路径选择对应的 Tasker 处理函数
 3. Tasker 解析 JSON 上报，转换为统一事件结构
-4. 调用 `Bot.em("message.group.normal", data)` 触发事件，交由 `PluginsLoader` 处理
+4. 调用 `AgentRuntime.em("message.group.normal", data)` 触发事件，交由 `PluginLoader` 处理
 
 ---
 
@@ -149,9 +149,9 @@ flowchart TB
 **步骤**：
 1. 在任意 core 目录的 `tasker` 子目录中新建 `XXX.js`（如 `core/my-core/tasker/MyTasker.js`）
 2. 在文件内：
-   - 通过 `Bot.tasker.push(new XXXTasker())` 注册 Tasker
-   - 在 `load()` 中向 `Bot.wsf` 映射对应 WebSocket 路径
-   - 在 `message()` 中解析上报并调用 `Bot.em`
+   - 通过 `AgentRuntime.tasker.push(new XXXTasker())` 注册 Tasker
+   - 在 `load()` 中向 `AgentRuntime.wsf` 映射对应 WebSocket 路径
+   - 在 `message()` 中解析上报并调用 `AgentRuntime.em`
 3. 重启或通过相应命令触发 Tasker 重载后，`TaskerLoader.load()` 会自动发现
 
 **代码示例**：
@@ -165,7 +165,7 @@ export default class MyTasker {
 
   async load() {
     // 注册 WebSocket 路径
-    Bot.wsf['/ws/mytasker'] = (ws, req) => {
+    AgentRuntime.wsf['/ws/mytasker'] = (ws, req) => {
       ws.on('message', (msg) => this.message(msg, ws));
     };
   }
@@ -183,12 +183,12 @@ export default class MyTasker {
       time: Date.now()
     };
     // 触发事件
-    Bot.em('mytasker.message.group.normal', e);
+    AgentRuntime.em('mytasker.message.group.normal', e);
   }
 }
 
 // 注册 Tasker
-Bot.tasker.push(new MyTasker());
+AgentRuntime.tasker.push(new MyTasker());
 ```
 
 ### 调试加载问题

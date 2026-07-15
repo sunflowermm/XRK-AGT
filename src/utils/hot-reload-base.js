@@ -3,7 +3,7 @@ import lodash from 'lodash';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import fs from 'node:fs/promises';
-import BotUtil from '#utils/botutil.js';
+import RuntimeUtil from '#utils/runtime-util.js';
 import paths from '#utils/paths.js';
 import { normalizeError } from '#utils/normalize-error.js';
 import { isShuttingDown } from '#utils/runtime-globals.js';
@@ -82,7 +82,7 @@ export class HotReloadBase {
 
     const prev = this._fileHashes.get(key);
     if (prev === hash) {
-      BotUtil.makeLog(
+      RuntimeUtil.makeLog(
         'debug',
         `跳过热更新（内容未变）: ${path.basename(filePath)}`,
         this.loggerName
@@ -128,7 +128,7 @@ export class HotReloadBase {
       await handler(filePath);
     } catch (err) {
       const error = normalizeError(err);
-      BotUtil.makeLog('error', `热更新 ${event} 失败: ${filePath}`, this.loggerName, error);
+      RuntimeUtil.makeLog('error', `热更新 ${event} 失败: ${filePath}`, this.loggerName, error);
     } finally {
       this._inFlight.delete(watchKey);
     }
@@ -144,7 +144,7 @@ export class HotReloadBase {
       if (this._stopping || !this.watcher) return;
       try {
         await fs.access(filePath);
-        BotUtil.makeLog(
+        RuntimeUtil.makeLog(
           'debug',
           `跳过 unlink（文件已恢复，多为原子保存）: ${path.basename(filePath)}`,
           this.loggerName
@@ -159,7 +159,7 @@ export class HotReloadBase {
         await handler(filePath);
       } catch (err) {
         const error = normalizeError(err);
-        BotUtil.makeLog('error', `热更新 unlink 失败: ${filePath}`, this.loggerName, error);
+        RuntimeUtil.makeLog('error', `热更新 unlink 失败: ${filePath}`, this.loggerName, error);
       } finally {
         this._inFlight.delete(key);
       }
@@ -222,7 +222,7 @@ export class HotReloadBase {
     } catch (err) {
       this.watcher = null;
       const error = normalizeError(err);
-      BotUtil.makeLog('error', `启动文件监视失败: ${error.message}`, this.loggerName, error);
+      RuntimeUtil.makeLog('error', `启动文件监视失败: ${error.message}`, this.loggerName, error);
       return false;
     }
 
@@ -252,9 +252,9 @@ export class HotReloadBase {
     this.watcher.on('error', (err) => {
       if (this._stopping) return;
       const error = normalizeError(err);
-      BotUtil.makeLog('error', '文件监视错误', this.loggerName, error);
+      RuntimeUtil.makeLog('error', '文件监视错误', this.loggerName, error);
     });
-    BotUtil.makeLog('info', '文件监视已启动', this.loggerName);
+    RuntimeUtil.makeLog('info', '文件监视已启动', this.loggerName);
     return true;
   }
 
@@ -276,7 +276,7 @@ export class HotReloadBase {
       return true;
     } catch (err) {
       const error = normalizeError(err);
-      BotUtil.makeLog('error', `追加监视路径失败: ${error.message}`, this.loggerName, error);
+      RuntimeUtil.makeLog('error', `追加监视路径失败: ${error.message}`, this.loggerName, error);
       return false;
     }
   }
@@ -319,7 +319,7 @@ export class HotReloadBase {
       await watcher.close();
     } catch (err) {
       const error = normalizeError(err);
-      BotUtil.makeLog('debug', `关闭文件监视: ${error.message}`, this.loggerName);
+      RuntimeUtil.makeLog('debug', `关闭文件监视: ${error.message}`, this.loggerName);
     } finally {
       this._stopping = false;
     }

@@ -31,7 +31,7 @@ export {
 const BUILTIN_PROJECT = {
   id: 'project',
   label: '项目根目录',
-  description: 'Bot 项目根，含代码与 data',
+  description: 'AgentRuntime 项目根，含代码与 data',
   kind: 'project'
 };
 
@@ -232,12 +232,12 @@ export function buildAistreamCfgForAgentRoot(aistreamCfg = {}, agentRootAbs) {
   };
 }
 
-export function applyRequestWorkspaceToStreams(StreamLoader, fileWorkspaceAbs) {
-  if (!fileWorkspaceAbs || !StreamLoader?.getStream) return () => {};
+export function applyRequestWorkspaceToStreams(AiStreamLoader, fileWorkspaceAbs) {
+  if (!fileWorkspaceAbs || !AiStreamLoader?.getStream) return () => {};
 
   const snapshots = [];
   for (const name of ['tools', 'desktop']) {
-    const stream = StreamLoader.getStream(name);
+    const stream = AiStreamLoader.getStream(name);
     if (!stream) continue;
     snapshots.push({
       stream,

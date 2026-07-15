@@ -13,15 +13,15 @@
 | 主题 | ✅ 要 | ❌ 不要 |
 |------|--------|---------|
 | 放码 | 业务 `core/<名>/`；基类/Loader `src/` | 业务写进 `src/`；改 Loader 逻辑应付业务 |
-| 全局 | 裸名 `Bot`、`segment`；HTTP 用 `req.bot` | `global.Bot`；`import Bot`；`new Bot()` |
-| 基类 | `import plugin` / `HttpApi` / `AIStream` | 依赖 `global.plugin` 写新插件 |
-| 配置 | `import cfg from '#infrastructure/config/config.js'` | 无必要写 `global.cfg` |
+| 全局 | 裸名 `AgentRuntime`、`msgSegment`；HTTP 用 `req.agentRuntime` | `global.AgentRuntime`；`import AgentRuntime`；`new AgentRuntime()` |
+| 基类 | `import PluginBase` / `HttpApi` / `AiWorkflow` | 依赖 `global.PluginBase` 写新插件（勿裸靠全局写新基类） |
+| 配置 | `import runtimeConfig from '#infrastructure/config/config.js'` | 无必要写 `global.runtimeConfig` |
 | 状态 | **类字段** `cache = new Map()` 或 `init()` 一次初始化 | constructor 里 `this.cache = new Map()` |
 | 出站 HTTP | `fetch` + `AbortSignal.timeout(ms)` | `node-fetch`；`AbortController`+`setTimeout` |
 | Shell | `#utils/exec-async.js` 的 `exec` | 各文件 `promisify(exec)` |
 | 判错 | `Error.isError` / `normalizeError` | `instanceof Error` |
 | 二进制 | `buf.toBase64()` / `Uint8Array.fromBase64` | `toString('base64')` 新代码 |
-| 日志 | `BotUtil.makeLog` 或裸 `Bot.makeLog` | `console.log` 持久化路径 |
+| 日志 | `RuntimeUtil.makeLog` 或裸 `AgentRuntime.makeLog` | `console.log` 持久化路径 |
 | HTTP 响应 | `HttpResponse.success/error/asyncHandler` | handler 裸 `res.json()`（兼容体用 `HttpResponse.json`） |
 | 热路径 I/O | `fs/promises`；`try/catch` 代替反复 `existsSync` | 请求链路里 `readFileSync` / 循环 `existsSync` |
 | 批量加载 | `FileLoader.forEachBatch` + `LOADER_BATCH_SIZE` | 全量 `Promise.all(上千 import)` |
@@ -39,7 +39,7 @@ Node 26 API 明细与审查清单见 [node-26-runtime.md](node-26-runtime.md)、
 |----|------|--------|
 | Core | `core/<名>/plugin|http|stream|tasker|events|commonconfig|www/` | 业务 |
 | Infrastructure | `src/infrastructure/`、`src/utils/`、`src/factory/` | Loader、基类、工厂、工具 |
-| Runtime | `src/bot.js`、`start.js` | 启动、中间件、挂载 |
+| Runtime | `src/agent-runtime.js`、`start.js` | 启动、中间件、挂载 |
 
 独立产品 Core 配置：`core/<名>/default/*.yaml` + `data/<产品>/`（见 `xrk-project` 规则）。勿把业务 yaml 放进 `config/default_config/`。
 
@@ -49,14 +49,14 @@ Node 26 API 明细与审查清单见 [node-26-runtime.md](node-26-runtime.md)、
 
 ```javascript
 // 插件 / Tasker / 事件
-Bot.em('message', data);
-segment.image(url);
+AgentRuntime.em('message', data);
+msgSegment.image(url);
 
 // HTTP
-handler: async (req, res, Bot) => HttpResponse.success(res, { url: Bot.getServerUrl() });
+handler: async (req, res, AgentRuntime) => HttpResponse.success(res, { url: AgentRuntime.getServerUrl() });
 
-// 配置（与 globalThis.cfg 同一单例）
-import cfg from '#infrastructure/config/config.js';
+// 配置（与 globalThis.runtimeConfig 同一单例）
+import runtimeConfig from '#infrastructure/config/config.js';
 ```
 
 | 包 | `#` 别名 | 相对路径到 `src/` |
@@ -64,7 +64,7 @@ import cfg from '#infrastructure/config/config.js';
 | 根仓库 | ✅ `#utils/*` `#infrastructure/*` | — |
 | 有 `package.json` 的子 Core | ❌ | `../../../src/infrastructure/...` |
 
-`Bot.run` 完成 `ConfigLoader.load()` **之前**勿读 `cfg`；此前用 ConfigBase / 默认模板。
+`AgentRuntime.run` 完成 `CommonConfigRegistry.load()` **之前**勿读 `runtimeConfig`；此前用 ConfigBase / 默认模板。
 
 ### 基础设施例外（仅 `src/`）
 
@@ -83,7 +83,7 @@ import cfg from '#infrastructure/config/config.js';
 ## 3. 类、状态、热重载
 
 ```javascript
-export default class Demo extends plugin {
+export default class Demo extends PluginBase {
   // ✅ 类字段：热重载安全
   cooldown = new Map();
 
@@ -111,7 +111,7 @@ await FileLoader.forEachBatch(files, LOADER_BATCH_SIZE, async ({ filePath }) => 
   const mod = await FileLoader.importFresh(filePath);
   // ...
 });
-// 并行多 Loader：Promise.allSettled（见 bot.js 启动段）
+// 并行多 Loader：Promise.allSettled（见 agent-runtime.js 启动段）
 ```
 
 **业务**：
@@ -131,7 +131,7 @@ await FileLoader.forEachBatch(files, LOADER_BATCH_SIZE, async ({ filePath }) => 
 | 启动 / 种子 / 菜单 | 同步 `fs` 可接受（`config-seed.js`、`start.js`） |
 | HTTP / 插件 / 工作流热路径 | `import fs from 'node:fs/promises'` |
 | 文件是否存在 | 优先 `try { await fs.access } catch` 或一次 `stat`，避免热路径 `existsSync` |
-| 大 JSON/YAML | 读一次缓存到实例/模块级；Config 走 `cfg` 内存层 |
+| 大 JSON/YAML | 读一次缓存到实例/模块级；Config 走 `runtimeConfig` 内存层 |
 | 图片/下载 | `fetch` + `Readable.fromWeb` + `pipeline`（见 `subserver-client.js`） |
 | 字符串拼接 | 长文本用数组 `push` + `join`，避免 `+=` 循环 |
 | 正则 | 模块顶层的 `/…/g` 注意 `lastIndex`；或改用 `matchAll` / 非全局 |
@@ -147,7 +147,7 @@ try {
   await work();
 } catch (err) {
   const error = normalizeError(err);
-  BotUtil.makeLog('error', error.message, 'MyModule');
+  RuntimeUtil.makeLog('error', error.message, 'MyModule');
   throw error; // HTTP 层交给 HttpResponse.asyncHandler
 }
 ```
@@ -167,7 +167,7 @@ export default {
     method: 'GET',
     path: '/api/demo/ping',
     systemAuth: false, // 默认 true：/api/* 需 Key
-    handler: HttpResponse.asyncHandler(async (req, res, Bot) => {
+    handler: HttpResponse.asyncHandler(async (req, res, AgentRuntime) => {
       const resp = await fetch(url, { signal: AbortSignal.timeout(5000) });
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
       return HttpResponse.success(res, await resp.json());
@@ -218,7 +218,7 @@ export default {
 
 ## 相关文档
 
-- [runtime-surface.md](runtime-surface.md) — 挂载与 Bot Proxy  
+- [runtime-surface.md](runtime-surface.md) — 挂载与 AgentRuntime Proxy  
 - [node-26-runtime.md](node-26-runtime.md) — Node API  
 - [base-classes.md](base-classes.md) — export 形状  
 - [http-api.md](http-api.md) — 路由与鉴权  

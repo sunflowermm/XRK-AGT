@@ -1,6 +1,6 @@
 ---
 name: xrk-subserver
-description: 子服插件开发；配置全在主服 CommonConfig，子服只读 data/；Bot.callSubserver 用 cfg.subserver。
+description: 子服插件开发；配置全在主服 CommonConfig，子服只读 data/；AgentRuntime.callSubserver 用 runtimeConfig.subserver。
 ---
 
 ## 配置（必读）
@@ -9,7 +9,7 @@ description: 子服插件开发；配置全在主服 CommonConfig，子服只读
 
 | 类型 | 主服编辑 | 子服 |
 |------|----------|------|
-| 子服 host/port | AIStream → 子服务端（`cfg.subserver`） | 被连接 |
+| 子服 host/port | AiWorkflow → 子服务端（`runtimeConfig.subserver`） | 被连接 |
 | 业务插件 | `apis/<group>/core/commonconfig/*.js` | `load_plugin_config` 只读 yaml |
 
 ## 插件结构

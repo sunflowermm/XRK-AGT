@@ -2,7 +2,7 @@
 
 > **目录**：`subserver/`（多语言）· 运行时目录 `src/utils/subserver-runtimes.js`  
 > **Python 实现**：`subserver/pyserver/`  
-> **说明**：主服务通过 `Bot.callSubserver` 调用各 runtime 的 `apis/` 插件。
+> **说明**：主服务通过 `AgentRuntime.callSubserver` 调用各 runtime 的 `apis/` 插件。
 
 子服务端提供（各 runtime 统一契约）：
 - **健康检查**：`GET /health`
@@ -41,7 +41,7 @@
 
 ```
 主服务端 (Node.js)
-    ↓ Bot.callSubserver
+    ↓ AgentRuntime.callSubserver
 子服务端 (pyserver | goserver | phpserver | jserver | netserver)
     ├─ core/              底层（加载器、配置、命令注册）
     ├─ apis/system/       框架系统 API
@@ -50,7 +50,7 @@
 
 与主仓 **`core/system-Core`** 分工相同：子服底层在 runtime 的 `core/`，业务在 `apis/<group>/`。
 
-**主服融合**：配置见 [subserver-commonconfig.md](subserver-commonconfig.md)（主服编辑、`core/commonconfig/` 扫描）；`Bot.callSubserver` 用 `cfg.subserver`。
+**主服融合**：配置见 [subserver-commonconfig.md](subserver-commonconfig.md)（主服编辑、`core/commonconfig/` 扫描）；`AgentRuntime.callSubserver` 用 `runtimeConfig.subserver`。
 
 子服终端统一 **`子服>`** 提示符；顶栏支持 `帮助`/`列表`，组内支持 `状态`/`更新`。
 
@@ -189,7 +189,7 @@ uv pip install -r apis/<组名>/requirements.txt   # 按实际插件目录
 | 端口被占用 | `PORT=8001 uv run xrk` 或改 `data/subserver/config.yaml` |
 ## 相关文档
 
-- **[AIStream 文档](aistream.md)** - Node 侧工作流与 LLM/MCP 调用说明
+- **[AiWorkflow 文档](aistream.md)** - Node 侧工作流与 LLM/MCP 调用说明
 - **[Docker 部署指南](docker.md)** - 容器化部署说明
 - **[框架可扩展性指南](框架可扩展性指南.md)** - 扩展开发完整指南
 

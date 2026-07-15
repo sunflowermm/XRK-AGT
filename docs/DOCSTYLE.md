@@ -11,7 +11,7 @@
 | L0 入口 | `README.md` | 安装、首读路径、外链 |
 | L1 枢纽 | `docs/README.md` | 全量索引、按角色阅读 |
 | L1 边界 | `底层架构设计.md` | 分层、工具表、AI/配置索引（**唯一架构图**） |
-| L1 运行时 | **`runtime-surface.md`** | 全局/Bot/Loader 挂载（**唯一挂载面**） |
+| L1 运行时 | **`runtime-surface.md`** | 全局/AgentRuntime/Loader 挂载（**唯一挂载面**） |
 | L1 写法 | **`coding-style.md`** | Core/src 写法与性能（**唯一写法规范**） |
 | L1 契约 | `base-classes.md` | 基类最小 export 示例 |
 | L2 专题 | `plugin-base.md`、`http-api.md` 等 | 单点 API、流程图、配置字段 |
@@ -78,14 +78,14 @@
 | `docs-hub-banner.png` | 文档枢纽 |
 | `architecture-layers.png` | 三层架构 |
 | `runtime-surface.png` | 运行时挂载 |
-| `bot-lifecycle.png` | Bot 生命周期 |
+| `bot-lifecycle.png` | AgentRuntime 生命周期 |
 | `loader-hot-reload.png` | Loader 扫描/热重载 |
 | `database-dual-store.png` | Redis（框架内置数据库） |
 | `config-base-flow.png` | ConfigBase |
-| `http-api-pipeline.png` | HttpApi / ApiLoader |
+| `http-api-pipeline.png` | HttpApi / HttpApiLoader |
 | `seven-extensions.png` | 七大扩展点 |
 | `plugin-event-pipeline.png` | 插件事件链 |
-| `aistream-mcp-flow.png` | AIStream + MCP |
+| `aistream-mcp-flow.png` | AiWorkflow + MCP |
 | `mcp-ecosystem.png` | MCP 生态 |
 | `llm-factory.png` | LLM/ASR/TTS 工厂 |
 | `docker-compose-stack.png` | Docker 编排 |
@@ -100,7 +100,7 @@
 
 改底层挂载或基类时，至少更新：
 
-1. `docs/runtime-surface.md`（若影响 global / Bot / req）  
+1. `docs/runtime-surface.md`（若影响 global / AgentRuntime / req）  
 2. `docs/base-classes.md`（若影响 export 形状）  
 3. [文档审查清单.md](文档审查清单.md) 对应行  
 

@@ -1,4 +1,4 @@
-import BotUtil from '../botutil.js';
+import RuntimeUtil from '../runtime-util.js';
 
 /**
  * 通用 SSE 解析器（适用于各类 LLM / 子进程流式接口）
@@ -17,13 +17,13 @@ import BotUtil from '../botutil.js';
  *
  * 本工具被以下组件复用：
  * - 所有 OpenAI-like LLM 工厂的 chatStream（OpenAI/Azure/Volcengine/XiaomiMiMo 等）
- * - aistream 子服务器调用（src/infrastructure/aistream/aistream.js）
+ * - aistream 子服务器调用（src/infrastructure/ai-workflow/ai-workflow.js）
  * - 其他需要稳健解析 SSE 的场景
  */
 export async function* iterateSSE(resp, options = {}) {
   const { stopOnDone = true } = options || {};
   if (!resp?.body?.getReader) {
-    BotUtil.makeLog('warn', '[SSE] 无效响应：resp.body 不可读', 'LLMStream');
+    RuntimeUtil.makeLog('warn', '[SSE] 无效响应：resp.body 不可读', 'LLMStream');
     throw new Error('SSE响应无效：resp.body 不可读');
   }
 
@@ -34,7 +34,7 @@ export async function* iterateSSE(resp, options = {}) {
   let totalBytes = 0;
   let eventCount = 0;
 
-  BotUtil.makeLog(
+  RuntimeUtil.makeLog(
     'info',
     `[SSE] 开始读取流式响应，stopOnDone=${stopOnDone}, url=${resp.url || 'unknown'}`,
     'LLMStream'
@@ -43,7 +43,7 @@ export async function* iterateSSE(resp, options = {}) {
   while (true) {
     const { value, done } = await reader.read();
     if (done) {
-      BotUtil.makeLog(
+      RuntimeUtil.makeLog(
         'info',
         `[SSE] 读取结束：chunks=${chunkCount}, totalBytes=${totalBytes}, remainingBufferLength=${buffer.length}`,
         'LLMStream'
@@ -63,7 +63,7 @@ export async function* iterateSSE(resp, options = {}) {
           return '<decode_failed>';
         }
       })();
-      BotUtil.makeLog(
+      RuntimeUtil.makeLog(
         'debug',
         `[SSE] 收到 chunk#${chunkCount} bytes=${byteLength}, preview="${preview}"`,
         'LLMStream'
@@ -105,7 +105,7 @@ export async function* iterateSSE(resp, options = {}) {
       eventCount += 1;
 
       if (eventCount <= 10) {
-        BotUtil.makeLog(
+        RuntimeUtil.makeLog(
           'debug',
           `[SSE] 解析到 event#${eventCount}, event="${event || ''}", dataLen=${data.length}, preview="${data.slice(0, 200).replace(/\s+/g, ' ')}"`,
           'LLMStream'
@@ -116,7 +116,7 @@ export async function* iterateSSE(resp, options = {}) {
     }
   }
 
-  BotUtil.makeLog(
+  RuntimeUtil.makeLog(
     'info',
     `[SSE] 迭代结束，总事件数=${eventCount}, 最终缓冲区长度=${buffer.length}`,
     'LLMStream'

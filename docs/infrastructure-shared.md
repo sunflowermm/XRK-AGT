@@ -14,7 +14,7 @@
 | `runtime-globals.js` | `setRuntimeGlobal` / `getRuntimeGlobal`；`isShuttingDown` / `setShuttingDown`；`isProcessFlagSet` / `setProcessFlag` |
 | `file-loader.js` | `importFresh`（热重载 cache-bust）、`forEachBatch` / `mapInBatches` |
 | `loader-constants.js` | `LOADER_BATCH_SIZE`、`API_REGISTER_BATCH_SIZE` |
-| `loader-shutdown.js` | 停机时 `stopAllLoaderWatchers()`（Plugins/Stream/Api/Config/cfg/Renderer） |
+| `loader-shutdown.js` | 停机时 `stopAllLoaderWatchers()`（Plugins/Stream/Api/Config/runtimeConfig/Renderer） |
 | `token-estimate.js` | `estimateTokensRough` / `estimateTokensMixed` |
 | `sse-openai.js` | `writeSSEChunk`、`createOpenAIChunk` |
 | `hot-reload-base.js` | chokidar 热重载唯一入口（`src/` 内除本文件外禁止直接 chokidar） |
@@ -26,9 +26,9 @@
 
 ## 全局引导
 
-- `src/bootstrap-globals.js`：在 `bot.js` 首行 import，`setRuntimeGlobal('plugin'|'segment', …)`  
-- 集成测试：`tests/helpers/bootstrap.mjs` 同样 import 一次，供 PluginsLoader / ApiLoader 加载 `extends plugin` 模块  
-- 业务：裸名 `segment` / import 基类；勿 `import #oicq`（见 [runtime-surface.md](runtime-surface.md)）
+- `src/bootstrap-globals.js`：在 `agent-runtime.js` 首行 import，`setRuntimeGlobal('PluginBase'|'msgSegment', …)`  
+- 集成测试：`tests/helpers/bootstrap.mjs` 同样 import 一次，供 PluginLoader / HttpApiLoader 加载 `extends PluginBase` 模块  
+- 业务：裸名 `msgSegment` / import 基类；见 [runtime-surface.md](runtime-surface.md)）
 
 ## Loader 标准模式
 
@@ -38,7 +38,7 @@
 4. 热重载：`this._hotReload = new HotReloadBase({ loggerName })`，`watch(true, { dirs|files, onAdd, onChange, onUnlink })`；销毁时 `_hotReload?.stop()`
 5. 模块 key 优先 `resolveQualifiedCoreModuleKey(file, dirs, subDir)`（如 `mongodb-Core/admin`），禁止仅 basename（多 Core 会互相覆盖）
 
-**不支持热重载（改完需重启）**：`events/`（ListenerLoader）、`tasker/`（TaskerLoader）。Bot 启动日志会打 debug 提示。
+**不支持热重载（改完需重启）**：`events/`（ListenerLoader）、`tasker/`（TaskerLoader）。AgentRuntime 启动日志会打 debug 提示。
 
 ## HotReloadBase 语义（`src/utils/hot-reload-base.js`）
 
@@ -56,12 +56,12 @@
 
 ### Loader 侧约定
 
-- **ConfigLoader**：监视器回调用 **`reloadFile(绝对路径)`**，勿仅用 basename 调 `reload(name)`（多 Core 同名 schema 会歧义）。
-- **PluginsLoader**：`changePlugin(key, filePath)` 优先用监视器路径；`createTask()` 对 cron 指纹 `_taskScheduleKey` 去重，插件热更但 schedule 未变时不重建全部定时任务。
-- **ApiLoader / StreamLoader**：`onChange` 应基于监视器报告的 `filePath` 重载（Api 实例已缓存 `filePath` 时等价）。
-- **Bot.run watchSetup**：统一启动 Config / Stream / Plugins / **Api** 四监视器（Api 不再挂到 listener 阶段）。
-- **cfg（`config.js`）**：单文件 `files` 模式 + `shouldHandle: () => true`；YAML 原子写入同样受 hash / unlink 延迟保护。
-- **加载顺序**：`ConfigLoader.load` → 挂载 `ConfigManager` → 再并行 Stream / Plugins / Api（避免插件 init 读不到配置）。
+- **CommonConfigRegistry**：监视器回调用 **`reloadFile(绝对路径)`**，勿仅用 basename 调 `reload(name)`（多 Core 同名 schema 会歧义）。
+- **PluginLoader**：`changePlugin(key, filePath)` 优先用监视器路径；`createTask()` 对 cron 指纹 `_taskScheduleKey` 去重，插件热更但 schedule 未变时不重建全部定时任务。
+- **HttpApiLoader / AiStreamLoader**：`onChange` 应基于监视器报告的 `filePath` 重载（Api 实例已缓存 `filePath` 时等价）。
+- **AgentRuntime.run watchSetup**：统一启动 Config / Stream / Plugins / **Api** 四监视器（Api 不再挂到 listener 阶段）。
+- **runtimeConfig（`config.js`）**：单文件 `files` 模式 + `shouldHandle: () => true`；YAML 原子写入同样受 hash / unlink 延迟保护。
+- **加载顺序**：`CommonConfigRegistry.load` → 挂载 `CommonConfigRegistry` → 再并行 Stream / Plugins / Api（避免插件 init 读不到配置）。
 
 ### 排查「未手改却热更」
 

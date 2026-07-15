@@ -2,7 +2,7 @@
  * XRK AI 助手 — 对齐 XRK-Yunzai plugin/ai.js
  * @ 机器人 / 配置前缀 / 群内随机触发；合并 memory、tools 等工作流
  */
-import BotUtil from '#utils/botutil.js';
+import RuntimeUtil from '#utils/runtime-util.js';
 import {
   AI_FULL_PROMPT_DUMP_REGEX,
   handleClearConversation,
@@ -16,7 +16,7 @@ import {
   isInAiWhitelist,
 } from '../lib/ai-assistant-runtime.js';
 
-export class XRKAIAssistant extends plugin {
+export class XRKAIAssistant extends PluginBase {
   constructor() {
     super({
       name: 'XRK-AI助手',
@@ -74,8 +74,8 @@ export class XRKAIAssistant extends plugin {
 
       if (!debugDumpFullPrompt && !isGlobalTrigger && !text) {
         const img = stream.getRandomEmotionImage?.('惊讶');
-        if (img) await e.reply(segment.image(img));
-        await BotUtil.sleep(300);
+        if (img) await e.reply(msgSegment.image(img));
+        await RuntimeUtil.sleep(300);
         await e.reply('有什么需要帮助的吗？');
         return true;
       }

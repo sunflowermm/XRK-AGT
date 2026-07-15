@@ -1,6 +1,6 @@
 import path from 'node:path';
 import HttpApi from './http.js';
-import BotUtil from '#utils/botutil.js';
+import RuntimeUtil from '#utils/runtime-util.js';
 import { getAistreamConfigOptional } from '#utils/aistream-config.js';
 import paths from '#utils/paths.js';
 import { validateApiInstance, getApiPriority } from './utils/helpers.js';
@@ -10,7 +10,7 @@ import { HotReloadBase } from '#utils/hot-reload-base.js';
 import { API_REGISTER_BATCH_SIZE, LOADER_BATCH_SIZE } from '#utils/loader-constants.js';
 import { classifyModuleImportError } from '#utils/module-import-error.js';
 
-class ApiLoader {
+class HttpApiLoader {
   apis = new Map();
   priority = [];
   loaded = false;
@@ -21,7 +21,7 @@ class ApiLoader {
 
   async load() {
     const startTime = Date.now();
-    BotUtil.makeLog('info', '开始加载API模块...', 'ApiLoader');
+    RuntimeUtil.makeLog('info', '开始加载API模块...', 'HttpApiLoader');
 
     const allFiles = await FileLoader.getCoreSubDirFiles('http', {
       ext: '.js',
@@ -34,7 +34,7 @@ class ApiLoader {
 
     this.sortByPriority();
     this.loaded = true;
-    BotUtil.makeLog('info', `API模块加载完成: ${this.apis.size}个, 耗时${Date.now() - startTime}ms`, 'ApiLoader');
+    RuntimeUtil.makeLog('info', `API模块加载完成: ${this.apis.size}个, 耗时${Date.now() - startTime}ms`, 'HttpApiLoader');
     return this.apis;
   }
 
@@ -52,10 +52,10 @@ class ApiLoader {
       if (!module.default) {
         const namedExports = Object.keys(module).filter((k) => k !== 'default');
         if (namedExports.length > 0) {
-          BotUtil.makeLog('debug', `跳过非 API 文件: ${key}`, 'ApiLoader');
+          RuntimeUtil.makeLog('debug', `跳过非 API 文件: ${key}`, 'HttpApiLoader');
           return false;
         }
-        BotUtil.makeLog('warn', `无效 API 模块: ${key}`, 'ApiLoader');
+        RuntimeUtil.makeLog('warn', `无效 API 模块: ${key}`, 'HttpApiLoader');
         return false;
       }
 
@@ -65,7 +65,7 @@ class ApiLoader {
       } else if (typeof module.default === 'object') {
         apiInstance = new HttpApi(module.default);
       } else {
-        BotUtil.makeLog('warn', `无效 API 模块: ${key}`, 'ApiLoader');
+        RuntimeUtil.makeLog('warn', `无效 API 模块: ${key}`, 'HttpApiLoader');
         return false;
       }
 
@@ -95,7 +95,7 @@ class ApiLoader {
       } else if (classified.kind === 'missing_package') {
         detail = `缺少依赖 ${classified.packageName || '未知'}，请 pnpm add 后重启`;
       }
-      BotUtil.makeLog('error', `加载API失败: ${filePath} - ${detail}`, 'ApiLoader', error);
+      RuntimeUtil.makeLog('error', `加载API失败: ${filePath} - ${detail}`, 'HttpApiLoader', error);
       return false;
     }
   }
@@ -108,13 +108,13 @@ class ApiLoader {
       try {
         await api.stop();
       } catch (error) {
-        BotUtil.makeLog('warn', `卸载 API stop 失败: ${api.name} - ${error.message}`, 'ApiLoader');
+        RuntimeUtil.makeLog('warn', `卸载 API stop 失败: ${api.name} - ${error.message}`, 'HttpApiLoader');
       }
     }
 
     this._removeWsHandlersByOwner(key);
     this.apis.delete(key);
-    BotUtil.makeLog('debug', `卸载API: ${api.name}`, 'ApiLoader');
+    RuntimeUtil.makeLog('debug', `卸载API: ${api.name}`, 'HttpApiLoader');
   }
 
   _removeWsHandlersByOwner(ownerKey) {
@@ -151,7 +151,7 @@ class ApiLoader {
     this.bot = bot;
 
     app.use((req, res, next) => {
-      req.bot = bot;
+      req.agentRuntime = bot;
       req.apiLoader = this;
       next();
     });
@@ -168,13 +168,13 @@ class ApiLoader {
 
         if (routeCount > 0 || wsCount > 0) {
           if (getAistreamConfigOptional().global?.debug) {
-            BotUtil.makeLog('debug', `注册API: ${api.name} (路由: ${routeCount}, WS: ${wsCount})`, 'ApiLoader');
+            RuntimeUtil.makeLog('debug', `注册API: ${api.name} (路由: ${routeCount}, WS: ${wsCount})`, 'HttpApiLoader');
           }
           return { routeCount, wsCount, enabled: true };
         }
         return { routeCount: 0, wsCount: 0, enabled: false };
       } catch (error) {
-        BotUtil.makeLog('error', `注册API失败: ${api.name} - ${error.message}`, 'ApiLoader', error);
+        RuntimeUtil.makeLog('error', `注册API失败: ${api.name} - ${error.message}`, 'HttpApiLoader', error);
         return { routeCount: 0, wsCount: 0, enabled: false };
       }
     };
@@ -199,24 +199,24 @@ class ApiLoader {
       }
     });
 
-    BotUtil.makeLog('info', `API路由注册完成: ${enabledCount}个模块, ${totalRoutes}个路由, ${totalWS}个WebSocket`, 'ApiLoader');
+    RuntimeUtil.makeLog('info', `API路由注册完成: ${enabledCount}个模块, ${totalRoutes}个路由, ${totalWS}个WebSocket`, 'HttpApiLoader');
   }
 
   async changeApi(key, filePath = null) {
     const api = this.apis.get(key);
     const resolved = filePath ?? api?.filePath ?? await this._findApiFile(key);
     if (!resolved) {
-      BotUtil.makeLog('warn', `API不存在: ${key}`, 'ApiLoader');
+      RuntimeUtil.makeLog('warn', `API不存在: ${key}`, 'HttpApiLoader');
       return false;
     }
 
     try {
-      BotUtil.makeLog('info', `重载API: ${api?.name ?? key}`, 'ApiLoader');
+      RuntimeUtil.makeLog('info', `重载API: ${api?.name ?? key}`, 'HttpApiLoader');
       await this._reloadFromFile(key, resolved);
-      BotUtil.makeLog('info', `API重载成功: ${this.apis.get(key)?.name ?? key}`, 'ApiLoader');
+      RuntimeUtil.makeLog('info', `API重载成功: ${this.apis.get(key)?.name ?? key}`, 'HttpApiLoader');
       return true;
     } catch (error) {
-      BotUtil.makeLog('error', `API重载失败: ${key}`, 'ApiLoader', error);
+      RuntimeUtil.makeLog('error', `API重载失败: ${key}`, 'HttpApiLoader', error);
       return false;
     }
   }
@@ -249,7 +249,7 @@ class ApiLoader {
     if (this._hotReload?.watcher) return;
 
     try {
-      const hotReload = new HotReloadBase({ loggerName: 'ApiLoader' });
+      const hotReload = new HotReloadBase({ loggerName: 'HttpApiLoader' });
       const apiDirs = await paths.getCoreSubDirs('http');
       if (apiDirs.length === 0) return;
 
@@ -272,9 +272,9 @@ class ApiLoader {
 
       if (started) this._hotReload = hotReload;
     } catch (error) {
-      BotUtil.makeLog('error', '启动 API 文件监视失败', 'ApiLoader', error);
+      RuntimeUtil.makeLog('error', '启动 API 文件监视失败', 'HttpApiLoader', error);
     }
   }
 }
 
-export default new ApiLoader();
+export default new HttpApiLoader();

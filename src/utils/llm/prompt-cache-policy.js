@@ -1,4 +1,4 @@
-import BotUtil from '#utils/botutil.js';
+import RuntimeUtil from '#utils/runtime-util.js';
 import { getAistreamConfigOptional } from '#utils/aistream-config.js';
 import { pickTrimmed } from '#utils/coerce-pick.js';
 
@@ -83,7 +83,7 @@ export function logPromptCacheUsage(usage, label = 'LLM') {
   if (cached == null || Number(cached) <= 0) return;
 
   const promptTokens = usage.prompt_tokens ?? usage.input_tokens ?? '-';
-  BotUtil.makeLog(
+  RuntimeUtil.makeLog(
     'debug',
     `[PromptCache] ${label} cached_tokens=${cached} prompt_tokens=${promptTokens}`,
     'PromptCache'

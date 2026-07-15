@@ -1,7 +1,7 @@
 /**
- * AI 助手运行时 — 底层走 AGT stream.process / StreamLoader.mergeStreams
+ * AI 助手运行时 — 底层走 AGT stream.process / AiStreamLoader.mergeStreams
  */
-import StreamLoader from '#infrastructure/aistream/loader.js';
+import AiStreamLoader from '#infrastructure/ai-workflow/loader.js';
 import ChatStream from '../stream/chat.js';
 
 export const AI_FULL_PROMPT_DUMP_REGEX = /#?XRK完整AI上下文/;
@@ -10,7 +10,7 @@ const cooldownState = new Map();
 
 function resolveAiConfigInstance() {
   try {
-    const cm = typeof ConfigManager !== 'undefined' ? ConfigManager : null;
+    const cm = typeof CommonConfigRegistry !== 'undefined' ? CommonConfigRegistry : null;
     if (!cm?.get) return null;
     const direct = cm.get('ai_config') || cm.get('system-Core/ai_config');
     if (direct) return direct;
@@ -23,7 +23,7 @@ function resolveAiConfigInstance() {
   return null;
 }
 
-/** 始终走 ConfigManager（若已就绪）或模板实例；勿缓存过期快照 */
+/** 始终走 CommonConfigRegistry（若已就绪）或模板实例；勿缓存过期快照 */
 export async function loadAiAssistantConfig() {
   const inst = resolveAiConfigInstance();
   if (inst && typeof inst.read === 'function') {
@@ -54,7 +54,7 @@ export function rawMessageTextForAiTrigger(e) {
  * 解析 chat 主流。组合副流由 runChatAgent → process({ mergeStreams }) 唯一完成。
  */
 export function resolveChatStream(plugin, _config) {
-  return plugin.getStream?.('chat') || StreamLoader.getStream?.('chat') || null;
+  return plugin.getStream?.('chat') || AiStreamLoader.getStream?.('chat') || null;
 }
 
 export function isInAiWhitelist(e, config) {
@@ -122,7 +122,7 @@ export async function processMessageContent(e, config) {
   }
 }
 
-/** 走 AGT AIStream.process：唯一热路径 mergeStreams */
+/** 走 AGT AiWorkflow.process：唯一热路径 mergeStreams */
 export async function runChatAgent(_plugin, e, {
   text,
   persona = '',

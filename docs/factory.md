@@ -184,7 +184,7 @@ const config = {
 };
 
 const deviceId = 'device-001';
-const client = ASRFactory.createClient(deviceId, config, Bot);
+const client = ASRFactory.createClient(deviceId, config, AgentRuntime);
 
 // 启动识别
 await client.start();
@@ -264,7 +264,7 @@ const config = {
 };
 
 const deviceId = 'device-001';
-const client = TTSFactory.createClient(deviceId, config, Bot);
+const client = TTSFactory.createClient(deviceId, config, AgentRuntime);
 
 // 合成语音
 const text = '你好，我是语音助手';
@@ -294,7 +294,7 @@ class TTSClient {
 
 ### 工厂配置位置
 
-与工厂相关的 YAML 均在**当前 Bot 端口目录** `data/server_bots/{port}/` 下（端口由运行时 `cfg` 绑定，见 `src/infrastructure/config/config.js` 中 `getServerConfig` 与 `cfg.aistream`）：
+与工厂相关的 YAML 均在**当前 AgentRuntime 端口目录** `data/server_bots/{port}/` 下（端口由运行时 `runtimeConfig` 绑定，见 `src/infrastructure/config/config.js` 中 `getServerConfig` 与 `runtimeConfig.aistream`）：
 
 1. **`aistream.yaml`**：`llm.Provider` / `asr.Provider` / `tts.Provider` 等选择默认工厂提供商；另含工作流、MCP、子服务端等段（详见 `docs/aistream.md`）。
 2. **各提供商配置文件**（如 `volcengine_llm.yaml`）：API Key、模型名等具体参数。
@@ -340,8 +340,8 @@ maxTokens: 4096
 
 ```javascript
 // 读取 LLM 配置
-const llmConfig = Bot.cfg.aistream.llm;
-const providerConfig = Bot.cfg[`${llmConfig.Provider}_llm`];
+const llmConfig = AgentRuntime.runtimeConfig.aistream.llm;
+const providerConfig = AgentRuntime.runtimeConfig[`${llmConfig.Provider}_llm`];
 
 // 创建客户端
 const client = LLMFactory.createClient({
@@ -472,7 +472,7 @@ class ASRFactory {
   /**
    * 注册自定义 ASR 提供商
    * @param {string} name - 提供商名称
-   * @param {Function} factoryFn - 工厂函数，接收 (deviceId, config, Bot) 参数
+   * @param {Function} factoryFn - 工厂函数，接收 (deviceId, config, AgentRuntime) 参数
    */
   static registerProvider(name, factoryFn)
 
@@ -493,10 +493,10 @@ class ASRFactory {
    * 创建 ASR 客户端
    * @param {string} deviceId - 设备ID
    * @param {Object} config - 配置对象
-   * @param {Object} Bot - Bot 实例
+   * @param {Object} AgentRuntime - AgentRuntime 实例
    * @returns {Object} ASR 客户端实例
    */
-  static createClient(deviceId, config = {}, Bot)
+  static createClient(deviceId, config = {}, AgentRuntime)
 }
 ```
 
@@ -507,7 +507,7 @@ class TTSFactory {
   /**
    * 注册自定义 TTS 提供商
    * @param {string} name - 提供商名称
-   * @param {Function} factoryFn - 工厂函数，接收 (deviceId, config, Bot) 参数
+   * @param {Function} factoryFn - 工厂函数，接收 (deviceId, config, AgentRuntime) 参数
    */
   static registerProvider(name, factoryFn)
 
@@ -528,10 +528,10 @@ class TTSFactory {
    * 创建 TTS 客户端
    * @param {string} deviceId - 设备ID
    * @param {Object} config - 配置对象
-   * @param {Object} Bot - Bot 实例
+   * @param {Object} AgentRuntime - AgentRuntime 实例
    * @returns {Object} TTS 客户端实例
    */
-  static createClient(deviceId, config = {}, Bot)
+  static createClient(deviceId, config = {}, AgentRuntime)
 }
 ```
 
@@ -539,12 +539,12 @@ class TTSFactory {
 
 ## 使用场景
 
-### 场景 1：在 AIStream 中使用 LLM 工厂
+### 场景 1：在 AiWorkflow 中使用 LLM 工厂
 
 ```javascript
 import LLMFactory from '#factory/llm/LLMFactory.js';
 
-class MyStream extends AIStream {
+class MyStream extends AiWorkflow {
   async process(e, question) {
     // 从配置读取 LLM 设置
     const llmConfig = this.getLLMConfig();
@@ -568,12 +568,12 @@ import ASRFactory from '#factory/asr/ASRFactory.js';
 import TTSFactory from '#factory/tts/TTSFactory.js';
 
 // 创建 ASR 客户端
-const asrConfig = Bot.cfg.device.asr;
-const asrClient = ASRFactory.createClient(deviceId, asrConfig, Bot);
+const asrConfig = AgentRuntime.runtimeConfig.device.asr;
+const asrClient = ASRFactory.createClient(deviceId, asrConfig, AgentRuntime);
 
 // 创建 TTS 客户端
-const ttsConfig = Bot.cfg.device.tts;
-const ttsClient = TTSFactory.createClient(deviceId, ttsConfig, Bot);
+const ttsConfig = AgentRuntime.runtimeConfig.device.tts;
+const ttsClient = TTSFactory.createClient(deviceId, ttsConfig, AgentRuntime);
 ```
 
 ### 场景 3：在 HTTP API 中使用工厂
@@ -634,7 +634,7 @@ export default {
     // 根据请求选择提供商
     const config = {
       provider: provider || 'volcengine',
-      ...Bot.cfg[`${provider}_llm`]
+      ...AgentRuntime.runtimeConfig[`${provider}_llm`]
     };
     
     const client = LLMFactory.createClient(config);
@@ -669,7 +669,7 @@ try {
   const client = LLMFactory.createClient(config);
   const response = await client.chat(messages);
 } catch (error) {
-  Bot.makeLog('error', `LLM调用失败: ${error.message}`);
+  AgentRuntime.makeLog('error', `LLM调用失败: ${error.message}`);
   throw error;
 }
 ```
@@ -936,7 +936,7 @@ Host: localhost:8080
 ## 相关文档
 
 - **[system-Core 特性](system-core.md)** - system-Core 内置模块完整说明，包含AI服务API和所有工作流的实际实现 ⭐
-- **[AIStream 文档](aistream.md)** - AIStream 基类技术文档，了解如何在 AIStream 中使用 LLM 工厂
+- **[AiWorkflow 文档](aistream.md)** - AiWorkflow 基类技术文档，了解如何在 AiWorkflow 中使用 LLM 工厂
 - **[配置基类文档](config-base.md)** - 了解配置系统的使用
 - **[MCP 完整指南](mcp-guide.md)** - MCP 工具注册与连接
 - **[HTTP API 文档](http-api.md)** - 了解 HTTP API 基类

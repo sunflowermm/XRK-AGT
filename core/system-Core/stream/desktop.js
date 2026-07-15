@@ -1,5 +1,5 @@
-import AIStream from '#infrastructure/aistream/aistream.js';
-import BotUtil from '#utils/botutil.js';
+import AiWorkflow from '#infrastructure/ai-workflow/ai-workflow.js';
+import RuntimeUtil from '#utils/runtime-util.js';
 import paths from '#utils/paths.js';
 import { exec as execCb, spawn } from 'child_process';
 import { exec } from '#utils/exec-async.js';
@@ -35,7 +35,7 @@ const execCommand = (command, options = {}) => {
  * - 剪贴板：read_clipboard、write_clipboard
  * - 办公文档：tools.run + office-* skills
  */
-export default class DesktopStream extends AIStream {
+export default class DesktopStream extends AiWorkflow {
 
   constructor() {
     super({
@@ -159,7 +159,7 @@ export default class DesktopStream extends AIStream {
             return this.successResponse({ message: '已发送显示桌面快捷键（xdotool）', platform: 'linux' });
           }
         } catch (err) {
-          BotUtil.makeLog('error', `[desktop] show_desktop: ${err.message}`, 'DesktopStream');
+          RuntimeUtil.makeLog('error', `[desktop] show_desktop: ${err.message}`, 'DesktopStream');
           return this.errorResponse(
             'SHOW_DESKTOP_FAILED',
             `${err.message}（Linux 可安装 wmctrl 或 xdotool；Wayland 下可能需桌面环境自带快捷键）`
@@ -244,7 +244,7 @@ export default class DesktopStream extends AIStream {
             `未找到可用程序，请安装 ${candidates.join(' / ')} 之一`
           );
         } catch (err) {
-          BotUtil.makeLog('error', `[desktop] 打开系统工具失败: ${err.message}`, 'DesktopStream');
+          RuntimeUtil.makeLog('error', `[desktop] 打开系统工具失败: ${err.message}`, 'DesktopStream');
           return this.errorResponse('OPEN_SYSTEM_TOOL_FAILED', err.message);
         }
       },
@@ -290,7 +290,7 @@ export default class DesktopStream extends AIStream {
               const seg = segment;
               await e.reply([seg.image(screenshotPath)]);
             } catch (err) {
-              BotUtil.makeLog(
+              RuntimeUtil.makeLog(
                 'warn',
                 `[desktop.screenshot] 截图发送到会话失败: ${err.message}`,
                 'DesktopStream'
@@ -298,7 +298,7 @@ export default class DesktopStream extends AIStream {
             }
           }
 
-          BotUtil.makeLog('info', `截图成功: ${screenshotPath} (${stats.size} bytes)`, 'DesktopStream');
+          RuntimeUtil.makeLog('info', `截图成功: ${screenshotPath} (${stats.size} bytes)`, 'DesktopStream');
           
           return this.successResponse({
             filePath: screenshotPath,
@@ -306,7 +306,7 @@ export default class DesktopStream extends AIStream {
             size: stats.size
           });
         } catch (err) {
-          BotUtil.makeLog('error', `[desktop] 截屏失败: ${err.message}`, 'DesktopStream');
+          RuntimeUtil.makeLog('error', `[desktop] 截屏失败: ${err.message}`, 'DesktopStream');
           return this.errorResponse('SCREENSHOT_FAILED', err.message);
         }
       },
@@ -350,7 +350,7 @@ export default class DesktopStream extends AIStream {
           }
           return this.errorResponse('LOCK_SCREEN_FAILED', `锁屏失败：${last}`);
         } catch (err) {
-          BotUtil.makeLog('error', `[desktop] 锁屏失败: ${err.message}`, 'DesktopStream');
+          RuntimeUtil.makeLog('error', `[desktop] 锁屏失败: ${err.message}`, 'DesktopStream');
           return this.errorResponse('LOCK_SCREEN_FAILED', err.message);
         }
       },
@@ -395,7 +395,7 @@ export default class DesktopStream extends AIStream {
 
           return this.successResponse(systemInfo);
         } catch (err) {
-          BotUtil.makeLog('error', `[desktop] 获取系统信息失败: ${err.message}`, 'DesktopStream');
+          RuntimeUtil.makeLog('error', `[desktop] 获取系统信息失败: ${err.message}`, 'DesktopStream');
           return this.errorResponse('SYSTEM_INFO_FAILED', err.message);
         }
       },
@@ -446,7 +446,7 @@ export default class DesktopStream extends AIStream {
           await execCommand(command, { shell: IS_WINDOWS ? 'cmd.exe' : undefined });
           return this.successResponse({ message: `已打开浏览器访问: ${url}`, url });
         } catch (err) {
-          BotUtil.makeLog('error', `[desktop] 打开浏览器失败: ${err.message}`, 'DesktopStream');
+          RuntimeUtil.makeLog('error', `[desktop] 打开浏览器失败: ${err.message}`, 'DesktopStream');
           return this.errorResponse('OPEN_BROWSER_FAILED', err.message);
         }
       },
@@ -531,7 +531,7 @@ export default class DesktopStream extends AIStream {
             platform: 'linux'
           });
         } catch (err) {
-          BotUtil.makeLog('error', `[desktop] 电源控制失败: ${err.message}`, 'DesktopStream');
+          RuntimeUtil.makeLog('error', `[desktop] 电源控制失败: ${err.message}`, 'DesktopStream');
           return this.errorResponse('POWER_CONTROL_FAILED', err.message);
         }
       },
@@ -577,7 +577,7 @@ export default class DesktopStream extends AIStream {
             count: disks.length
           });
         } catch (err) {
-          BotUtil.makeLog('error', `[desktop] 获取磁盘空间失败: ${err.message}`, 'DesktopStream');
+          RuntimeUtil.makeLog('error', `[desktop] 获取磁盘空间失败: ${err.message}`, 'DesktopStream');
           return this.errorResponse('DISK_SPACE_FAILED', err.message);
         }
       },
@@ -671,7 +671,7 @@ export default class DesktopStream extends AIStream {
             }
           }
         } catch (err) {
-          BotUtil.makeLog('error', `[desktop] 打开应用程序失败: ${err.message}`, 'DesktopStream');
+          RuntimeUtil.makeLog('error', `[desktop] 打开应用程序失败: ${err.message}`, 'DesktopStream');
           return this.errorResponse('OPEN_APPLICATION_FAILED', err.message);
         }
       },
@@ -695,7 +695,7 @@ export default class DesktopStream extends AIStream {
             count: (result.killed || []).length
           });
         } catch (err) {
-          BotUtil.makeLog('error', `[desktop] 清理进程失败: ${err.message}`, 'DesktopStream');
+          RuntimeUtil.makeLog('error', `[desktop] 清理进程失败: ${err.message}`, 'DesktopStream');
           return this.errorResponse('CLEANUP_PROCESSES_FAILED', err.message);
         }
       },

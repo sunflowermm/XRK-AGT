@@ -104,8 +104,7 @@ config/server_config/
 # Temporary files
 trash/
 
-# Framework tests（本地/CI 使用，不作为发行内容入库）
-tests/
+# Framework tests 已入库（pnpm test / test:fast）；勿再 ignore
 
 # 本地运维脚本默认不入库；Redis 引导必须随仓
 scripts/*

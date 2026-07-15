@@ -12,7 +12,7 @@ description: 编写或审查 core/src 代码时的写法与性能规范（全局
 
 ## 30 秒记忆
 
-1. 业务 **`core/`** — 裸名 `Bot`/`segment`，勿 `global.`；HTTP 用 `req.bot` + `HttpResponse`
+1. 业务 **`core/`** — 裸名 `AgentRuntime`/`msgSegment`，勿 `global.`；HTTP 用 `req.agentRuntime` + `HttpResponse`
 2. **类字段**存 Map/缓存，constructor 只 `super()` + 固定配置
 3. 热路径 **`fs/promises`**，批加载 **`forEachBatch`**，出站 **`fetch` + `AbortSignal.timeout`**
 4. 错误 **`normalizeError`**，Shell **`#utils/exec-async.js`**

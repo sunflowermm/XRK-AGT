@@ -1,4 +1,4 @@
-import BotUtil from '#utils/botutil.js';
+import RuntimeUtil from '#utils/runtime-util.js';
 import { summarizeToolResultText } from '#utils/mcp-tool-result-text.js';
 import os from 'os';
 
@@ -45,7 +45,7 @@ export class MCPServer {
     // 静默覆盖已存在的工具（避免热重载时的重复警告）
     // 工具注册前应该先清空旧工具，这里只记录调试信息
     if (this.tools.has(name) && process.env.DEBUG_MCP_TOOLS) {
-      BotUtil.makeLog('debug', `MCP工具已存在，将被覆盖: ${name}`, 'MCPServer');
+      RuntimeUtil.makeLog('debug', `MCP工具已存在，将被覆盖: ${name}`, 'MCPServer');
     }
     
     this.tools.set(name, {
@@ -73,7 +73,7 @@ export class MCPServer {
       mimeType: resource.mimeType || 'text/plain',
       handler: resource.handler
     });
-    BotUtil.makeLog('debug', `MCP资源已注册: ${uri}`, 'MCPServer');
+    RuntimeUtil.makeLog('debug', `MCP资源已注册: ${uri}`, 'MCPServer');
   }
 
   /**
@@ -91,7 +91,7 @@ export class MCPServer {
       arguments: prompt.arguments || [],
       handler: prompt.handler
     });
-    BotUtil.makeLog('debug', `MCP提示词已注册: ${name}`, 'MCPServer');
+    RuntimeUtil.makeLog('debug', `MCP提示词已注册: ${name}`, 'MCPServer');
   }
 
   /**
@@ -132,7 +132,7 @@ export class MCPServer {
     const tool = this.tools.get(name);
     const isRemote = name.startsWith('remote-mcp.');
 
-    BotUtil.makeLog(
+    RuntimeUtil.makeLog(
       'info',
       `MCP 工具调用开始: ${name}${isRemote ? ' (remote)' : ''}`,
       'MCPServer'
@@ -159,7 +159,7 @@ export class MCPServer {
       // 检查是否为错误结果
       const isError = result && typeof result === 'object' && result.success === false;
 
-      BotUtil.makeLog(
+      RuntimeUtil.makeLog(
         isError ? 'warn' : 'info',
         `MCP 工具调用完成: ${name}${isRemote ? ' (remote)' : ''}, isError=${isError}`,
         'MCPServer'
@@ -171,7 +171,7 @@ export class MCPServer {
         isError
       };
     } catch (error) {
-      BotUtil.makeLog('error', `MCP工具调用失败[${name}]: ${error.message}`, 'MCPServer');
+      RuntimeUtil.makeLog('error', `MCP工具调用失败[${name}]: ${error.message}`, 'MCPServer');
       
       return {
         content: [
@@ -477,7 +477,7 @@ export class MCPServer {
         result
       };
     } catch (error) {
-      BotUtil.makeLog('error', `MCP JSON-RPC处理失败[${method}]: ${error.message}`, 'MCPServer');
+      RuntimeUtil.makeLog('error', `MCP JSON-RPC处理失败[${method}]: ${error.message}`, 'MCPServer');
       
       return {
         jsonrpc: '2.0',
@@ -655,7 +655,7 @@ export class MCPServer {
       handler: async (args) => {
         const { version = 'v4', count = 1 } = args;
         const n = Math.min(Math.max(Number(count) || 1, 1), 100);
-        const uuids = Array.from({ length: n }, () => BotUtil.uuid());
+        const uuids = Array.from({ length: n }, () => RuntimeUtil.uuid());
         return {
           version,
           count: uuids.length,

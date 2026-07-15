@@ -11,13 +11,13 @@
 
 | 能力 | 用法 | 代码位置 |
 |------|------|----------|
-| `Error.isError()` | 基础设施判错 | `src/bot.js`、`log.js`、LLM/HTTP 等 |
+| `Error.isError()` | 基础设施判错 | `src/agent-runtime.js`、`log.js`、LLM/HTTP 等 |
 | `normalizeError()` | 非 Error 转标准 Error | `#utils/normalize-error.js` |
-| `Map.getOrInsert*` | 统计/缓存初始化 | `error-handler.js`、`botutil.getMap()` |
+| `Map.getOrInsert*` | 统计/缓存初始化 | `error-handler.js`、`RuntimeUtil.getMap()` |
 | 全局 `URLPattern` | 重定向路径匹配 | `http-business.js` |
 | 原生 `fetch` + `ProxyAgent` | LLM/下载/健康检查 | 全局 fetch；`#utils/llm/proxy-utils.js` |
-| `AbortSignal.timeout` | HTTP 超时 | `bot.js`、`http-business.js`、`start.js` |
-| `Uint8Array.fromBase64/toBase64/toHex` | 二进制编解码 | `botutil.js`、`image-utils.js`、Tasker 等 |
+| `AbortSignal.timeout` | HTTP 超时 | `agent-runtime.js`、`http-business.js`、`start.js` |
+| `Uint8Array.fromBase64/toBase64/toHex` | 二进制编解码 | `runtime-util.js`、`image-utils.js`、Tasker 等 |
 | `Readable.fromWeb` | fetch body 写盘 | `subserver-client.js` |
 | `#utils/exec-async.js` | Promise 版 `exec` | 全项目唯一 `promisify(exec)` 封装点 |
 | `#utils/win-utf8.js` | Windows 控制台 UTF-8 | `start.js` 菜单、`log.js` 初始化前 |
@@ -61,7 +61,7 @@ Temporal、Web Storage、`node:ffi`（实验）等——本项目当前未依赖
 
 ```bash
 node -v                    # 应 >= v26.0.0
-node --check src/bot.js
+node --check src/agent-runtime.js
 node -e "import('#utils/exec-async.js').then(m=>console.log('exec',typeof m.exec))"
 node -e "console.log('Error.isError', typeof Error.isError)"
 ```

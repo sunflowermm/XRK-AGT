@@ -10,8 +10,8 @@
 - ✅ **零配置扩展**：放置到任意 `core/*/tasker/` 目录即可自动加载
 - ✅ **标准化事件**：统一的事件格式，便于处理
 - ✅ **协议转换**：将平台消息转换为统一事件模型
-- ✅ **自动注册**：通过 `Bot.tasker.push()` 自动注册
-- ✅ **多Bot支持**：支持同一Tasker管理多个Bot实例
+- ✅ **自动注册**：通过 `AgentRuntime.tasker.push()` 自动注册
+- ✅ **多AgentRuntime支持**：支持同一Tasker管理多个AgentRuntime实例
 - ✅ **事件去重**：自动处理重复事件，避免重复处理
 
 ---
@@ -21,7 +21,7 @@
 - [Tasker 基础属性](#tasker-基础属性)
 - [事件对象基础属性](#事件对象基础属性)
 - [Tasker 特定属性（由增强插件处理）](#tasker-特定属性由增强插件处理)
-- [Bot实例基础方法](#bot实例基础方法)
+- [AgentRuntime实例基础方法](#bot实例基础方法)
 - [事件处理流程](#事件处理流程)
 - [Tasker Loader 规范](#tasker-loader-规范)
 - [注意事项](#注意事项)
@@ -55,7 +55,7 @@ classDiagram
         +string tasker_name
         +string event_id
         +number time
-        +Bot bot
+        +AgentRuntime bot
         +Object sender
         +Function reply
     }
@@ -74,7 +74,7 @@ classDiagram
 - `name` - Tasker 名称（如 'OneBotv11', 'stdin'）
 - `path` - Tasker 路径
 
-### Bot 实例中的 Tasker 信息
+### AgentRuntime 实例中的 Tasker 信息
 
 - `bot.tasker.id` - Tasker ID
 - `bot.tasker.name` - Tasker 名称
@@ -95,7 +95,7 @@ classDiagram
         +string tasker_name
         +string event_id
         +number time
-        +Bot bot
+        +AgentRuntime bot
         +Object sender
         +Function reply
         +string user_id
@@ -121,7 +121,7 @@ classDiagram
 
 - **基础标识**：`self_id`、`tasker`、`tasker_id`、`tasker_name`
 - **事件标识**：`event_id`、`time`
-- **Bot对象**：`bot`（只读，不可修改）
+- **AgentRuntime对象**：`bot`（只读，不可修改）
 - **发送者信息**：`user_id`、`sender` 对象
 - **回复方法**：`reply` 通用回复方法
 
@@ -203,9 +203,9 @@ classDiagram
 }
 ```
 
-## Bot实例基础方法
+## AgentRuntime实例基础方法
 
-所有Bot实例都应该具备以下基础方法：
+所有AgentRuntime实例都应该具备以下基础方法：
 
 ### 消息发送（通用接口）
 
@@ -219,7 +219,7 @@ bot.sendForwardMsg(sendFn, msg) => Promise<any>
 bot.fileToUrl(file, opts?) => Promise<string>
 ```
 
-### Bot 选择方法（Tasker 特定）
+### AgentRuntime 选择方法（Tasker 特定）
 
 ```javascript
 // OneBot 特定（由 OneBot Tasker 内部直接提供）
@@ -237,12 +237,12 @@ bot.pickMember(group_id, user_id) => Member
 Tasker 在接收到外部上报后，应该：
 
 1. 设置基础属性（self_id, tasker, tasker_id, tasker_name 等）
-2. 调用 `Bot.em(eventName, data)` 发送事件
-3. `Bot.em` 会自动调用 `Bot.prepareEvent(data)` 设置通用属性
+2. 调用 `AgentRuntime.em(eventName, data)` 发送事件
+3. `AgentRuntime.em` 会自动调用 `AgentRuntime.prepareEvent(data)` 设置通用属性
 
-### 2. Bot.prepareEvent（底层通用逻辑）
+### 2. AgentRuntime.prepareEvent（底层通用逻辑）
 
-`Bot.prepareEvent` 只处理所有 Tasker 通用的属性：
+`AgentRuntime.prepareEvent` 只处理所有 Tasker 通用的属性：
 
 - 确保 `bot` 对象存在
 - 设置 `tasker_id` 和 `tasker_name`
@@ -271,7 +271,7 @@ TaskerLoader 应该：
 
 1. 扫描 Tasker 目录
 2. 加载 Tasker 文件
-3. Tasker 文件应该通过 `Bot.tasker.push()` 注册 Tasker 实例
+3. Tasker 文件应该通过 `AgentRuntime.tasker.push()` 注册 Tasker 实例
 4. Tasker 实例应该设置 `id` 和 `name` 属性
 
 ## 注意事项
@@ -289,7 +289,7 @@ TaskerLoader 应该：
 - **[Tasker 加载器](tasker-loader.md)** - TaskerLoader 如何扫描并加载 Tasker
 - **[OneBotv11 Tasker](tasker-onebotv11.md)** - OneBotv11 Tasker 完整文档，包含全局对象说明和使用示例
 - **[事件系统标准化文档](事件系统标准化文档.md)** - 事件命名规范、字段责任、处理流程
-- **[Bot 主类文档](bot.md)** - Bot 主类说明，包含事件派发和 Bot 实例管理
+- **[AgentRuntime 主类文档](agent-runtime.md)** - AgentRuntime 主类说明，包含事件派发和 AgentRuntime 实例管理
 - **[框架可扩展性指南](框架可扩展性指南.md)** - 扩展开发完整指南
 
 ---

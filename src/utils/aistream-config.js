@@ -1,8 +1,8 @@
 /**
- * AIStream 配置工具
+ * AiWorkflow 配置工具
  * 统一 LLM/ASR/TTS 配置读取，供 device、xiaozhi、stream 等模块复用
  */
-import cfg from '#infrastructure/config/config.js';
+import runtimeConfig from '#infrastructure/config/config.js';
 
 const ensureConfig = (value, configPath) => {
     if (value === undefined) {
@@ -11,13 +11,13 @@ const ensureConfig = (value, configPath) => {
     return value;
 };
 
-export const getAistreamConfig = () => ensureConfig(cfg.aistream, 'aistream');
+export const getAistreamConfig = () => ensureConfig(runtimeConfig.aistream, 'aistream');
 
 /** 可选读取：无 aistream 时返回 {}，供 loader/mcp/debug 等使用 */
-export const getAistreamConfigOptional = () => cfg.aistream ?? {};
+export const getAistreamConfigOptional = () => runtimeConfig.aistream ?? {};
 
 /**
- * 获取 LLM 调用配置。底层工厂用 aistream.llm.Provider + cfg[Provider]_llm，不依赖 profiles。
+ * 获取 LLM 调用配置。底层工厂用 aistream.llm.Provider + runtimeConfig[Provider]_llm，不依赖 profiles。
  * 有 profiles/models 时做工作流/预设合并；没有时直接用 llm 段（Provider、timeout、persona 等）。
  */
 export const getLLMSettings = ({ workflow, persona, profile } = {}) => {
@@ -88,7 +88,7 @@ export const getTtsConfig = () => {
     const provider = (section.Provider || section.provider || 'volcengine').toLowerCase();
     if (provider !== 'volcengine') throw new Error(`不支持的TTS提供商: ${provider}`);
 
-    const baseConfig = ensureConfig(cfg.volcengine_tts, 'volcengine_tts');
+    const baseConfig = ensureConfig(runtimeConfig.volcengine_tts, 'volcengine_tts');
     return { enabled: true, provider, ...baseConfig };
 };
 
@@ -100,8 +100,8 @@ export const getAsrConfig = () => {
     const provider = (section.Provider || section.provider || 'volcengine').toLowerCase();
     if (provider !== 'volcengine') throw new Error(`不支持的ASR提供商: ${provider}`);
 
-    const baseConfig = ensureConfig(cfg.volcengine_asr, 'volcengine_asr');
+    const baseConfig = ensureConfig(runtimeConfig.volcengine_asr, 'volcengine_asr');
     return { enabled: true, provider, ...baseConfig };
 };
 
-export const getSystemConfig = () => ensureConfig(cfg.device, 'device');
+export const getSystemConfig = () => ensureConfig(runtimeConfig.device, 'device');

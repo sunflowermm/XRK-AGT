@@ -19,8 +19,8 @@
  */
 
 import WebSocket from 'ws';
-import BotUtil from '#utils/botutil.js';
-import StreamLoader from '#infrastructure/aistream/loader.js';
+import RuntimeUtil from '#utils/runtime-util.js';
+import AiStreamLoader from '#infrastructure/ai-workflow/loader.js';
 import fs from 'fs';
 import path from 'path';
 import paths from '#utils/paths.js';
@@ -185,7 +185,7 @@ function decodeAsrAudioPayload(payload, deviceId) {
             try {
                 return Buffer.from(Uint8Array.fromBase64(b64));
             } catch (e) {
-                BotUtil.makeLog(
+                RuntimeUtil.makeLog(
                     'error',
                     `❌ [ASR] base64 音频解码失败: ${e.message}`,
                     deviceId
@@ -194,14 +194,14 @@ function decodeAsrAudioPayload(payload, deviceId) {
             }
         }
 
-        BotUtil.makeLog(
+        RuntimeUtil.makeLog(
             'warn',
             '[ASR] 收到无法识别的音频数据类型，已忽略该分片',
             deviceId
         );
         return Buffer.alloc(0);
     } catch (e) {
-        BotUtil.makeLog(
+        RuntimeUtil.makeLog(
             'error',
             `❌ [ASR] 解码音频数据异常: ${e.message}`,
             deviceId
@@ -238,7 +238,7 @@ function shouldEmitThrottledLog(key, windowMs = DEFAULT_LOG_THROTTLE) {
 
 function logWithThrottle(level, message, scope, key, windowMs = DEFAULT_LOG_THROTTLE) {
     if (shouldEmitThrottledLog(key, windowMs)) {
-        BotUtil.makeLog(level, message, scope);
+        RuntimeUtil.makeLog(level, message, scope);
     }
 }
 
@@ -260,7 +260,7 @@ class DeviceManager {
     getBot(override) {
         const runtime = override || this.bot;
         if (!runtime) {
-            throw new Error('DeviceManager: Bot 实例未初始化');
+            throw new Error('DeviceManager: AgentRuntime 实例未初始化');
         }
         return runtime;
     }
@@ -402,7 +402,7 @@ class DeviceManager {
             } = data;
             const asrConfig = getAsrConfig();
 
-            BotUtil.makeLog('info',
+            RuntimeUtil.makeLog('info',
                 `⚡ [ASR会话#${session_number}] 开始: ${session_id}`,
                 deviceId
             );
@@ -414,7 +414,7 @@ class DeviceManager {
             const client = this._getASRClient(deviceId, asrConfig);
             
             if (client.currentUtterance && !client.currentUtterance.ending) {
-                BotUtil.makeLog('warn',
+                RuntimeUtil.makeLog('warn',
                     `⚠️ [ASR] 已有活跃会话，先结束: ${client.currentUtterance.sessionId}`,
                     deviceId
                 );
@@ -422,7 +422,7 @@ class DeviceManager {
                     await client.endUtterance();
                     await new Promise(resolve => setTimeout(resolve, 200));
                 } catch (e) {
-                    BotUtil.makeLog('warn',
+                    RuntimeUtil.makeLog('warn',
                         `⚠️ [ASR] 结束旧会话失败: ${e.message}`,
                         deviceId
                     );
@@ -461,7 +461,7 @@ class DeviceManager {
                 });
                 asrSessions.get(session_id).asrStarted = true;
             } catch (e) {
-                BotUtil.makeLog('error',
+                RuntimeUtil.makeLog('error',
                     `❌ [ASR] 启动utterance失败: ${e.message}`,
                     deviceId
                 );
@@ -472,7 +472,7 @@ class DeviceManager {
             return { success: true, session_id };
 
         } catch (e) {
-            BotUtil.makeLog('error',
+            RuntimeUtil.makeLog('error',
                 `❌ [ASR会话] 启动失败: ${e.message}`,
                 deviceId
             );
@@ -512,7 +512,7 @@ class DeviceManager {
             const duration = audioBuf.length > 0 ? (audioBuf.length / 2) / sr : 0;
 
             // ASR后端调试日志：逐块统计，方便对比前端是否丢包
-            BotUtil.makeLog(
+            RuntimeUtil.makeLog(
                 'debug',
                 `[ASR后端] 收到音频块 #${chunk_index}: 字节=${audioBuf.length}, 时长=${duration.toFixed(3)}s, 间隔=${interval}ms, ` +
                 `累计块数=${session.totalChunks}, 累计字节=${session.totalBytes}`,
@@ -530,13 +530,13 @@ class DeviceManager {
                         if (session.endingChunks >= 2 && !session.earlyEndSent) {
                             session.earlyEndSent = true;
 
-                            BotUtil.makeLog('info',
+                            RuntimeUtil.makeLog('info',
                                 `⚡ [ASR] 检测到ending×${session.endingChunks}，提前结束`,
                                 deviceId
                             );
 
                             client.endUtterance().catch((e) => {
-        BotUtil.makeLog('error',
+        RuntimeUtil.makeLog('error',
                                     `❌ [ASR] 提前结束失败: ${e.message}`,
                                     deviceId
                                 );
@@ -552,7 +552,7 @@ class DeviceManager {
             return { success: true, received: chunk_index };
 
         } catch (e) {
-            BotUtil.makeLog('error',
+            RuntimeUtil.makeLog('error',
                 `❌ [ASR] 处理音频块失败: ${e.message}`,
                 deviceId
             );
@@ -571,7 +571,7 @@ class DeviceManager {
             const { session_id, duration, session_number } = data;
             const asrConfig = getAsrConfig();
 
-            BotUtil.makeLog('info',
+            RuntimeUtil.makeLog('info',
                 `✓ [ASR会话#${session_number}] 停止: ${session_id} (时长=${duration}s)`,
                 deviceId
             );
@@ -593,12 +593,12 @@ class DeviceManager {
                 if (!session.earlyEndSent) {
                     try {
                         await client.endUtterance();
-                        BotUtil.makeLog('info',
+                        RuntimeUtil.makeLog('info',
                             `✓ [ASR会话#${session_number}] Utterance已结束`,
                             deviceId
                         );
                     } catch (e) {
-                        BotUtil.makeLog('warn',
+                        RuntimeUtil.makeLog('warn',
                             `⚠️ [ASR] 结束utterance失败: ${e.message}`,
                             deviceId
                         );
@@ -621,7 +621,7 @@ class DeviceManager {
                     ? Math.round(session.totalBytes / session.totalChunks)
                     : 0;
 
-                BotUtil.makeLog(
+                RuntimeUtil.makeLog(
                     'info',
                     `[ASR后端] 会话统计#${session_number}: 总块数=${session.totalChunks}, 总字节=${session.totalBytes}, ` +
                     `平均块大小=${avgChunkSize}字节, 音频估算时长=${totalDuration.toFixed(3)}s, 接收耗时=${(elapsedMs / 1000).toFixed(3)}s`,
@@ -634,7 +634,7 @@ class DeviceManager {
             return { success: true };
 
         } catch (e) {
-            BotUtil.makeLog('error',
+            RuntimeUtil.makeLog('error',
                 `❌ [ASR会话] 停止失败: ${e.message}`,
                 deviceId
             );
@@ -663,7 +663,7 @@ class DeviceManager {
 
         if (session.finalText) {
             const waitedMs = waitCount * checkIntervalMs;
-            BotUtil.makeLog('info',
+            RuntimeUtil.makeLog('info',
                 `✅ [ASR最终] "${session.finalText}" (等待${waitedMs}ms)`,
                 deviceId
             );
@@ -683,11 +683,11 @@ class DeviceManager {
                 // 忽略发送失败，交由重试/心跳机制处理
             }
         } else {
-            BotUtil.makeLog('warn',
+            RuntimeUtil.makeLog('warn',
                 `⚠️ [ASR] 等待最终结果超时(${maxWaitMs}ms)`,
                 deviceId
             );
-            BotUtil.makeLog('debug', `[ASR] 等待最终结果超时上下文: session_id=${session.session_id}`, deviceId);
+            RuntimeUtil.makeLog('debug', `[ASR] 等待最终结果超时上下文: session_id=${session.session_id}`, deviceId);
 
             // 超时也要通知设备端，避免卡住
             await this._sendAIError(deviceId);
@@ -711,7 +711,7 @@ class DeviceManager {
             const startTime = Date.now();
             const fromASR = options.fromASR === true;
 
-            BotUtil.makeLog('info',
+            RuntimeUtil.makeLog('info',
                 `⚡ [AI] 开始处理: ${question.substring(0, 50)}${question.length > 50 ? '...' : ''}`,
                 deviceId
             );
@@ -721,7 +721,7 @@ class DeviceManager {
             const deviceBot = runtimeBot[deviceId];
 
             if (!deviceBot) {
-                BotUtil.makeLog('error', '❌ [AI] 设备Bot未找到', deviceId);
+                RuntimeUtil.makeLog('error', '❌ [AI] 设备AgentRuntime未找到', deviceId);
                 await this._sendAIError(deviceId);
                 return;
             }
@@ -732,16 +732,16 @@ class DeviceManager {
             const streamName = workflowName || 'device';
             // 仓库无默认 device 流：回退 chat（设备场景可配 mergeStreams）
             const deviceStream =
-              StreamLoader.getStream(streamName) ||
-              StreamLoader.getStream('device') ||
-              StreamLoader.getStream('chat');
+              AiStreamLoader.getStream(streamName) ||
+              AiStreamLoader.getStream('device') ||
+              AiStreamLoader.getStream('chat');
             if (!deviceStream) {
-                BotUtil.makeLog('error', `[AI] 工作流未加载: ${streamName}（且无 chat 回退）`, deviceId);
+                RuntimeUtil.makeLog('error', `[AI] 工作流未加载: ${streamName}（且无 chat 回退）`, deviceId);
                 await this._sendAIError(deviceId);
                 return;
             }
             if (deviceStream.name !== streamName) {
-                BotUtil.makeLog(
+                RuntimeUtil.makeLog(
                   'debug',
                   `[AI] 工作流 ${streamName} 不存在，回退 ${deviceStream.name}`,
                   deviceId
@@ -755,7 +755,7 @@ class DeviceManager {
             });
             if (!streamConfig.enabled) {
                 // warn: 工作流已禁用需要关注
-                BotUtil.makeLog('warn', '⚠️ [AI] 工作流已禁用', deviceId);
+                RuntimeUtil.makeLog('warn', '⚠️ [AI] 工作流已禁用', deviceId);
                 await this._sendAIError(deviceId);
                 return;
             }
@@ -784,7 +784,7 @@ class DeviceManager {
         if (!waiting) return;
                     try {
                         const ttsClient = this._getTTSClient(deviceId, ttsConfig);
-                        BotUtil.makeLog('info', `🔊 [TTS] AI较慢/工具调用中，先播提示语音`, deviceId);
+                        RuntimeUtil.makeLog('info', `🔊 [TTS] AI较慢/工具调用中，先播提示语音`, deviceId);
                         progressPromise = Promise.resolve()
                             .then(() => ttsClient.synthesize(progressText))
                             .then(() => (typeof ttsClient.waitAudioSent === 'function' ? ttsClient.waitAudioSent() : null))
@@ -817,24 +817,24 @@ class DeviceManager {
 
             if (!aiResult) {
                 // warn: 未返回结果需要关注
-                BotUtil.makeLog('warn', '⚠️ [AI] 工作流执行完成，但未返回结果', deviceId);
+                RuntimeUtil.makeLog('warn', '⚠️ [AI] 工作流执行完成，但未返回结果', deviceId);
                 await this._sendAIError(deviceId);
                 return;
             }
 
             const aiTime = Date.now() - startTime;
             // info: AI性能和回复是重要的业务信息
-            BotUtil.makeLog('info', `⚡ [AI性能] [${deviceStream.name}] 耗时: ${aiTime}ms`, deviceId);
-            BotUtil.makeLog('info', `✅ [AI] 回复: ${aiResult.text || '(仅表情)'}`, deviceId);
+            RuntimeUtil.makeLog('info', `⚡ [AI性能] [${deviceStream.name}] 耗时: ${aiTime}ms`, deviceId);
+            RuntimeUtil.makeLog('info', `✅ [AI] 回复: ${aiResult.text || '(仅表情)'}`, deviceId);
 
             // 显示表情
             const emotionCode = normalizeEmotionToDevice(aiResult.emotion);
             if (emotionCode) {
                 try {
                     await deviceBot.emotion(emotionCode);
-                    BotUtil.makeLog('info', `✓ [设备] 表情: ${emotionCode}`, deviceId);
+                    RuntimeUtil.makeLog('info', `✓ [设备] 表情: ${emotionCode}`, deviceId);
                 } catch (e) {
-                    BotUtil.makeLog('error', `❌ [设备] 表情显示失败: ${e.message}`, deviceId);
+                    RuntimeUtil.makeLog('error', `❌ [设备] 表情显示失败: ${e.message}`, deviceId);
                 }
             }
 
@@ -846,13 +846,13 @@ class DeviceManager {
                         const success = await ttsClient.synthesize(aiResult.text);
 
                         if (success) {
-                            BotUtil.makeLog('info', `🔊 [TTS] 语音合成已启动`, deviceId);
+                            RuntimeUtil.makeLog('info', `🔊 [TTS] 语音合成已启动`, deviceId);
                         } else {
-                            BotUtil.makeLog('error', `❌ [TTS] 语音合成失败`, deviceId);
+                            RuntimeUtil.makeLog('error', `❌ [TTS] 语音合成失败`, deviceId);
                             await this._sendAIError(deviceId);
                         }
                     } catch (e) {
-                        BotUtil.makeLog('error', `❌ [TTS] 语音合成异常: ${e.message}`, deviceId);
+                        RuntimeUtil.makeLog('error', `❌ [TTS] 语音合成异常: ${e.message}`, deviceId);
                         await this._sendAIError(deviceId);
                     }
                 }
@@ -868,14 +868,14 @@ class DeviceManager {
                         wrap: true,
                         spacing: 2
                     });
-                    BotUtil.makeLog('info', `✓ [设备] 文字: ${aiResult.text}`, deviceId);
+                    RuntimeUtil.makeLog('info', `✓ [设备] 文字: ${aiResult.text}`, deviceId);
                 } catch (e) {
-                    BotUtil.makeLog('error', `❌ [设备] 文字显示失败: ${e.message}`, deviceId);
+                    RuntimeUtil.makeLog('error', `❌ [设备] 文字显示失败: ${e.message}`, deviceId);
                 }
             }
 
         } catch (e) {
-            BotUtil.makeLog('error', `❌ [AI] 处理失败: ${e.message}`, deviceId);
+            RuntimeUtil.makeLog('error', `❌ [AI] 处理失败: ${e.message}`, deviceId);
             await this._sendAIError(deviceId);
         }
     }
@@ -893,7 +893,7 @@ class DeviceManager {
                 await deviceBot.sendCommand('ai_error', {}, 1);
             }
         } catch (e) {
-            BotUtil.makeLog('error', `❌ [AI] 发送错误通知失败: ${e.message}`, deviceId);
+            RuntimeUtil.makeLog('error', `❌ [AI] 发送错误通知失败: ${e.message}`, deviceId);
         }
     }
 
@@ -1010,12 +1010,12 @@ class DeviceManager {
     /**
      * 注册设备
      * @param {Object} deviceData - 设备数据
-     * @param {Object} Bot - Bot实例
+     * @param {Object} AgentRuntime - AgentRuntime实例
      * @param {WebSocket} ws - WebSocket连接
      * @returns {Promise<Object>} 设备对象
      */
-    async registerDevice(deviceData, Bot, ws) {
-        const runtimeBot = this.getBot(Bot);
+    async registerDevice(deviceData, AgentRuntime, ws) {
+        const runtimeBot = this.getBot(AgentRuntime);
         const {
             device_id,
             device_type,
@@ -1089,7 +1089,7 @@ class DeviceManager {
         const shouldAnnounceOnline = isFirstSeen || (wasOffline && !isWithinHeartbeatWindow);
 
         if (shouldAnnounceOnline) {
-            BotUtil.makeLog('info',
+            RuntimeUtil.makeLog('info',
                 `🟢 [设备上线] ${device.device_name} (${device_id}) - IP: ${device.ip_address || '未知'}`,
                 device.device_name
             );
@@ -1107,7 +1107,7 @@ class DeviceManager {
             };
             runtimeBot.em('device.online', onlineEventData);
         } else {
-            BotUtil.makeLog('debug',
+            RuntimeUtil.makeLog('debug',
                 `↻ [设备重连] ${device.device_name} (${device_id})`,
                 device.device_name
             );
@@ -1194,7 +1194,7 @@ class DeviceManager {
         });
 
         ws.on('error', (error) => {
-        BotUtil.makeLog('error',
+        RuntimeUtil.makeLog('error',
                 `❌ [WebSocket错误] ${error.message}`,
                 deviceId
             );
@@ -1216,7 +1216,7 @@ class DeviceManager {
         if (device) {
             device.online = false;
             const logLevel = device.device_type === 'web' ? 'debug' : 'info';
-            BotUtil.makeLog(
+            RuntimeUtil.makeLog(
                 logLevel,
                 `🔴 [设备离线] ${device.device_name} (${deviceId})`,
                 device.device_name
@@ -1241,11 +1241,11 @@ class DeviceManager {
     }
 
     /**
-     * 创建设备Bot实例
+     * 创建设备AgentRuntime实例
      * @param {string} deviceId - 设备ID
      * @param {Object} deviceInfo - 设备信息
      * @param {WebSocket} ws - WebSocket实例
-     * @returns {Object} Bot实例
+     * @returns {Object} AgentRuntime实例
      */
     createDeviceBot(deviceId, deviceInfo, ws, botOverride) {
         const runtimeBot = this.getBot(botOverride);
@@ -1321,7 +1321,7 @@ class DeviceManager {
                     ws.send(JSON.stringify(replyMsg));
                     return true;
                 } catch (err) {
-                    BotUtil.makeLog('error', `reply失败: ${err.message}`, deviceId);
+                    RuntimeUtil.makeLog('error', `reply失败: ${err.message}`, deviceId);
                     return false;
                 }
             },
@@ -1378,7 +1378,7 @@ class DeviceManager {
                             // xiaozhi 风格：纯二进制 TTS，稳定快速
                             const buf = Buffer.from(hex, 'hex');
                             ws.send(buf);
-                            BotUtil.makeLog(
+                            RuntimeUtil.makeLog(
                                 'debug',
                                 (() => {
         const status = ttsQueueStatus.get(deviceId);
@@ -1388,16 +1388,16 @@ class DeviceManager {
                                 deviceId
                             );
                         }).catch((e) => {
-        BotUtil.makeLog('error', `[TTS传输] WebSocket发送队列异常: ${e.message}`, deviceId);
+        RuntimeUtil.makeLog('error', `[TTS传输] WebSocket发送队列异常: ${e.message}`, deviceId);
                         });
                     } catch (e) {
-                        BotUtil.makeLog('error', `[TTS传输] WebSocket发送失败: ${e.message}`, deviceId);
+                        RuntimeUtil.makeLog('error', `[TTS传输] WebSocket发送失败: ${e.message}`, deviceId);
                     }
                 } else {
                     if (!ws) {
-                        BotUtil.makeLog('warn', `[TTS传输] WebSocket未找到设备: ${deviceId}`, deviceId);
+                        RuntimeUtil.makeLog('warn', `[TTS传输] WebSocket未找到设备: ${deviceId}`, deviceId);
                     } else if (ws.readyState !== WebSocket.OPEN) {
-                        BotUtil.makeLog('warn', `[TTS传输] WebSocket未打开: ${deviceId}, 状态=${ws.readyState}`, deviceId);
+                        RuntimeUtil.makeLog('warn', `[TTS传输] WebSocket未打开: ${deviceId}, 状态=${ws.readyState}`, deviceId);
                     }
                 }
             },
@@ -1477,7 +1477,7 @@ class DeviceManager {
         deviceStats.get(deviceId) || this.initDeviceStats(deviceId)
     };
 
-    // 通过 Bot 代理注册设备子 Bot（进入 bots 映射，而不是直接挂载到主实例上）
+    // 通过 AgentRuntime 代理注册设备子 AgentRuntime（进入 bots 映射，而不是直接挂载到主实例上）
     runtimeBot[deviceId] = deviceBot;
 
     return deviceBot;
@@ -1573,11 +1573,11 @@ class DeviceManager {
      * 处理WebSocket消息
      * @param {WebSocket} ws - WebSocket实例
      * @param {Object} data - 消息数据
-     * @param {Object} Bot - Bot实例
+     * @param {Object} AgentRuntime - AgentRuntime实例
      * @returns {Promise<void>}
      */
-    async processWebSocketMessage(ws, data, Bot) {
-        const runtimeBot = this.getBot(Bot);
+    async processWebSocketMessage(ws, data, AgentRuntime) {
+        const runtimeBot = this.getBot(AgentRuntime);
         try {
             const { type, device_id, ...payload } = data;
             const deviceId = device_id || ws.device_id || 'unknown';
@@ -1589,12 +1589,12 @@ class DeviceManager {
             }
 
             if (!type) {
-                BotUtil.makeLog('error', `❌ [WebSocket] 消息格式错误，缺少type字段`, deviceId);
+                RuntimeUtil.makeLog('error', `❌ [WebSocket] 消息格式错误，缺少type字段`, deviceId);
                 this.sendWsError(ws, '消息格式错误：缺少type字段');
                 return;
             }
             if (type !== 'register' && !devices.has(deviceId)) {
-                BotUtil.makeLog('warn', `[WebSocket] 收到来自未注册设备的消息 (type: ${type})`, deviceId);
+                RuntimeUtil.makeLog('warn', `[WebSocket] 收到来自未注册设备的消息 (type: ${type})`, deviceId);
                 this.sendWsError(ws, '设备未注册。请先发送 register 消息。');
                 return;
             }
@@ -1810,7 +1810,7 @@ class DeviceManager {
         try {
                                 const ws = deviceWebSockets.get(deviceId);
                                 if (!ws || ws.readyState !== WebSocket.OPEN) {
-                                    BotUtil.makeLog('warn', `[WebSocket] 连接未打开，无法发送消息`, deviceId);
+                                    RuntimeUtil.makeLog('warn', `[WebSocket] 连接未打开，无法发送消息`, deviceId);
                                     return false;
                                 }
                                 
@@ -1901,7 +1901,7 @@ class DeviceManager {
                                             return { type: seg.type, url: `data:${mime};base64,${filePath.toBase64()}`, data: {}, name: seg.name };
                                         }
                                         if (!filePath || typeof filePath !== 'string') {
-                                            BotUtil.makeLog('warn', `[reply] ${seg.type} segment 缺少 file 或 url`, deviceId);
+                                            RuntimeUtil.makeLog('warn', `[reply] ${seg.type} segment 缺少 file 或 url`, deviceId);
                                             return null;
                                         }
                                         if (/^https?:\/\//i.test(filePath) || filePath.startsWith('data:')) {
@@ -1922,7 +1922,7 @@ class DeviceManager {
                                 }).filter(seg => seg !== null);
 
                                 if (segments.length === 0) {
-                                    BotUtil.makeLog('warn', `[回复消息] segments为空，无法发送`, deviceId);
+                                    RuntimeUtil.makeLog('warn', `[回复消息] segments为空，无法发送`, deviceId);
                                     return false;
                                 }
                                 
@@ -1963,12 +1963,12 @@ class DeviceManager {
                                         if (title) replyMsg.title = title;
                                         if (description) replyMsg.description = description;
                                         replyTextForHistory = title || description || `[转发消息 ${forwardData.length}条]`;
-                                        BotUtil.makeLog('info', 
+                                        RuntimeUtil.makeLog('info', 
                                             `📨 [转发消息] ${forwardData.length}条消息${title ? ` - ${title}` : ''}`, 
                                             deviceId
                                         );
                                     } else {
-                                        BotUtil.makeLog('warn', `[转发消息] 格式错误，降级为普通消息`, deviceId);
+                                        RuntimeUtil.makeLog('warn', `[转发消息] 格式错误，降级为普通消息`, deviceId);
                                         replyMsg.type = 'reply';
                                         replyMsg.segments = segments;
                                         if (title) replyMsg.title = title;
@@ -1989,7 +1989,7 @@ class DeviceManager {
                                 }).join('');
                                 replyTextForHistory = logText || '';
                                 if (logText) {
-                                    BotUtil.makeLog('info', 
+                                    RuntimeUtil.makeLog('info', 
                                         `${title ? `【${title}】` : ''}${logText.substring(0, 500)}${logText.length > 500 ? '...' : ''}`, 
                                         deviceId
                                     );
@@ -2008,7 +2008,7 @@ class DeviceManager {
                                 }
                                 return true;
                             } catch (err) {
-                                BotUtil.makeLog('error', `reply失败: ${err.message}`, deviceId);
+                                RuntimeUtil.makeLog('error', `reply失败: ${err.message}`, deviceId);
                                 return false;
                             }
                         }
@@ -2072,24 +2072,24 @@ class DeviceManager {
                 default:
                     // 只对非心跳类型的未知消息发送错误
                     if (type !== 'heartbeat_response') {
-                        BotUtil.makeLog('warn',
+                        RuntimeUtil.makeLog('warn',
                             `⚠️ [WebSocket] 未知消息类型: ${type}`,
                             deviceId
                         );
                     }
             }
         } catch (e) {
-            BotUtil.makeLog('error', `❌ [WebSocket] 处理消息失败: ${e.message}`, ws.device_id);
+            RuntimeUtil.makeLog('error', `❌ [WebSocket] 处理消息失败: ${e.message}`, ws.device_id);
             this.sendWsError(ws, e.message);
         }
     }
 
     /**
      * 检查离线设备
-     * @param {Object} Bot - Bot实例
+     * @param {Object} AgentRuntime - AgentRuntime实例
      */
-    checkOfflineDevices(Bot) {
-        const runtimeBot = this.getBot(Bot);
+    checkOfflineDevices(AgentRuntime) {
+        const runtimeBot = this.getBot(AgentRuntime);
         const systemConfig = getSystemConfig();
         const timeout = (systemConfig.heartbeat?.timeout || 1800) * 1000;
         const now = Date.now();
@@ -2106,7 +2106,7 @@ class DeviceManager {
 
             device.online = false;
 
-            BotUtil.makeLog('info',
+            RuntimeUtil.makeLog('info',
                 `🔴 [设备离线] ${device.device_name} (${id})`,
                 device.device_name
             );
@@ -2168,13 +2168,13 @@ export default {
         {
             method: 'POST',
             path: '/api/device/register',
-            handler: HttpResponse.asyncHandler(async (req, res, Bot) => {
+            handler: HttpResponse.asyncHandler(async (req, res, AgentRuntime) => {
                     const device = await deviceManager.registerDevice(
                         {
                             ...req.body,
                             ip_address: req.ip || req.socket.remoteAddress
                         },
-                        Bot
+                        AgentRuntime
                     );
                 HttpResponse.success(res, { device_id: device.device_id });
             }, 'device.register')
@@ -2391,10 +2391,10 @@ export default {
 
     ws: {
         device: [
-            (ws, req, Bot) => {
+            (ws, req, AgentRuntime) => {
         const remote = req.socket?.remoteAddress || req.headers['x-real-ip'] || 'unknown';
                 if (shouldLogConnection(remote)) {
-                    BotUtil.makeLog('info',
+                    RuntimeUtil.makeLog('info',
                         `🔌 [WebSocket] 新连接: ${remote}`,
                         'DeviceManager'
                     );
@@ -2403,9 +2403,9 @@ export default {
                 ws.on('message', msg => {
                     try {
                         const data = JSON.parse(msg);
-                        deviceManager.processWebSocketMessage(ws, data, Bot);
+                        deviceManager.processWebSocketMessage(ws, data, AgentRuntime);
                     } catch (e) {
-                        BotUtil.makeLog('error',
+                        RuntimeUtil.makeLog('error',
                             `❌ [WebSocket] 消息解析失败: ${e.message}`,
                             ws.device_id
                         );
@@ -2416,7 +2416,7 @@ export default {
         if (ws.device_id) {
                         deviceManager.handleDeviceDisconnect(ws.device_id, ws);
                     } else {
-                        BotUtil.makeLog('info',
+                        RuntimeUtil.makeLog('info',
                             `✓ [WebSocket] 连接关闭: ${remote}`,
                             'DeviceManager'
                         );
@@ -2424,7 +2424,7 @@ export default {
                 });
 
                 ws.on('error', (e) => {
-        BotUtil.makeLog('error',
+        RuntimeUtil.makeLog('error',
                         `❌ [WebSocket] 错误: ${e.message}`,
                         ws.device_id || 'unknown'
                     );
@@ -2433,10 +2433,10 @@ export default {
         ]
     },
 
-    init(app, Bot) {
+    init(app, AgentRuntime) {
         if (__runtime) __runtime.dispose();
         __runtime = new Disposables();
-        deviceManager.setBot(Bot);
+        deviceManager.setBot(AgentRuntime);
         deviceManager.cleanupInterval = __runtime.interval(() => {
         deviceManager.checkOfflineDevices();
         }, 30000);
@@ -2472,7 +2472,7 @@ export default {
         try {
             deviceManager.attachDeviceEventBridge(deviceManager.getBot());
         } catch {
-            // 忽略挂接失败，通常是 Bot 尚未完全初始化
+            // 忽略挂接失败，通常是 AgentRuntime 尚未完全初始化
         }
     },
 

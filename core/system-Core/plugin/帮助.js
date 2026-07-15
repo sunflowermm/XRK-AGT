@@ -1,4 +1,4 @@
-export class Help extends plugin {
+export class Help extends PluginBase {
   constructor() {
     super({
       name: '帮助',

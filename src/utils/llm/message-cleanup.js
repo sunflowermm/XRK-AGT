@@ -2,7 +2,7 @@
  * 消息序列标准化工具
  */
 
-import BotUtil from '#utils/botutil.js';
+import RuntimeUtil from '#utils/runtime-util.js';
 
 /**
  * 标准化消息序列
@@ -25,14 +25,14 @@ export function cleanupMessages(messages, options = {}) {
 
   cleaned = fixToolCallSequence(cleaned);
 
-  BotUtil.makeLog('debug', `[message-cleanup] ${messages.length} -> ${cleaned.length} 条消息`, 'MessageCleanup');
+  RuntimeUtil.makeLog('debug', `[message-cleanup] ${messages.length} -> ${cleaned.length} 条消息`, 'MessageCleanup');
 
   // 输出完整消息序列，用于调试
   const fullSequence = cleaned.map((m, i) => {
     const hasContent = m.content && (typeof m.content === 'string' ? m.content.trim().length > 0 : true);
     return `${i}:${m.role}${m.tool_calls ? `(${m.tool_calls.length}tc)` : ''}${hasContent && m.tool_calls ? '+content' : ''}`;
   }).join(' ');
-  BotUtil.makeLog('debug', `[message-cleanup] 完整序列: ${fullSequence}`, 'MessageCleanup');
+  RuntimeUtil.makeLog('debug', `[message-cleanup] 完整序列: ${fullSequence}`, 'MessageCleanup');
 
   return cleaned;
 }
@@ -166,7 +166,7 @@ function fixToolCallSequence(messages) {
 
     if (msg.role === 'assistant' && msg.tool_calls?.length > 0) {
       if (prev && prev.role !== 'user' && prev.role !== 'tool') {
-        BotUtil.makeLog('debug', `[message-cleanup] 跳过 assistant with tool_calls（前面是 ${prev.role}，需要 user 或 tool）`, 'MessageCleanup');
+        RuntimeUtil.makeLog('debug', `[message-cleanup] 跳过 assistant with tool_calls（前面是 ${prev.role}，需要 user 或 tool）`, 'MessageCleanup');
         continue;
       }
 
@@ -179,7 +179,7 @@ function fixToolCallSequence(messages) {
 
     if (msg.role === 'tool') {
       if (!expectingToolResponse) {
-        BotUtil.makeLog('debug', `[message-cleanup] 跳过孤立的 tool 消息`, 'MessageCleanup');
+        RuntimeUtil.makeLog('debug', `[message-cleanup] 跳过孤立的 tool 消息`, 'MessageCleanup');
         continue;
       }
 
@@ -194,7 +194,7 @@ function fixToolCallSequence(messages) {
     }
 
     if (expectingToolResponse) {
-      BotUtil.makeLog('debug', `[message-cleanup] 跳过 ${msg.role} 消息（等待 tool 响应）`, 'MessageCleanup');
+      RuntimeUtil.makeLog('debug', `[message-cleanup] 跳过 ${msg.role} 消息（等待 tool 响应）`, 'MessageCleanup');
       continue;
     }
 
@@ -204,7 +204,7 @@ function fixToolCallSequence(messages) {
   // 如果消息在裁剪后以不完整的 tool_calls 结尾（assistant 有 tool_calls 但 tool 响应不足），
   // Gemini/部分上游会直接 400。这里丢弃这段不完整片段，保证请求永远合法。
   if (expectingToolResponse && pendingToolCallsStartIndex >= 0) {
-    BotUtil.makeLog(
+    RuntimeUtil.makeLog(
       'debug',
       `[message-cleanup] 丢弃不完整的 tool_calls 片段（从 index=${pendingToolCallsStartIndex} 起）`,
       'MessageCleanup'

@@ -1,11 +1,11 @@
-import PluginsLoader from '#infrastructure/plugins/loader.js'
+import PluginLoader from '#infrastructure/plugins/loader.js'
 import { EventNormalizer } from '#utils/event-normalizer.js'
 
 /**
  * 模拟定时输入插件
  * 用于定时模拟用户输入消息
  */
-export class DailySignIn extends plugin {
+export class DailySignIn extends PluginBase {
   constructor() {
     super({
       name: '每日定时消息模拟',
@@ -32,7 +32,7 @@ export class DailySignIn extends plugin {
     const messages = ['#你是谁']
     for (const msg of messages) {
       const fakeMsgEvent = this.createMessageEvent(msg)
-      await PluginsLoader.deal(fakeMsgEvent)
+      await PluginLoader.deal(fakeMsgEvent)
     }
   }
 
@@ -45,7 +45,7 @@ export class DailySignIn extends plugin {
     const user_id = 12345678
     const name = "模拟用户"
     const time = Math.floor(Date.now() / 1000)
-    const self_id = Bot.uin.toString()
+    const self_id = AgentRuntime.uin.toString()
 
     const event = {
       tasker: "stdin",
@@ -60,7 +60,7 @@ export class DailySignIn extends plugin {
       raw_message: inputMsg,
       isMaster: true,
       isStdin: true,
-      bot: Bot.stdin || Bot[Bot.uin.toString()],
+      bot: AgentRuntime.stdin || AgentRuntime[AgentRuntime.uin.toString()],
       sender: {
         card: name,
         nickname: name,

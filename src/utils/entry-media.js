@@ -1,6 +1,6 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import BotUtil from '#utils/botutil.js';
+import RuntimeUtil from '#utils/runtime-util.js';
 import { inlineBinaryFromRef, isPathLike } from '#utils/media-ref.js';
 
 const HTTP_RE = /^https?:\/\//i;
@@ -33,7 +33,7 @@ async function readLocalBuffer(ref) {
   if (inline) return inline;
   const p = String(ref ?? '').replace(/^file:\/\//, '').trim();
   if (!p || isHttpRef(p) || !isPathLike(p)) return null;
-  if (!(await BotUtil.fileExists(p))) return null;
+  if (!(await RuntimeUtil.fileExists(p))) return null;
   try {
     const buf = await fs.readFile(p);
     return buf?.length ? buf : null;
@@ -44,7 +44,7 @@ async function readLocalBuffer(ref) {
 
 async function fetchRefBuffer(ref, timeoutMs) {
   if (!ref || !isHttpRef(ref)) return null;
-  const fetched = await BotUtil.Buffer(ref, { http: false, timeout: timeoutMs });
+  const fetched = await RuntimeUtil.Buffer(ref, { http: false, timeout: timeoutMs });
   return Buffer.isBuffer(fetched) && fetched.length ? fetched : null;
 }
 
@@ -60,7 +60,7 @@ async function getImageViaApi(sendApi, fileRef, timeoutMs) {
         }),
       ])
       : await api;
-    if (d.file && isPathLike(d.file) && await BotUtil.fileExists(d.file)) {
+    if (d.file && isPathLike(d.file) && await RuntimeUtil.fileExists(d.file)) {
       return readLocalBuffer(`file://${path.resolve(d.file)}`);
     }
     if (d.base64) {
@@ -68,7 +68,7 @@ async function getImageViaApi(sendApi, fileRef, timeoutMs) {
       return raw ? Buffer.from(raw, 'base64') : null;
     }
   } catch (err) {
-    globalThis.Bot?.makeLog?.('debug', `[get_image] ${fileRef} → ${err.message}`, 'EntryMedia');
+    globalThis.AgentRuntime?.makeLog?.('debug', `[get_image] ${fileRef} → ${err.message}`, 'EntryMedia');
   }
   return null;
 }
@@ -126,12 +126,12 @@ export async function persistEntryMedia(segment, { baseDir, groupId, sendApi }) 
     if (!ref || isHttpRef(ref) || ref.startsWith('base64://')) continue;
     if (isEntryMediaRelPath(ref)) {
       const existing = path.join(baseDir, ref);
-      if (await BotUtil.fileExists(existing)) return ref;
+      if (await RuntimeUtil.fileExists(existing)) return ref;
     }
-    if (isPathLike(ref) && await BotUtil.fileExists(ref)) {
+    if (isPathLike(ref) && await RuntimeUtil.fileExists(ref)) {
       const rel = `${groupId}/${mediaType}/${path.basename(ref)}`;
       const dest = path.join(baseDir, rel);
-      await BotUtil.mkdir(path.dirname(dest));
+      await RuntimeUtil.mkdir(path.dirname(dest));
       await fs.copyFile(ref, dest);
       return rel;
     }
@@ -140,12 +140,12 @@ export async function persistEntryMedia(segment, { baseDir, groupId, sendApi }) 
   const buffer = await readImageBuffer(data, sendApi, { persist: true });
   if (!buffer?.length) return null;
 
-  const file = await Bot.fileType({ ...data, file: buffer });
+  const file = await AgentRuntime.fileType({ ...data, file: buffer });
   if (!Buffer.isBuffer(file.buffer)) return null;
 
   file.name = `${groupId}/${mediaType}/${file.name}`;
   file.path = path.join(baseDir, file.name);
-  await BotUtil.mkdir(path.dirname(file.path));
-  await BotUtil.writeFile(file.path, file.buffer);
+  await RuntimeUtil.mkdir(path.dirname(file.path));
+  await RuntimeUtil.writeFile(file.path, file.buffer);
   return file.name;
 }

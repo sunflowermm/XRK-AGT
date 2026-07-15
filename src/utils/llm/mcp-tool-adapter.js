@@ -1,11 +1,11 @@
-import StreamLoader from '#infrastructure/aistream/loader.js';
-import BotUtil from '#utils/botutil.js';
+import AiStreamLoader from '#infrastructure/ai-workflow/loader.js';
+import RuntimeUtil from '#utils/runtime-util.js';
 
 /**
  * MCP 工具适配器
  *
  * 职责边界：
- * - 将 StreamLoader 暴露的 MCP 工具转换为 OpenAI tools 数组格式，供各 LLM 工厂在构造请求体时注入
+ * - 将 AiStreamLoader 暴露的 MCP 工具转换为 OpenAI tools 数组格式，供各 LLM 工厂在构造请求体时注入
  * - 在收到 OpenAI style tool_calls 时，实际调用 MCP 工具，并返回 role=tool 的消息列表
  * - 基于 streams/allowedTools 做工具白名单过滤：保证"未通过接口声明的工具"不会被调用
  */
@@ -15,7 +15,7 @@ export class MCPToolAdapter {
    * @returns {*}
    */
   static getMCPServer() {
-    return StreamLoader.mcpServer;
+    return AiStreamLoader.mcpServer;
   }
 
   /**
@@ -158,7 +158,7 @@ export class MCPToolAdapter {
         const functionName = toolCall.function?.name;
 
         if (allowedToolNames && !allowedToolNames.has(functionName)) {
-          BotUtil.makeLog(
+          RuntimeUtil.makeLog(
             'warn',
             `MCP 工具调用被拒绝（不在白名单）: ${functionName}`,
             'MCPToolAdapter'
@@ -195,7 +195,7 @@ export class MCPToolAdapter {
           }
         })();
 
-        BotUtil.makeLog(
+        RuntimeUtil.makeLog(
           'info',
           `MCP 工具调用开始: #${index + 1} name=${functionName}, args=${argPreview}`,
           'MCPToolAdapter'
@@ -216,7 +216,7 @@ export class MCPToolAdapter {
           }
         }
 
-        BotUtil.makeLog(
+        RuntimeUtil.makeLog(
           'info',
           `MCP 工具调用完成: #${index + 1} name=${functionName}, isError=${Boolean(result.isError)}`,
           'MCPToolAdapter'

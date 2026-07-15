@@ -7,7 +7,7 @@
 `HttpApi` 是 XRK-AGT 中的 **HTTP API 基类**，用于统一定义 REST 路由、WebSocket 处理器、中间件等。
 
 所有位于 `core/*/http` 目录下的 API 模块都可以：
-- **直接导出对象（推荐）**：由 `ApiLoader` 自动包装为 `HttpApi` 实例
+- **直接导出对象（推荐）**：由 `HttpApiLoader` 自动包装为 `HttpApi` 实例
 - **继承 HttpApi 类**：手动控制初始化逻辑，适合复杂场景
 
 ### 核心特性
@@ -17,13 +17,13 @@
 - ✅ **灵活路由**：支持REST API和WebSocket
 - ✅ **中间件支持**：支持全局和路由级中间件
 - ✅ **热重载支持**：修改代码后自动重载
-- ✅ **System-Core 默认鉴权**：`HttpApi` 对路径以 `/api/` 开头的路由自动调用 `Bot.checkApiAuthorization(req)`（见 `route.systemAuth` / `src/infrastructure/http/http.js`）；显式设置 `systemAuth: false` 可关闭。其他 Core 可按需自定义（详见 [AUTH.md](AUTH.md)）
+- ✅ **System-Core 默认鉴权**：`HttpApi` 对路径以 `/api/` 开头的路由自动调用 `AgentRuntime.checkApiAuthorization(req)`（见 `route.systemAuth` / `src/infrastructure/http/http.js`）；显式设置 `systemAuth: false` 可关闭。其他 Core 可按需自定义（详见 [AUTH.md](AUTH.md)）
 
 ---
 
 ## 架构概览
 
-![HttpApi 与 ApiLoader 导读](../resources/mdimg/docs/http-api-pipeline.png)
+![HttpApi 与 HttpApiLoader 导读](../resources/mdimg/docs/http-api-pipeline.png)
 
 路由注册、`systemAuth` 与 `HttpResponse` 细节见下文各节；加载流程见 [api-loader.md](api-loader.md)。
 
@@ -105,15 +105,15 @@ flowchart LR
 **流程**：
 1. 验证 `routes` 数组
 2. 遍历每个路由，验证 `method`、`path`、`handler`
-3. 使用 `wrapHandler` 包装处理函数（自动注入 `req.bot` 和 `req.api`）
+3. 使用 `wrapHandler` 包装处理函数（自动注入 `req.agentRuntime` 和 `req.api`）
 4. 注册到Express（支持路由级中间件）
 
 **处理函数签名**：
 ```javascript
 async (req, res, bot, next) => {
-  // req.bot - Bot实例（已自动注入）
+  // req.agentRuntime - AgentRuntime实例（已自动注入）
   // req.api - 当前API实例（已自动注入）
-  // bot - Bot实例（参数传递）
+  // bot - AgentRuntime实例（参数传递）
   // next - Express next函数（可选）
   
   // 推荐：统一 HttpResponse
@@ -132,7 +132,7 @@ async (req, res, bot, next) => {
 包装路由处理函数，注入上下文并处理错误。
 
 **注入的上下文**：
-- `req.bot = bot` - Bot实例
+- `req.agentRuntime = bot` - AgentRuntime实例
 - `req.api = this` - 当前API实例
 
 ### `registerWebSocketHandlers(bot)`
@@ -181,7 +181,7 @@ ws: {
 - `stop()` - 停用API（设置 `enable = false`）
 - `reload(app, bot)` - 重载API（stop → init → start）
 
-> **注意**：文件级别的重载由 `ApiLoader` 负责，`reload` 更适用于逻辑级微调。
+> **注意**：文件级别的重载由 `HttpApiLoader` 负责，`reload` 更适用于逻辑级微调。
 
 ---
 
@@ -210,7 +210,7 @@ export default {
       method: 'GET',
       path: '/api/example/ping',
       handler: async (req, res, bot) => {
-        // req.bot 和 req.api 已自动注入
+        // req.agentRuntime 和 req.api 已自动注入
         res.json({
           success: true,
           message: 'pong',
@@ -279,7 +279,7 @@ export default class AdvancedAPI extends HttpApi {
 
 ```javascript
 // core/my-core/http/ai-chat-api.js
-import StreamLoader from '#infrastructure/aistream/loader.js';
+import AiStreamLoader from '#infrastructure/ai-workflow/loader.js';
 import { HttpResponse } from '#utils/http-utils.js';
 
 export default {
@@ -290,7 +290,7 @@ export default {
       path: '/api/ai/chat', // 自定义 Core 示例；内置 AI 见 system-Core/http/ai.js
       handler: HttpResponse.asyncHandler(async (req, res, bot) => {
         const { message, streamName = 'chat' } = req.body;
-        const stream = StreamLoader.getStream(streamName);
+        const stream = AiStreamLoader.getStream(streamName);
         if (!stream) return HttpResponse.notFound(res, '工作流未找到');
         
         const e = {
@@ -311,7 +311,7 @@ export default {
 };
 ```
 
-> **注意**：API文件放置在 `core/*/http/` 目录后，`ApiLoader` 会自动加载并注册。
+> **注意**：API文件放置在 `core/*/http/` 目录后，`HttpApiLoader` 会自动加载并注册。
 
 ---
 
@@ -319,17 +319,17 @@ export default {
 
 ### 中间件执行顺序
 
-所有 `HttpApi` 路由都运行在 **Bot 的中间件栈之后**（CORS、安全头、认证等已处理）。
+所有 `HttpApi` 路由都运行在 **AgentRuntime 的中间件栈之后**（CORS、安全头、认证等已处理）。
 
 ### 常见集成模式
 
 **调用工作流系统（推荐配合 HttpResponse）**：
 ```javascript
-import StreamLoader from '#infrastructure/aistream/loader.js';
+import AiStreamLoader from '#infrastructure/ai-workflow/loader.js';
 import { HttpResponse } from '#utils/http-utils.js';
 
 handler: HttpResponse.asyncHandler(async (req, res, bot) => {
-  const stream = StreamLoader.getStream('chat');
+  const stream = AiStreamLoader.getStream('chat');
   if (!stream) return HttpResponse.notFound(res, '工作流未找到');
 
   const e = {
@@ -383,7 +383,7 @@ handler: async (req, res, bot) => {
 
 ### 1. 鉴权：位置清晰、不做重复校验
 
-- system-Core 下的 HTTP API 在各自模块内通过 `Bot.checkApiAuthorization(req)` 统一使用系统级 API Key（详见 **[AUTH.md](AUTH.md)**）。
+- system-Core 下的 HTTP API 在各自模块内通过 `AgentRuntime.checkApiAuthorization(req)` 统一使用系统级 API Key（详见 **[AUTH.md](AUTH.md)**）。
 - 其他 Core 的 HTTP 模块可以选择接入系统级 API Key，或实现自有鉴权方案，但应保持“**一处判断、避免重复**”的原则：不要既在 Server 层又在业务 handler 内多次判断同一层级的 Key。
 
 ### 2. 响应格式：统一用 HttpResponse
@@ -405,7 +405,7 @@ routes: [
   {
     method: 'GET',
     path: '/api/example/:id',
-    handler: HttpResponse.asyncHandler(async (req, res, Bot) => {
+    handler: HttpResponse.asyncHandler(async (req, res, AgentRuntime) => {
       const id = req.params.id;
       if (!id) return HttpResponse.validationError(res, '缺少 id');
       const item = await getItem(id);
@@ -432,13 +432,13 @@ routes: [
 
 - Handler 内 **一律使用 async/await**，避免在回调里忘记返回或错误未捕获。
 - **不要在 handler 内做长时间同步阻塞**（如大文件同步读、密集计算）；耗时操作放到异步流程或队列，必要时用 `init()` 里启动的定时器/Worker 处理。
-- 需要依赖 Bot、配置、数据库时，在 handler 内按需 `import` 或使用已注入的 `Bot`，避免在模块顶层执行副作用。
+- 需要依赖 AgentRuntime、配置、数据库时，在 handler 内按需 `import` 或使用已注入的 `AgentRuntime`，避免在模块顶层执行副作用。
 
 ### 7. 模块结构建议
 
 - 每个 API 模块导出 **`name`、`dsc`、`priority`、`routes`**；需要时加 `init`、`ws`、`middleware`。
 - **路由数组**保持扁平，单文件内路由不宜过多；若路由很多，可拆成多个 `core/*/http/*.js` 文件，用 `priority` 和 path 前缀区分。
-- 与配置、插件、工作流等交互时，优先使用框架提供的 **ConfigManager、PluginsLoader、StreamLoader** 等入口，避免直接读文件或维护多份状态。
+- 与配置、插件、工作流等交互时，优先使用框架提供的 **CommonConfigRegistry、PluginLoader、AiStreamLoader** 等入口，避免直接读文件或维护多份状态。
 
 ### 8. 参考实现
 
@@ -453,7 +453,7 @@ routes: [
 
 1. **业务逻辑分层**：业务逻辑沉淀在插件与工作流中，HTTP 层提供入口和管理界面。
 2. **统一响应与错误**：使用 `HttpResponse` 与 `asyncHandler`，保持 `{ success, message, code }` 等格式一致。
-3. **鉴权位置清晰**：system-Core HTTP 在模块内统一使用系统级 API Key（`Bot.checkApiAuthorization(req)`），其他 Core 可按需接入或自定义鉴权。
+3. **鉴权位置清晰**：system-Core HTTP 在模块内统一使用系统级 API Key（`AgentRuntime.checkApiAuthorization(req)`），其他 Core 可按需接入或自定义鉴权。
 4. **与前端协作**：统一 JSON、必填/可选参数清晰，关键接口可在文档或 system-Core 说明中列出。
 
 ---

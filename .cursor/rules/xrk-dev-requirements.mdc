@@ -19,14 +19,14 @@ alwaysApply: true
 
 | 对象 | 业务写法（`core/`） |
 |------|---------------------|
-| Bot | 裸名 `Bot`、`Bot.em()`、`Bot[self_id]`；**勿** `import Bot`、`new Bot()`、`global.Bot` |
-| segment | 裸名 `segment.image(url)`；**勿** `import #oicq`、`global.segment` |
-| plugin 基类 | `import plugin from '#infrastructure/plugins/plugin.js'` |
-| cfg | `import cfg from '#infrastructure/config/config.js'`（与全局同一单例） |
-| HTTP | `req.bot` 或 handler 第三参 `Bot` |
+| AgentRuntime | 裸名 `AgentRuntime`、`AgentRuntime.em()`、`AgentRuntime[self_id]`；**勿** `import AgentRuntime`、`new AgentRuntime()`、`global.AgentRuntime` |
+| msgSegment | 裸名 `msgSegment.image(url)`；**勿** `global.msgSegment` |
+| PluginBase | `import PluginBase from '#infrastructure/plugins/plugin-base.js'` |
+| runtimeConfig | `import runtimeConfig from '#infrastructure/config/config.js'`（与全局同一单例） |
+| HTTP | `req.agentRuntime` 或 handler 第三参 `AgentRuntime` |
 
 - **`src/` 挂载**统一用 `setRuntimeGlobal(name, value)`（`#utils/runtime-globals.js`），勿手写 `global.x` 与 `globalThis.x` 双份。
-- 配置在 `Bot.run` 完成 `ConfigLoader.load()` 之前不可用。
+- 配置在 `AgentRuntime.run` 完成 `CommonConfigRegistry.load()` 之前不可用。
 
 ## HttpResponse（src/utils/http-utils.js）
 

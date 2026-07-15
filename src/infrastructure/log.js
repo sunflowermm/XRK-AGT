@@ -1,6 +1,6 @@
 import pino from 'pino'
 import chalk from 'chalk'
-import cfg from './config/config.js'
+import runtimeConfig from './config/config.js'
 import path from 'node:path'
 import util from 'node:util'
 import fs from 'node:fs'
@@ -77,7 +77,7 @@ export default function setLog() {
   fixWindowsUTF8()
 
   const logDir = paths.logs || path.join(process.cwd(), 'logs')
-  const logCfg = cfg.agt?.logging || {}
+  const logCfg = runtimeConfig.agt?.logging || {}
   const selectedScheme = COLOR_SCHEMES[logCfg.color] || COLOR_SCHEMES.default
   const selectedTimestampColors = TIMESTAMP_SCHEMES[logCfg.color] || TIMESTAMP_SCHEMES.default
 
@@ -102,7 +102,7 @@ export default function setLog() {
   let cleanupJob = null
 
   const canLog = (level) => {
-    const configLevel = cfg.agt?.logging?.level || 'info'
+    const configLevel = runtimeConfig.agt?.logging?.level || 'info'
     const targetLevel = LOG_STYLES[level]?.level || 30
     const configLevelValue = LOG_STYLES[configLevel]?.level || 30
     return targetLevel >= configLevelValue
@@ -147,7 +147,7 @@ export default function setLog() {
    * @returns {string} 日志头部文本
    */
   function getLogHeader() {
-    const headerText = cfg.agt?.logging?.align ? `[${cfg.agt.logging.align}]` : '[XRKAGT]'
+    const headerText = runtimeConfig.agt?.logging?.align ? `[${runtimeConfig.agt.logging.align}]` : '[XRKAGT]'
     return createGradientText(headerText)
   }
 
@@ -666,11 +666,11 @@ export default function setLog() {
         loggerType: 'pino',
         loggerVersion: '9.x',
         nodeVersion: process.version,
-        logLevel: cfg.agt?.logging?.level || 'info',
+        logLevel: runtimeConfig.agt?.logging?.level || 'info',
         logDir: paths.logs || path.join(process.cwd(), 'logs'),
         cleanupSchedule: 'Daily at 3 AM',
-        mainLogAge: `${cfg.agt?.logging?.maxDays || LOGGER_CONFIG.DEFAULT_MAX_DAYS} days`,
-        traceLogAge: `${cfg.agt?.logging?.traceDays || LOGGER_CONFIG.DEFAULT_TRACE_DAYS} day(s)`,
+        mainLogAge: `${runtimeConfig.agt?.logging?.maxDays || LOGGER_CONFIG.DEFAULT_MAX_DAYS} days`,
+        traceLogAge: `${runtimeConfig.agt?.logging?.traceDays || LOGGER_CONFIG.DEFAULT_TRACE_DAYS} day(s)`,
         logFiles: {
           main: `${LOGGER_CONFIG.MAIN_LOG_PREFIX}.yyyy-MM-dd.log`,
           trace: `${LOGGER_CONFIG.TRACE_LOG_PREFIX}.yyyy-MM-dd.log`
@@ -803,8 +803,8 @@ function createRotatingStream(logDir, prefix, maxDays) {
  */
 async function cleanExpiredLogs(logger, customDays, includeTrace = true) {
   const logDir = paths.logs || path.join(process.cwd(), 'logs')
-  const mainLogMaxAge = customDays || cfg.agt?.logging?.maxDays || LOGGER_CONFIG.DEFAULT_MAX_DAYS
-  const traceLogMaxAge = cfg.agt?.logging?.traceDays || LOGGER_CONFIG.DEFAULT_TRACE_DAYS
+  const mainLogMaxAge = customDays || runtimeConfig.agt?.logging?.maxDays || LOGGER_CONFIG.DEFAULT_MAX_DAYS
+  const traceLogMaxAge = runtimeConfig.agt?.logging?.traceDays || LOGGER_CONFIG.DEFAULT_TRACE_DAYS
   const now = Date.now()
 
   try {

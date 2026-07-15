@@ -11,8 +11,8 @@ export default class AnthropicLLMConfig extends ConfigBase {
       name: 'anthropic_llm',
       displayName: 'Anthropic LLM 工厂配置（官方）',
       description: 'Claude / Messages API 配置，通过 providers[] 管理多 API / 多模型端点',
-      filePath: (cfg) => {
-        const port = cfg?.port ?? cfg?._port;
+      filePath: (runtimeConfig) => {
+        const port = runtimeConfig?.port ?? runtimeConfig?._port;
         if (!port) throw new Error('AnthropicLLMConfig: 未提供端口，无法解析路径');
         return `data/server_bots/${port}/anthropic_llm.yaml`;
       },

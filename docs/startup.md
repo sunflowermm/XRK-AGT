@@ -1,6 +1,6 @@
 # 启动与引导
 
-> **定位**：XRK-AGT 是**融合智能体业务逻辑的通用后端**；本页描述从 `node app` 到 Bot 在线的引导链。架构边界见 [底层架构设计](底层架构设计.md)。
+> **定位**：XRK-AGT 是**融合智能体业务逻辑的通用后端**；本页描述从 `node app` 到 AgentRuntime 在线的引导链。架构边界见 [底层架构设计](底层架构设计.md)。
 
 ---
 
@@ -17,11 +17,11 @@ flowchart TD
   Boot --> Imp["data/importsJson → package.json.imports"]
   Boot --> Start["import start.js"]
   Start --> Menu["交互菜单 / PM2 / server 子进程"]
-  Start --> Bot["src/bot.js · Bot.run"]
-  Bot --> DB["initDatabases · Redis"]
-  Bot --> Load["并行加载 tasker / events / plugin / http / stream"]
-  Bot --> Srv["HTTP · HTTPS · WebSocket · 静态 www"]
-  Bot --> Online["online / ready"]
+  Start --> AgentRuntime["src/agent-runtime.js · AgentRuntime.run"]
+  AgentRuntime --> DB["initDatabases · Redis"]
+  AgentRuntime --> Load["并行加载 tasker / events / plugin / http / stream"]
+  AgentRuntime --> Srv["HTTP · HTTPS · WebSocket · 静态 www"]
+  AgentRuntime --> Online["online / ready"]
 ```
 
 | 阶段 | 文件 | 职责 |
@@ -29,7 +29,7 @@ flowchart TD
 | 入口 | `app.js` | `new Bootstrap().run()` |
 | 引导 | `src/utils/bootstrap.js` | 环境、依赖、动态 imports |
 | 菜单 / 进程 | `start.js` | 端口选择、Playwright 浏览器、PM2、Ctrl+C 语义 |
-| 运行时 | `src/bot.js` | 服务、加载器、全局 `Bot` |
+| 运行时 | `src/agent-runtime.js` | 服务、加载器、全局 `AgentRuntime` |
 
 引导日志：`logs/bootstrap.log`（`src/utils/simple-logger.js`）。
 
@@ -51,14 +51,14 @@ flowchart TD
 
 ---
 
-## start.js 与 Bot
+## start.js 与 AgentRuntime
 
 - **交互菜单**：选端口、启停服务、Playwright 浏览器安装、`pnpm run setup:browsers` 等价入口。
-- **server 模式**：子进程跑 Bot，便于开发热重启。
-- **信号**：Ctrl+C 在服务端 **1 次重启 / 3 次回菜单**（`src/utils/process-signals.js`），详见 [bot.md](bot.md#关闭流程与-ctrlc)。
+- **server 模式**：子进程跑 AgentRuntime，便于开发热重启。
+- **信号**：Ctrl+C 在服务端 **1 次重启 / 3 次回菜单**（`src/utils/process-signals.js`），详见 [agent-runtime.md](bot.md#关闭流程与-ctrlc)。
 - **Windows UTF-8**：`src/utils/win-utf8.js`（菜单与日志共用）。
 
-`Bot.run()` 内大致顺序：读配置 → `initDatabases`（见 [database.md](database.md)）→ 加载 Tasker / 监听器 / 插件 / HTTP / 工作流 → 监听 HTTP/WS → 触发 `online`。
+`AgentRuntime.run()` 内大致顺序：读配置 → `initDatabases`（见 [database.md](database.md)）→ 加载 Tasker / 监听器 / 插件 / HTTP / 工作流 → 监听 HTTP/WS → 触发 `online`。
 
 ---
 
@@ -87,8 +87,8 @@ Puppeteer 为可选渲染器；引导阶段不会自动下载浏览器。
 
 ## 进一步阅读
 
-- [app-dev.md](app-dev.md) — Web 控制台、前后端协作、cfg 用法  
-- [bot.md](bot.md) — Bot 生命周期、中间件、关闭流程  
+- [app-dev.md](app-dev.md) — Web 控制台、前后端协作、runtimeConfig 用法  
+- [agent-runtime.md](agent-runtime.md) — AgentRuntime 生命周期、中间件、关闭流程  
 - [database.md](database.md) — Redis（含 `scripts/ensure-redis.mjs` 探测/拉起）  
 - [底层架构设计](底层架构设计.md) — 分层与工具模块表  
 

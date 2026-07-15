@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import lodash from 'lodash';
-import BotUtil from '#utils/botutil.js';
+import RuntimeUtil from '#utils/runtime-util.js';
 import paths from '#utils/paths.js';
 import { registerShutdownHook } from '#utils/process-signals.js';
 import Renderer from './Renderer.js';
@@ -70,7 +70,7 @@ export default class BrowserRendererBase extends Renderer {
     try {
       await redis.set(this.browserMacKey, endpoint, { EX: 60 * 60 * 24 * 30 });
     } catch (err) {
-      BotUtil.makeLog('error', `Failed to save browser instance: ${err.message}`, this.logTag);
+      RuntimeUtil.makeLog('error', `Failed to save browser instance: ${err.message}`, this.logTag);
     }
   }
 
@@ -93,7 +93,7 @@ export default class BrowserRendererBase extends Renderer {
 
     const filePath = path.join(paths.root, lodash.trimStart(savePath, '.'));
     if (!fs.existsSync(filePath)) {
-      BotUtil.makeLog('error', `HTML file does not exist: ${filePath}`, this.logTag);
+      RuntimeUtil.makeLog('error', `HTML file does not exist: ${filePath}`, this.logTag);
       return null;
     }
 
@@ -114,12 +114,12 @@ export default class BrowserRendererBase extends Renderer {
 
   finishScreenshotRun(name, ret, data) {
     if (this.renderNum % this.restartNum === 0 && this.renderNum > 0 && this.shoting.length === 0) {
-      BotUtil.makeLog('info', `Completed ${this.renderNum} screenshots, restarting browser...`, this.logTag);
+      RuntimeUtil.makeLog('info', `Completed ${this.renderNum} screenshots, restarting browser...`, this.logTag);
       setTimeout(() => this.restart(), 2000);
     }
 
     if (ret.length === 0 || !ret[0]) {
-      BotUtil.makeLog('error', `[${name}] Screenshot result is empty`, this.logTag);
+      RuntimeUtil.makeLog('error', `[${name}] Screenshot result is empty`, this.logTag);
       return false;
     }
 

@@ -1,7 +1,7 @@
 import BrowserRendererBase from "#infrastructure/renderer/browser-renderer-base.js";
 import playwright from "playwright";
 import { createRequire } from "node:module";
-import BotUtil from '#utils/botutil.js';
+import RuntimeUtil from '#utils/runtime-util.js';
 import Renderer from "#infrastructure/renderer/Renderer.js";
 import { connectPlaywrightBrowser, launchPlaywrightBrowser } from "#utils/playwright-puppeteer-compat.js";
 const { buildPlaywrightLaunchOptions, pickBrowserPath } = createRequire(import.meta.url)('#utils/system-browser.cjs');
@@ -56,7 +56,7 @@ export default class PlaywrightRenderer extends BrowserRendererBase {
   async connectToExisting(wsEndpoint, retries = 0) {
     const delay = this.retryDelay * Math.pow(2, retries);
     try {
-      BotUtil.makeLog("info", `Connecting to existing ${this.browserType} instance (attempt ${retries + 1}/${this.maxRetries})`, this.logTag);
+      RuntimeUtil.makeLog("info", `Connecting to existing ${this.browserType} instance (attempt ${retries + 1}/${this.maxRetries})`, this.logTag);
 
       const browser = await connectPlaywrightBrowser(playwright, this.browserType, wsEndpoint, { timeout: 10000 });
       const context = await browser.newContext();
@@ -65,10 +65,10 @@ export default class PlaywrightRenderer extends BrowserRendererBase {
       await page.close();
       await context.close();
 
-      BotUtil.makeLog("info", `Successfully connected to existing ${this.browserType} instance`, this.logTag);
+      RuntimeUtil.makeLog("info", `Successfully connected to existing ${this.browserType} instance`, this.logTag);
       return browser;
     } catch (e) {
-      BotUtil.makeLog("warn", `Connection failed: ${e.message}`, this.logTag);
+      RuntimeUtil.makeLog("warn", `Connection failed: ${e.message}`, this.logTag);
 
       if (retries < this.maxRetries - 1) {
         await new Promise(r => setTimeout(r, delay));
@@ -86,7 +86,7 @@ export default class PlaywrightRenderer extends BrowserRendererBase {
         this.browser.contexts();
         return this.browser;
       } catch (e) {
-        BotUtil.makeLog("warn", `Existing browser instance invalid: ${e.message}`, this.logTag);
+        RuntimeUtil.makeLog("warn", `Existing browser instance invalid: ${e.message}`, this.logTag);
         this.browser = null;
       }
     }
@@ -97,7 +97,7 @@ export default class PlaywrightRenderer extends BrowserRendererBase {
 
     this.lock = true;
     try {
-      BotUtil.makeLog("info", `Starting playwright ${this.browserType}...`, this.logTag);
+      RuntimeUtil.makeLog("info", `Starting playwright ${this.browserType}...`, this.logTag);
 
       await this.ensureMac(`AGT:${this.browserType}:browserURL`);
       const wsEndpoint = this.wsEndpoint || await this.resolveWsEndpoint();
@@ -107,11 +107,11 @@ export default class PlaywrightRenderer extends BrowserRendererBase {
       }
 
       if (!this.browser) {
-        BotUtil.makeLog("info", `Launching new ${this.browserType} instance...`, this.logTag);
+        RuntimeUtil.makeLog("info", `Launching new ${this.browserType} instance...`, this.logTag);
         this.browser = await launchPlaywrightBrowser(playwright, this.browserType, this.launchOptions);
 
         if (this.browser) {
-          BotUtil.makeLog("info", `Playwright ${this.browserType} started successfully`, this.logTag);
+          RuntimeUtil.makeLog("info", `Playwright ${this.browserType} started successfully`, this.logTag);
           if (typeof this.browser.wsEndpoint === 'function') {
             const endpoint = this.browser.wsEndpoint();
             if (endpoint) await this.persistWsEndpoint(endpoint);
@@ -120,12 +120,12 @@ export default class PlaywrightRenderer extends BrowserRendererBase {
       }
 
       if (!this.browser) {
-        BotUtil.makeLog("error", `Playwright ${this.browserType} failed to start`, this.logTag);
+        RuntimeUtil.makeLog("error", `Playwright ${this.browserType} failed to start`, this.logTag);
         return false;
       }
 
       this.browser.on("disconnected", async () => {
-        BotUtil.makeLog("warn", `${this.browserType} instance disconnected`, this.logTag);
+        RuntimeUtil.makeLog("warn", `${this.browserType} instance disconnected`, this.logTag);
         this.browser = null;
         await this.removeStoredEndpoint();
 
@@ -137,11 +137,11 @@ export default class PlaywrightRenderer extends BrowserRendererBase {
       this.startHealthCheck();
     } catch (e) {
       if (/Executable doesn't exist/i.test(e.message)) {
-        BotUtil.makeLog("error", "Playwright 浏览器未安装，请在启动菜单选择「Playwright 浏览器」安装，或执行: pnpm run setup:browsers", this.logTag);
+        RuntimeUtil.makeLog("error", "Playwright 浏览器未安装，请在启动菜单选择「Playwright 浏览器」安装，或执行: pnpm run setup:browsers", this.logTag);
       } else if (!this.launchOptions.executablePath) {
-        BotUtil.makeLog("error", "未找到可用浏览器：请安装系统 Chrome/Chromium，或在启动菜单安装 Playwright Chromium", this.logTag);
+        RuntimeUtil.makeLog("error", "未找到可用浏览器：请安装系统 Chrome/Chromium，或在启动菜单安装 Playwright Chromium", this.logTag);
       }
-      BotUtil.makeLog("error", `Browser initialization failed: ${e.message}`, this.logTag);
+      RuntimeUtil.makeLog("error", `Browser initialization failed: ${e.message}`, this.logTag);
       this.browser = null;
     } finally {
       this.lock = false;
@@ -159,7 +159,7 @@ export default class PlaywrightRenderer extends BrowserRendererBase {
       try {
         this.browser.contexts();
       } catch (e) {
-        BotUtil.makeLog("warn", `Health check failed: ${e.message}, restarting...`, this.logTag);
+        RuntimeUtil.makeLog("warn", `Health check failed: ${e.message}, restarting...`, this.logTag);
         await this.restart(true);
       }
     }, this.healthCheckInterval);
@@ -213,7 +213,7 @@ export default class PlaywrightRenderer extends BrowserRendererBase {
         const buff = await body.screenshot(screenshotOptions);
         this.renderNum++;
         const kb = (buff.length / 1024).toFixed(2) + "KB";
-        BotUtil.makeLog("info", `[${name}][${this.renderNum}] ${kb} ${Date.now() - start}ms`, this.logTag);
+        RuntimeUtil.makeLog("info", `[${name}][${this.renderNum}] ${kb} ${Date.now() - start}ms`, this.logTag);
         ret.push(buff);
       } else {
         if (num > 1) {
@@ -250,7 +250,7 @@ export default class PlaywrightRenderer extends BrowserRendererBase {
 
           this.renderNum++;
           const kb = (buff.length / 1024).toFixed(2) + "KB";
-          BotUtil.makeLog("debug", `[${name}][${i}/${num}] ${kb}`, this.logTag);
+          RuntimeUtil.makeLog("debug", `[${name}][${i}/${num}] ${kb}`, this.logTag);
           ret.push(buff);
 
           if (i < num && num > 2) {
@@ -259,11 +259,11 @@ export default class PlaywrightRenderer extends BrowserRendererBase {
         }
 
         if (num > 1) {
-          BotUtil.makeLog("info", `[${name}] Completed in ${Date.now() - start}ms`, this.logTag);
+          RuntimeUtil.makeLog("info", `[${name}] Completed in ${Date.now() - start}ms`, this.logTag);
         }
       }
     } catch (error) {
-      BotUtil.makeLog("error", `[${name}] Screenshot failed: ${error.message}`, this.logTag);
+      RuntimeUtil.makeLog("error", `[${name}] Screenshot failed: ${error.message}`, this.logTag);
       ret = [];
     } finally {
       if (page) {
@@ -286,7 +286,7 @@ export default class PlaywrightRenderer extends BrowserRendererBase {
     if (!this.browser || this.lock || this.isClosing) return;
     if (!force && (this.renderNum % this.restartNum !== 0 || this.shoting.length > 0)) return;
 
-    BotUtil.makeLog("warn", `${this.browserType} ${force ? "forced" : "scheduled"} restart...`, this.logTag);
+    RuntimeUtil.makeLog("warn", `${this.browserType} ${force ? "forced" : "scheduled"} restart...`, this.logTag);
     this.isClosing = true;
 
     try {
@@ -303,9 +303,9 @@ export default class PlaywrightRenderer extends BrowserRendererBase {
 
       if (global.gc) global.gc();
 
-      BotUtil.makeLog("info", `${this.browserType} restart completed`, this.logTag);
+      RuntimeUtil.makeLog("info", `${this.browserType} restart completed`, this.logTag);
     } catch (err) {
-      BotUtil.makeLog("error", `Restart failed: ${err.message}`, this.logTag);
+      RuntimeUtil.makeLog("error", `Restart failed: ${err.message}`, this.logTag);
     } finally {
       this.isClosing = false;
     }
@@ -327,6 +327,6 @@ export default class PlaywrightRenderer extends BrowserRendererBase {
     }
 
     await this.removeStoredEndpoint();
-    BotUtil.makeLog("info", "Playwright resources cleaned up", this.logTag);
+    RuntimeUtil.makeLog("info", "Playwright resources cleaned up", this.logTag);
   }
 }

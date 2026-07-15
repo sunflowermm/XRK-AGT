@@ -12,7 +12,7 @@ import OllamaCompatibleLLMClient from './OllamaCompatibleLLMClient.js';
 import GeminiCompatibleLLMClient from './GeminiCompatibleLLMClient.js';
 import AnthropicCompatibleLLMClient from './AnthropicCompatibleLLMClient.js';
 import AzureOpenAICompatibleLLMClient from './AzureOpenAICompatibleLLMClient.js';
-import cfg from '#infrastructure/config/config.js';
+import runtimeConfig from '#infrastructure/config/config.js';
 
 const builtinClientFactories = new Map([
   // builtin：各厂商官方 SDK/文档路径，禁止与 openai_compat 混用
@@ -33,10 +33,10 @@ export function resolveFactoryId(configKey = '') {
   return key;
 }
 
-/** 读取工厂 YAML（须走 cfg.getConfig； bracket 访问对多数 *_compat_llm 无效） */
+/** 读取工厂 YAML（须走 runtimeConfig.getConfig； bracket 访问对多数 *_compat_llm 无效） */
 function readFactoryCfg(configKey) {
-  if (!configKey || typeof cfg?.getConfig !== 'function') return {};
-  return cfg.getConfig(configKey) || {};
+  if (!configKey || typeof runtimeConfig?.getConfig !== 'function') return {};
+  return runtimeConfig.getConfig(configKey) || {};
 }
 
 /** 所有 LLM 工厂统一从 providers[] 解析；YAML 默认仅 providers: [] */
@@ -63,7 +63,7 @@ function normalizeProviderKey(name) {
 }
 
 function resolveDefaultProvider() {
-  return normalizeProviderKey(cfg?.aistream?.llm?.Provider || cfg?.aistream?.llm?.provider);
+  return normalizeProviderKey(runtimeConfig?.aistream?.llm?.Provider || runtimeConfig?.aistream?.llm?.provider);
 }
 
 function normalizeProtocol(value) {

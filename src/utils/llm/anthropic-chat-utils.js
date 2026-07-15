@@ -1,5 +1,5 @@
 import { MCPToolAdapter } from './mcp-tool-adapter.js';
-import BotUtil from '../botutil.js';
+import RuntimeUtil from '../runtime-util.js';
 
 function parseToolArguments(raw) {
   if (raw == null || raw === '') return {};
@@ -110,7 +110,7 @@ export function applyAnthropicTools(body, config = {}, overrides = {}, toolNameM
       : mcpTools;
     const choice = overrides.tool_choice ?? overrides.toolChoice ?? config.toolChoice;
     body.tool_choice = mapToolChoice(choice, toolNameMapper);
-    BotUtil.makeLog(
+    RuntimeUtil.makeLog(
       'debug',
       `[anthropic-chat-utils] 注入 MCP tools=${mcpTools.length}, streams=${JSON.stringify(streams)}`,
       'LLMFactory'

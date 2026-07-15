@@ -1,10 +1,10 @@
 /**
- * 挂载各 Core 的 www 静态目录（从 Bot 内聚逻辑抽出，便于单测与复用）
+ * 挂载各 Core 的 www 静态目录（从 AgentRuntime 内聚逻辑抽出，便于单测与复用）
  */
 import path from 'node:path';
 import fsSync from 'node:fs';
 import express from 'express';
-import BotUtil from '#utils/botutil.js';
+import RuntimeUtil from '#utils/runtime-util.js';
 import paths from '#utils/paths.js';
 import { statDirs, statFiles } from '#utils/core-fs.js';
 
@@ -32,7 +32,7 @@ export async function mountCoreWwwStatic(app, staticOptions = {}) {
     if (!mountedPaths.has(coreMountPath)) {
       app.use(coreMountPath, express.static(wwwDir, staticOptions));
       mountedPaths.add(coreMountPath);
-      BotUtil.makeLog('info', `挂载静态资源: ${coreMountPath} -> ${wwwDir}`, 'Bot');
+      RuntimeUtil.makeLog('info', `挂载静态资源: ${coreMountPath} -> ${wwwDir}`, 'AgentRuntime');
     }
 
     try {
@@ -50,38 +50,38 @@ export async function mountCoreWwwStatic(app, staticOptions = {}) {
         const mountPath = `/${subDirName}`;
 
         if (signExists[di]) {
-          BotUtil.makeLog(
+          RuntimeUtil.makeLog(
             'info',
             `检测到前端 sign.json，跳过子目录静态挂载: ${mountPath} (core: ${coreName})`,
-            'Bot'
+            'AgentRuntime'
           );
           continue;
         }
 
         if (RESERVED_ROOT_SEGMENTS.includes(subDirName)) {
-          BotUtil.makeLog('warn', `跳过保留路径: ${mountPath} (core: ${coreName})`, 'Bot');
+          RuntimeUtil.makeLog('warn', `跳过保留路径: ${mountPath} (core: ${coreName})`, 'AgentRuntime');
           continue;
         }
 
         if (mountedPaths.has(mountPath)) {
-          BotUtil.makeLog(
+          RuntimeUtil.makeLog(
             'warn',
             `路径冲突，跳过: ${mountPath} (core: ${coreName})，已被其他core占用`,
-            'Bot'
+            'AgentRuntime'
           );
           continue;
         }
 
         app.use(mountPath, express.static(subDirPath, staticOptions));
         mountedPaths.add(mountPath);
-        BotUtil.makeLog(
+        RuntimeUtil.makeLog(
           'info',
           `挂载子目录: ${mountPath} -> ${subDirPath} (core: ${coreName})`,
-          'Bot'
+          'AgentRuntime'
         );
       }
     } catch (error) {
-      BotUtil.makeLog('debug', `扫描 www 子目录失败: ${wwwDir} - ${error.message}`, 'Bot');
+      RuntimeUtil.makeLog('debug', `扫描 www 子目录失败: ${wwwDir} - ${error.message}`, 'AgentRuntime');
     }
   }
 

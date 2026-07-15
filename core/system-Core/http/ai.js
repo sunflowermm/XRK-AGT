@@ -1,8 +1,8 @@
-import StreamLoader from '#infrastructure/aistream/loader.js';
-import cfg from '#infrastructure/config/config.js';
+import AiStreamLoader from '#infrastructure/ai-workflow/loader.js';
+import runtimeConfig from '#infrastructure/config/config.js';
 import { getAistreamConfigOptional } from '#utils/aistream-config.js';
 import LLMFactory from '#factory/llm/LLMFactory.js';
-import BotUtil from '#utils/botutil.js';
+import RuntimeUtil from '#utils/runtime-util.js';
 import { errorHandler, ErrorCodes } from '#utils/error-handler.js';
 import path from 'path';
 import crypto from 'crypto';
@@ -20,12 +20,12 @@ import {
 } from '../lib/ai-workspace-runtime.js';
 import { runWithAiConsoleContext, installMcpAuditHook } from '../lib/ai-workspace-context.js';
 import { resolveDefaultMcpWorkflow } from '../lib/builtin-mcp.js';
-import { initOpenAIChatSSE, pipeOpenAIChatCompletionsStream, writeOpenAIStreamError } from '#utils/sse-openai.js';
+import { initOpenAIChatSSE, pipeOpenAIChatCompletionsStream, writeOpenAiWorkflowError } from '#utils/sse-openai.js';
 import { pickPromptCacheOverrides } from '#utils/llm/prompt-cache-policy.js';
-import { expandChatToolStreamWhitelist } from '#infrastructure/aistream/chat-tool-streams.js';
+import { expandChatToolStreamWhitelist } from '#infrastructure/ai-workflow/chat-tool-streams.js';
 import { transformOpenAIStyleVisionMessages } from '#utils/llm/message-transform.js';
-import { assembleChatLlmMessages } from '#infrastructure/aistream/chat-pipeline.js';
-import { runWithStreamRequestContext } from '#infrastructure/aistream/stream-request-context.js';
+import { assembleChatLlmMessages } from '#infrastructure/ai-workflow/chat-pipeline.js';
+import { runWithStreamRequestContext } from '#infrastructure/ai-workflow/stream-request-context.js';
 import {
   pickFirst,
   parseOptionalJson,
@@ -152,8 +152,8 @@ async function handleChatCompletionsV3(req, res) {
   // 支持 multipart/form-data 格式（图片上传）
   if (contentType.includes('multipart/form-data')) {
     try {
-      const bot = req.bot ?? Bot;
-      const maxFileSize = cfg?.server?.limits?.fileSize || '100mb';
+      const bot = req.agentRuntime ?? AgentRuntime;
+      const maxFileSize = runtimeConfig?.server?.limits?.fileSize || '100mb';
       const mediaDir = path.join(paths.data, 'media');
       await fs.mkdir(mediaDir, { recursive: true });
       const createUploader = req.createMultipartUploader || (() => req.multipartUpload);
@@ -230,7 +230,7 @@ async function handleChatCompletionsV3(req, res) {
   }
 
   // HTTP 侧内容安全：对输入文本做违禁词检测（复用 data/bannedWords/global.json）
-  const safetyCfg = cfg?.server?.contentSafety?.http || {};
+  const safetyCfg = runtimeConfig?.server?.contentSafety?.http || {};
   if (safetyCfg.enabled !== false && safetyCfg.checkAiInput !== false) {
     const extractTexts = (msg) => {
         const out = [];
@@ -254,7 +254,7 @@ async function handleChatCompletionsV3(req, res) {
         if (hit) {
           const msg = `内容触发违禁词(${hit.type})：${hit.word}`;
           if (String(safetyCfg.action || 'reject').toLowerCase() === 'warn') {
-            BotUtil.makeLog('warn', msg, 'ai.v3.chat.completions');
+            RuntimeUtil.makeLog('warn', msg, 'ai.v3.chat.completions');
             break;
           }
           return HttpResponse.error(res, new Error(msg), 400, 'ai.v3.chat.completions');
@@ -263,7 +263,7 @@ async function handleChatCompletionsV3(req, res) {
     }
   }
 
-  BotUtil.makeLog(
+  RuntimeUtil.makeLog(
     'debug',
     `[v3/chat/completions] 入参摘要: ${safePreview(summarizeV3Request(req, body, { contentType, messages, uploadedImagesCount: uploadedImages.length }), { maxLen: 2000 })}`,
     'ai.v3.chat.completions'
@@ -365,7 +365,7 @@ async function handleChatCompletionsV3(req, res) {
   const llmMessages = await transformOpenAIStyleVisionMessages(messages, llmConfig);
 
   const fileWorkspaceAbs = workspaceCtx.fileRootAbs || workspaceCtx.agentRootAbs;
-  const restoreStreamWorkspace = applyRequestWorkspaceToStreams(StreamLoader, fileWorkspaceAbs);
+  const restoreStreamWorkspace = applyRequestWorkspaceToStreams(AiStreamLoader, fileWorkspaceAbs);
   const auditWorkspaceId = workspaceCtx.presetId || null;
 
   if (!streamFlag) {
@@ -412,10 +412,10 @@ async function handleChatCompletionsV3(req, res) {
   const id = `chatcmpl_${Date.now()}`;
   const modelName = llmConfig.provider || 'unknown';
 
-  BotUtil.makeLog('info', `[v3/chat/completions] 开始流式输出: provider=${modelName}, id=${id}`, 'ai.v3.stream');
+  RuntimeUtil.makeLog('info', `[v3/chat/completions] 开始流式输出: provider=${modelName}, id=${id}`, 'ai.v3.stream');
 
   try {
-    BotUtil.makeLog('info', `[v3/chat/completions] 调用client.chatStream开始`, 'ai.v3.stream');
+    RuntimeUtil.makeLog('info', `[v3/chat/completions] 调用client.chatStream开始`, 'ai.v3.stream');
 
     const totalContent = await pipeOpenAIChatCompletionsStream(res, {
       client,
@@ -430,14 +430,14 @@ async function handleChatCompletionsV3(req, res) {
       runWrapped: (run) => runWithAiConsoleContext({ workspaceId: auditWorkspaceId }, run)
     });
 
-    BotUtil.makeLog('info', `[v3/chat/completions] chatStream完成: 总长度=${totalContent.length}`, 'ai.v3.stream');
-    BotUtil.makeLog('info', `[v3/chat/completions] 流式输出完成`, 'ai.v3.stream');
+    RuntimeUtil.makeLog('info', `[v3/chat/completions] chatStream完成: 总长度=${totalContent.length}`, 'ai.v3.stream');
+    RuntimeUtil.makeLog('info', `[v3/chat/completions] 流式输出完成`, 'ai.v3.stream');
   } catch (error) {
-    BotUtil.makeLog('error', `[v3/chat/completions] 流式输出错误: ${error.message}, stack=${error.stack?.substring(0, 200)}`, 'ai.v3.stream');
-    writeOpenAIStreamError(res, { id, created: now, model: modelName, error });
+    RuntimeUtil.makeLog('error', `[v3/chat/completions] 流式输出错误: ${error.message}, stack=${error.stack?.substring(0, 200)}`, 'ai.v3.stream');
+    writeOpenAiWorkflowError(res, { id, created: now, model: modelName, error });
   } finally {
     restoreStreamWorkspace();
-    BotUtil.makeLog('debug', `[v3/chat/completions] 关闭响应流`, 'ai.v3.stream');
+    RuntimeUtil.makeLog('debug', `[v3/chat/completions] 关闭响应流`, 'ai.v3.stream');
     res.end();
   }
 }
@@ -464,7 +464,7 @@ async function handleModels(req, res) {
 
   const vendors = LLMFactory.listVendors(profiles);
 
-  const workflows = StreamLoader.getStreamsByPriority()
+  const workflows = AiStreamLoader.getStreamsByPriority()
     .filter(s => !s.primaryStream && !s.secondaryStreams && (s.mcpTools?.size || 0) > 0)
     .map(s => ({
       key: s.name,
@@ -476,7 +476,7 @@ async function handleModels(req, res) {
     }));
 
   // 远程 MCP 服务器也视为“工作流选项”，但默认不勾选，由用户显式选择。
-  const remoteServers = StreamLoader.listRemoteMCPServers?.() || [];
+  const remoteServers = AiStreamLoader.listRemoteMCPServers?.() || [];
   const remoteWorkflows = remoteServers.map((name) => ({
     key: `remote-mcp.${name}`,
     label: `远程 MCP：${name}`,
@@ -541,7 +541,7 @@ export default {
           const contextObj = parseOptionalJson(req.query.context);
           const metadata = parseOptionalJson(req.query.meta);
 
-          const stream = StreamLoader.getStream(workflowName) || StreamLoader.getStream('chat');
+          const stream = AiStreamLoader.getStream(workflowName) || AiStreamLoader.getStream('chat');
           if (!stream) {
             return HttpResponse.error(res, new Error('工作流未加载'), 500, 'ai.stream');
           }
@@ -588,7 +588,7 @@ export default {
           let acc = '';
           const finalText = await runWithStreamRequestContext(
             { e: null, turnState: null },
-            () => stream.callAIStream(
+            () => stream.callAiWorkflow(
               messages,
               llmOverrides,
               (delta) => {

@@ -1,5 +1,5 @@
 import redisInit, { closeRedis, getRedisClient } from '../redis.js';
-import BotUtil from '#utils/botutil.js';
+import RuntimeUtil from '#utils/runtime-util.js';
 
 class DatabaseManager {
   redis = null;
@@ -12,9 +12,9 @@ class DatabaseManager {
 
     try {
       this.redis = (await redisInit()) ?? getRedisClient();
-      BotUtil.makeLog('success', 'Redis 初始化成功', 'DatabaseManager');
+      RuntimeUtil.makeLog('success', 'Redis 初始化成功', 'DatabaseManager');
     } catch (err) {
-      BotUtil.makeLog('error', `Redis 初始化失败: ${err.message}`, 'DatabaseManager');
+      RuntimeUtil.makeLog('error', `Redis 初始化失败: ${err.message}`, 'DatabaseManager');
       throw err;
     }
 
@@ -41,7 +41,7 @@ class DatabaseManager {
     await closeRedis().catch(() => {});
     this.redis = null;
     this.initialized = false;
-    BotUtil.makeLog('info', 'Redis 连接已关闭', 'DatabaseManager');
+    RuntimeUtil.makeLog('info', 'Redis 连接已关闭', 'DatabaseManager');
   }
 
   async getHealthStatus() {

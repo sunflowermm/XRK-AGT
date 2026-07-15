@@ -3,7 +3,7 @@ import { transformMessagesWithVision } from '../../utils/llm/message-transform.j
 import { buildOpenAIChatCompletionsBody, applyOpenAITools } from '../../utils/llm/openai-chat-utils.js';
 import { buildFetchOptionsWithProxy } from '../../utils/llm/proxy-utils.js';
 import { createToolNameMapper } from '../../utils/llm/tool-name-utils.js';
-import BotUtil from '../../utils/botutil.js';
+import RuntimeUtil from '../../utils/runtime-util.js';
 import { iterateSSE } from '../../utils/llm/sse-utils.js';
 
 function normalizeDeepSeekReasoningEffort(value) {
@@ -186,7 +186,7 @@ export default class DeepSeekLLMClient {
       await this._consumeSSEWithToolCalls(resp, onDelta, collector, overrides);
 
       if (collector.toolCalls.length > 0 && collector.finishReason === 'tool_calls' && enableMcp) {
-        BotUtil.makeLog('info', `[DeepSeekLLMClient] 检测到工具调用，执行工具: ${collector.toolCalls.length}个`, 'LLMFactory');
+        RuntimeUtil.makeLog('info', `[DeepSeekLLMClient] 检测到工具调用，执行工具: ${collector.toolCalls.length}个`, 'LLMFactory');
 
         currentMessages.push({
           role: 'assistant',
@@ -208,7 +208,7 @@ export default class DeepSeekLLMClient {
         currentMessages.push(...toolResults);
         round++;
         if (round >= maxToolRounds) {
-          BotUtil.makeLog('warn', `[DeepSeekLLMClient] 达到最大工具调用轮数: ${maxToolRounds}`, 'LLMFactory');
+          RuntimeUtil.makeLog('warn', `[DeepSeekLLMClient] 达到最大工具调用轮数: ${maxToolRounds}`, 'LLMFactory');
           break;
         }
         continue;

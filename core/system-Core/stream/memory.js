@@ -1,6 +1,6 @@
-import AIStream from '#infrastructure/aistream/aistream.js';
-import BotUtil from '#utils/botutil.js';
-import MemoryManager from '#infrastructure/aistream/memory-manager.js';
+import AiWorkflow from '#infrastructure/ai-workflow/ai-workflow.js';
+import RuntimeUtil from '#utils/runtime-util.js';
+import MemoryManager from '#infrastructure/ai-workflow/memory-manager.js';
 import path from 'path';
 import fs from 'fs/promises';
 import os from 'os';
@@ -14,7 +14,7 @@ import os from 'os';
  * - save_memory（保存记忆）
  * - delete_memory（删除记忆）
  */
-export default class MemoryStream extends AIStream {
+export default class MemoryStream extends AiWorkflow {
   memoryDir = path.join(os.homedir(), '.xrk', 'memory');
   memories = new Map();
 
@@ -87,7 +87,7 @@ export default class MemoryStream extends AIStream {
         if (!content) return { success: false, error: '记忆内容不能为空' };
 
         const memoryId = await this.saveMemory(content, context);
-        BotUtil.makeLog('info', `[${this.name}] 保存记忆 #${memoryId}: ${content.slice(0, 50)}...`, 'MemoryStream');
+        RuntimeUtil.makeLog('info', `[${this.name}] 保存记忆 #${memoryId}: ${content.slice(0, 50)}...`, 'MemoryStream');
         
         return {
           success: true,
@@ -136,7 +136,7 @@ export default class MemoryStream extends AIStream {
         if (!keyword) return { success: false, error: '关键词不能为空' };
 
         const memories = await this.queryMemories(keyword, context);
-        BotUtil.makeLog('info', `[${this.name}] 查询记忆 "${keyword}"，找到 ${memories.length} 条`, 'MemoryStream');
+        RuntimeUtil.makeLog('info', `[${this.name}] 查询记忆 "${keyword}"，找到 ${memories.length} 条`, 'MemoryStream');
 
         return {
           success: true,
@@ -184,7 +184,7 @@ export default class MemoryStream extends AIStream {
         if (!id) return { success: false, error: '记忆ID不能为空' };
 
         const success = await this.deleteMemory(id, context);
-        BotUtil.makeLog('info', `[${this.name}] ${success ? '删除' : '删除失败'}记忆 #${id}`, 'MemoryStream');
+        RuntimeUtil.makeLog('info', `[${this.name}] ${success ? '删除' : '删除失败'}记忆 #${id}`, 'MemoryStream');
         
         return {
           success,
@@ -232,7 +232,7 @@ export default class MemoryStream extends AIStream {
       },
       handler: async (_args = {}, context = {}) => {
         const memories = await this.listMemories(context);
-        BotUtil.makeLog('info', `[${this.name}] 列出记忆，共 ${memories.length} 条`, 'MemoryStream');
+        RuntimeUtil.makeLog('info', `[${this.name}] 列出记忆，共 ${memories.length} 条`, 'MemoryStream');
 
         return {
           success: true,
@@ -376,7 +376,7 @@ export default class MemoryStream extends AIStream {
       
       await fs.writeFile(memoryFile, JSON.stringify(memories, null, 2), 'utf8');
     } catch (error) {
-      BotUtil.makeLog('error', `[${this.name}] 保存记忆到文件失败: ${error.message}`, 'MemoryStream');
+      RuntimeUtil.makeLog('error', `[${this.name}] 保存记忆到文件失败: ${error.message}`, 'MemoryStream');
     }
   }
 
@@ -404,7 +404,7 @@ export default class MemoryStream extends AIStream {
         }
       }
     } catch (error) {
-      BotUtil.makeLog('error', `[${this.name}] 从文件删除记忆失败: ${error.message}`, 'MemoryStream');
+      RuntimeUtil.makeLog('error', `[${this.name}] 从文件删除记忆失败: ${error.message}`, 'MemoryStream');
     }
   }
 

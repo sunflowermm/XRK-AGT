@@ -3,7 +3,7 @@ import { partitionAndExecuteToolCalls } from '../../utils/llm/tool-partition-uti
 import { buildOpenAIChatCompletionsBody, applyOpenAITools } from '../../utils/llm/openai-chat-utils.js';
 import { transformMessagesWithVision } from '../../utils/llm/message-transform.js';
 import { ensureMessagesImagesDataUrl } from '../../utils/llm/image-utils.js';
-import BotUtil from '../../utils/botutil.js';
+import RuntimeUtil from '../../utils/runtime-util.js';
 import { iterateSSE } from '../../utils/llm/sse-utils.js';
 
 /**
@@ -146,7 +146,7 @@ export default class OpenAILLMClient {
       await this._consumeSSEWithToolCalls(resp, onDelta, toolCallsCollector, overrides);
       
       if (toolCallsCollector.toolCalls.length > 0 && toolCallsCollector.finishReason === 'tool_calls' && enableMcp) {
-        BotUtil.makeLog('info', `[OpenAILLMClient] 检测到工具调用，执行工具: ${toolCallsCollector.toolCalls.length}个`, 'LLMFactory');
+        RuntimeUtil.makeLog('info', `[OpenAILLMClient] 检测到工具调用，执行工具: ${toolCallsCollector.toolCalls.length}个`, 'LLMFactory');
         
         currentMessages.push({
           role: 'assistant',
@@ -168,7 +168,7 @@ export default class OpenAILLMClient {
         
         round++;
         if (round >= maxToolRounds) {
-          BotUtil.makeLog('warn', `[OpenAILLMClient] 达到最大工具调用轮数: ${maxToolRounds}`, 'LLMFactory');
+          RuntimeUtil.makeLog('warn', `[OpenAILLMClient] 达到最大工具调用轮数: ${maxToolRounds}`, 'LLMFactory');
           break;
         }
         continue;

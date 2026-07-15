@@ -4,7 +4,7 @@ import { transformMessagesWithVision } from '../../utils/llm/message-transform.j
 import { buildFetchOptionsWithProxy } from '../../utils/llm/proxy-utils.js';
 import { ensureMessagesImagesDataUrl } from '../../utils/llm/image-utils.js';
 import { cleanupMessages } from '../../utils/llm/message-cleanup.js';
-import BotUtil from '../../utils/botutil.js';
+import RuntimeUtil from '../../utils/runtime-util.js';
 import { iterateSSE } from '../../utils/llm/sse-utils.js';
 import { logPromptCacheUsage } from '../../utils/llm/prompt-cache-policy.js';
 
@@ -130,7 +130,7 @@ export default class OpenAICompatibleLLMClient {
       `bodyLength=${bodyStr.length}`
     ].filter(Boolean).join(', ');
 
-    BotUtil.makeLog('debug', `[OpenAICompatibleLLMClient] 构建请求: ${logParts}`, 'LLMFactory');
+    RuntimeUtil.makeLog('debug', `[OpenAICompatibleLLMClient] 构建请求: ${logParts}`, 'LLMFactory');
 
     return buildFetchOptionsWithProxy(this.config, {
       method: 'POST',
@@ -148,7 +148,7 @@ export default class OpenAICompatibleLLMClient {
       throw new Error(`openai_compat ${tag}: ${resp.status} ${resp.statusText}${text ? ` | ${text}` : ''}`);
     }
     if (stream && !resp.body) {
-      BotUtil.makeLog(
+      RuntimeUtil.makeLog(
         'warn',
         '[OpenAICompatibleLLMClient] 流式请求失败：resp.ok 但 body 为空',
         'LLMFactory'
@@ -162,7 +162,7 @@ export default class OpenAICompatibleLLMClient {
       // 这会导致 SSE 解析拿不到任何 data 事件，表现为“空流”。这里显式检测并抛出可读错误。
       if (contentType && !contentType.includes('text/event-stream')) {
         const text = await resp.text().catch(() => '');
-        BotUtil.makeLog(
+        RuntimeUtil.makeLog(
           'warn',
           `[OpenAICompatibleLLMClient] 期望SSE但收到非SSE响应: content-type=${contentType}, bodyPreview="${String(text)
             .slice(0, 300)
@@ -175,7 +175,7 @@ export default class OpenAICompatibleLLMClient {
       }
     }
 
-    BotUtil.makeLog(
+    RuntimeUtil.makeLog(
       'info',
       `[OpenAICompatibleLLMClient] _fetchRound 成功: stream=${stream}, status=${resp.status}, url=${resp.url || this.endpoint}`,
       'LLMFactory'
@@ -238,17 +238,17 @@ export default class OpenAICompatibleLLMClient {
           }
         }
       } catch (e) {
-        BotUtil.makeLog('warn', `[OpenAICompatibleLLMClient] SSE JSON解析失败: ${e.message}`, 'LLMFactory');
+        RuntimeUtil.makeLog('warn', `[OpenAICompatibleLLMClient] SSE JSON解析失败: ${e.message}`, 'LLMFactory');
       }
     }
 
     if (toolCallsMap.size > 0) {
       const sortedIndices = Array.from(toolCallsMap.keys()).sort((a, b) => a - b);
       result.toolCalls = sortedIndices.map((idx, i) => this._normalizeToolCall(toolCallsMap.get(idx), i));
-      BotUtil.makeLog('info', `[OpenAICompatibleLLMClient] 收集到${result.toolCalls.length}个工具调用`, 'LLMFactory');
+      RuntimeUtil.makeLog('info', `[OpenAICompatibleLLMClient] 收集到${result.toolCalls.length}个工具调用`, 'LLMFactory');
     }
 
-    BotUtil.makeLog(
+    RuntimeUtil.makeLog(
       'info',
       `[OpenAICompatibleLLMClient] SSE 消费完成: events=${sseEventCount}, sseDataChars=${sseDataChars}, deltaContentChars=${deltaContentChars}`,
       'LLMFactory'
@@ -294,7 +294,7 @@ export default class OpenAICompatibleLLMClient {
       state.messages.push(...toolResults);
     }
 
-    BotUtil.makeLog('warn', `[OpenAICompatibleLLMClient] 达到最大工具调用轮数: ${maxToolRounds}`, 'LLMFactory');
+    RuntimeUtil.makeLog('warn', `[OpenAICompatibleLLMClient] 达到最大工具调用轮数: ${maxToolRounds}`, 'LLMFactory');
     return {
       content: state.messages[state.messages.length - 1]?.content || '',
       executedToolNames: Array.from(state.toolNameSet)
@@ -325,7 +325,7 @@ export default class OpenAICompatibleLLMClient {
   async chatStream(messages, onDelta, overrides = {}) {
     const transformedMessages = await this._prepareMessages(messages);
 
-    BotUtil.makeLog(
+    RuntimeUtil.makeLog(
       'info',
       `[OpenAICompatibleLLMClient] chatStream 开始: messages=${transformedMessages.length}`,
       'LLMFactory'
@@ -339,7 +339,7 @@ export default class OpenAICompatibleLLMClient {
       }
     });
 
-    BotUtil.makeLog(
+    RuntimeUtil.makeLog(
       'info',
       `[OpenAICompatibleLLMClient] chatStream 结束`,
       'LLMFactory'

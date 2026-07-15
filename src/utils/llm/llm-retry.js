@@ -1,4 +1,4 @@
-import BotUtil from '#utils/botutil.js';
+import RuntimeUtil from '#utils/runtime-util.js';
 import { getAistreamConfigOptional } from '#utils/aistream-config.js';
 
 function getLlmRetryConfig() {
@@ -111,19 +111,19 @@ export async function runWithLlmRetry({ label, kind, run }) {
       lastError = error;
       const errorInfo = classifyLlmError(error);
       if (!shouldRetryLlm(errorInfo, retryConfig, attempt)) {
-        BotUtil.makeLog('error', `[${label}] ${kind}失败: ${error.message}`, 'AIStream');
+        RuntimeUtil.makeLog('error', `[${label}] ${kind}失败: ${error.message}`, 'AiWorkflow');
         throw error;
       }
       const delay = calculateRetryDelay(attempt, retryConfig);
-      BotUtil.makeLog('warn',
+      RuntimeUtil.makeLog('warn',
         `[${label}] ${kind}失败，${attempt}/${retryConfig.maxAttempts}次重试中: ${error.message}`,
-        'AIStream'
+        'AiWorkflow'
       );
-      await BotUtil.sleep(delay);
+      await RuntimeUtil.sleep(delay);
     }
   }
 
   const msg = `${kind}失败，已重试${retryConfig.maxAttempts}次: ${lastError?.message || '未知错误'}`;
-  BotUtil.makeLog('error', `[${label}] ${msg}`, 'AIStream');
+  RuntimeUtil.makeLog('error', `[${label}] ${msg}`, 'AiWorkflow');
   throw new Error(msg);
 }

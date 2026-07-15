@@ -2,8 +2,8 @@ import fs from 'fs/promises';
 import fsSync from 'fs';
 import path from 'path';
 import yaml from 'yaml';
-import BotUtil from '#utils/botutil.js';
-import cfg from '#infrastructure/config/config.js';
+import RuntimeUtil from '#utils/runtime-util.js';
+import runtimeConfig from '#infrastructure/config/config.js';
 import paths from '#utils/paths.js';
 
 /**
@@ -48,7 +48,7 @@ export default class ConfigBase {
    * @param {string} metadata.description - 配置描述
    * @param {string|Function} metadata.filePath - 配置文件相对路径或动态路径函数
    *   - 字符串：相对于项目根目录的路径，如 'config/myconfig.yaml'
-   *   - 函数：动态计算路径，接收cfg对象，返回路径字符串
+   *   - 函数：动态计算路径，接收runtimeConfig对象，返回路径字符串
    * @param {string} metadata.fileType - 文件类型：'yaml' 或 'json'（默认'yaml'）
    * @param {Object} metadata.schema - 配置结构定义（用于验证）
    */
@@ -166,7 +166,7 @@ export default class ConfigBase {
    */
   _resolveFilePath() {
     if (this._getFilePath) {
-      const dynamicPath = this._getFilePath(cfg);
+      const dynamicPath = this._getFilePath(runtimeConfig);
       if (!dynamicPath) {
         throw new Error('动态路径函数未返回有效路径');
       }
@@ -257,7 +257,7 @@ export default class ConfigBase {
         }
         if (templatePath) {
           content = await fs.readFile(templatePath, 'utf8');
-          BotUtil.makeLog(
+          RuntimeUtil.makeLog(
             'info',
             `使用默认配置模板 [${this.name}] ← ${path.relative(paths.root, templatePath)}`,
             'ConfigBase'
@@ -288,7 +288,7 @@ export default class ConfigBase {
 
       return data;
     } catch (error) {
-      BotUtil.makeLog('error', `读取配置失败 [${this.name}]: ${error.message}`, 'ConfigBase');
+      RuntimeUtil.makeLog('error', `读取配置失败 [${this.name}]: ${error.message}`, 'ConfigBase');
       throw error;
     }
   }
@@ -318,7 +318,7 @@ export default class ConfigBase {
           const content = await fs.readFile(defaultFilePath, 'utf8');
           config = this.fileType === 'yaml' ? yaml.parse(content) : JSON.parse(content);
         } catch (error) {
-          BotUtil.makeLog('warn', `读取默认配置失败 [${this.name}/${key}]: ${error.message}`, 'ConfigBase');
+          RuntimeUtil.makeLog('warn', `读取默认配置失败 [${this.name}/${key}]: ${error.message}`, 'ConfigBase');
         }
       }
       
@@ -331,7 +331,7 @@ export default class ConfigBase {
             config = { ...config, ...fileConfig };
           }
         } catch (error) {
-          BotUtil.makeLog('warn', `读取配置失败 [${this.name}/${key}]: ${error.message}`, 'ConfigBase');
+          RuntimeUtil.makeLog('warn', `读取配置失败 [${this.name}/${key}]: ${error.message}`, 'ConfigBase');
         }
       }
       
@@ -415,10 +415,10 @@ export default class ConfigBase {
       this._cache = processedData;
       this._cacheTime = Date.now();
 
-      BotUtil.makeLog('info', `配置已保存 [${this.name}]`, 'ConfigBase');
+      RuntimeUtil.makeLog('info', `配置已保存 [${this.name}]`, 'ConfigBase');
       return true;
     } catch (error) {
-      BotUtil.makeLog('error', `写入配置失败 [${this.name}]: ${error.message}`, 'ConfigBase');
+      RuntimeUtil.makeLog('error', `写入配置失败 [${this.name}]: ${error.message}`, 'ConfigBase');
       throw error;
     }
   }
@@ -482,10 +482,10 @@ export default class ConfigBase {
       this._cache = data;
       this._cacheTime = Date.now();
 
-      BotUtil.makeLog('info', `多文件配置已保存 [${this.name}]`, 'ConfigBase');
+      RuntimeUtil.makeLog('info', `多文件配置已保存 [${this.name}]`, 'ConfigBase');
       return true;
     } catch (error) {
-      BotUtil.makeLog('error', `写入多文件配置失败 [${this.name}]: ${error.message}`, 'ConfigBase');
+      RuntimeUtil.makeLog('error', `写入多文件配置失败 [${this.name}]: ${error.message}`, 'ConfigBase');
       throw error;
     }
   }
@@ -505,11 +505,11 @@ export default class ConfigBase {
       for (const e of entries) {
         if (e.isFile() && e.name.startsWith(prefix)) {
           await fs.unlink(path.join(dir, e.name));
-          BotUtil.makeLog('debug', `已删除旧备份 [${this.name}]: ${e.name}`, 'ConfigBase');
+          RuntimeUtil.makeLog('debug', `已删除旧备份 [${this.name}]: ${e.name}`, 'ConfigBase');
         }
       }
     } catch (err) {
-      if (err.code !== 'ENOENT') BotUtil.makeLog('debug', `清理旧备份时忽略 [${this.name}]: ${err.message}`, 'ConfigBase');
+      if (err.code !== 'ENOENT') RuntimeUtil.makeLog('debug', `清理旧备份时忽略 [${this.name}]: ${err.message}`, 'ConfigBase');
     }
   }
 
@@ -524,10 +524,10 @@ export default class ConfigBase {
       const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
       const backupPath = `${filePath}.backup.${timestamp}`;
       await fs.copyFile(filePath, backupPath);
-      BotUtil.makeLog('debug', `配置已备份 [${this.name}]: ${backupPath}`, 'ConfigBase');
+      RuntimeUtil.makeLog('debug', `配置已备份 [${this.name}]: ${backupPath}`, 'ConfigBase');
       return backupPath;
     } catch (error) {
-      BotUtil.makeLog('error', `备份配置失败 [${this.name}]: ${error.message}`, 'ConfigBase');
+      RuntimeUtil.makeLog('error', `备份配置失败 [${this.name}]: ${error.message}`, 'ConfigBase');
       throw error;
     }
   }

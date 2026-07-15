@@ -1,0 +1,99 @@
+import { describe, it, before, after } from 'node:test';
+import assert from 'node:assert/strict';
+import { spawn } from 'node:child_process';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
+const helper = path.join(root, 'tests/helpers/test-server.mjs');
+
+function pickPort() {
+  return 19000 + Math.floor(Math.random() * 800);
+}
+
+function waitForReady(child, timeoutMs = 120000) {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error('server boot timeout')), timeoutMs);
+    let buf = '';
+    const onData = (chunk) => {
+      buf += chunk.toString();
+      if (buf.includes('XRK_TEST_READY')) {
+        clearTimeout(timer);
+        child.stdout?.off('data', onData);
+        resolve();
+      }
+    };
+    child.stdout?.on('data', onData);
+    child.on('exit', (code) => {
+      if (!buf.includes('XRK_TEST_READY')) {
+        clearTimeout(timer);
+        reject(new Error(`server exited early: ${code}\n${buf}`));
+      }
+    });
+    child.on('error', (e) => {
+      clearTimeout(timer);
+      reject(e);
+    });
+  });
+}
+
+describe('HTTP 端到端（真实启动 AgentRuntime）', () => {
+  /** @type {import('node:child_process').ChildProcessWithoutNullStreams} */
+  let child;
+  let port;
+
+  before(async () => {
+    port = pickPort();
+    child = spawn(process.execPath, [helper], {
+      cwd: root,
+      env: { ...process.env, XRK_TEST_PORT: String(port) },
+      stdio: ['ignore', 'pipe', 'pipe']
+    });
+    let errBuf = '';
+    child.stderr?.on('data', (c) => { errBuf += c.toString(); });
+    try {
+      await waitForReady(child);
+    } catch (e) {
+      throw new Error(`${e.message}\nstderr:\n${errBuf.slice(-4000)}`);
+    }
+  }, { timeout: 150000 });
+
+  after(async () => {
+    if (!child || child.killed) return;
+    child.kill('SIGTERM');
+    await new Promise((resolve) => {
+      const t = setTimeout(() => {
+        if (!child.killed) child.kill('SIGKILL');
+        resolve();
+      }, 8000);
+      child.once('exit', () => {
+        clearTimeout(t);
+        resolve();
+      });
+    });
+  });
+
+  it('GET /api/plugins/summary 200（127 免 Key）', async () => {
+    const res = await fetch(`http://127.0.0.1:${port}/api/plugins/summary`);
+    assert.equal(res.status, 200);
+    const body = await res.json();
+    assert.equal(body.success, true);
+    assert.ok(body.summary != null);
+    assert.ok(Array.isArray(body.plugins));
+  });
+
+  it('GET /xrk/ 返回 HTML', async () => {
+    const res = await fetch(`http://127.0.0.1:${port}/xrk/`);
+    assert.equal(res.status, 200);
+    const text = await res.text();
+    assert.match(text, /html/i);
+  });
+
+  it('GET /api/plugins/tasks 200', async () => {
+    const res = await fetch(`http://127.0.0.1:${port}/api/plugins/tasks`);
+    assert.equal(res.status, 200);
+    const body = await res.json();
+    assert.equal(body.success, true);
+    assert.ok(Array.isArray(body.tasks));
+  });
+});

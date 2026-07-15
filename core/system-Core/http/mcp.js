@@ -1,8 +1,8 @@
-import BotUtil from '#utils/botutil.js';
-import StreamLoader from '#infrastructure/aistream/loader.js';
+import RuntimeUtil from '#utils/runtime-util.js';
+import AiStreamLoader from '#infrastructure/ai-workflow/loader.js';
 import { HttpResponse } from '#utils/http-utils.js';
 
-const getMCPServer = () => StreamLoader.mcpServer;
+const getMCPServer = () => AiStreamLoader.mcpServer;
 
 const requireMCP = (res) => {
         const mcpServer = getMCPServer();
@@ -292,7 +292,7 @@ export default {
 
   ws: {
     '/mcp/ws': (ws) => {
-        BotUtil.makeLog('info', 'MCP WebSocket连接已建立', 'MCPApi');
+        RuntimeUtil.makeLog('info', 'MCP WebSocket连接已建立', 'MCPApi');
 
       const mcpServer = getMCPServer();
       if (!mcpServer) {
@@ -421,7 +421,7 @@ export default {
             }));
           }
         } catch (error) {
-          BotUtil.makeLog('error', `MCP WebSocket消息处理失败: ${error.message}`, 'MCPApi');
+          RuntimeUtil.makeLog('error', `MCP WebSocket消息处理失败: ${error.message}`, 'MCPApi');
           ws.send(JSON.stringify({
             jsonrpc: '2.0',
             id: message?.id || null,
@@ -434,11 +434,11 @@ export default {
       });
 
       ws.on('close', () => {
-        BotUtil.makeLog('info', 'MCP WebSocket连接已关闭', 'MCPApi');
+        RuntimeUtil.makeLog('info', 'MCP WebSocket连接已关闭', 'MCPApi');
       });
 
       ws.on('error', (error) => {
-        BotUtil.makeLog('error', `MCP WebSocket错误: ${error.message}`, 'MCPApi');
+        RuntimeUtil.makeLog('error', `MCP WebSocket错误: ${error.message}`, 'MCPApi');
       });
     }
   }

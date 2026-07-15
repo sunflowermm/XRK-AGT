@@ -1,8 +1,8 @@
-import cfg from '#infrastructure/config/config.js';
+import runtimeConfig from '#infrastructure/config/config.js';
 import { fetchWithPolicy } from '../net/fetcher.js';
 
 function getNoticeConfig() {
-  const n = cfg?.notice;
+  const n = runtimeConfig?.notice;
   return n && typeof n === 'object' ? n : {};
 }
 

@@ -4,11 +4,11 @@ import { createReadStream } from 'fs';
 import crypto from 'crypto';
 import multer from 'multer';
 import paths from '#utils/paths.js';
-import BotUtil from '#utils/botutil.js';
+import RuntimeUtil from '#utils/runtime-util.js';
 import { errorHandler, ErrorCodes } from '#utils/error-handler.js';
 import { InputValidator } from '#utils/input-validator.js';
 import { HttpResponse } from '#utils/http-utils.js';
-import cfg from '#infrastructure/config/config.js';
+import runtimeConfig from '#infrastructure/config/config.js';
 import { bannedWordsService } from '../lib/content-safety/banned-words-service.js';
 import { Disposables } from '../lib/runtime/disposables.js';
 
@@ -18,8 +18,8 @@ const mediaDir = path.join(paths.data, 'media');
 const fileMap = new Map();
 let __runtime = null;
 
-function resolveBaseUrl(Bot, req) {
-  const raw = Bot?.url || Bot?.getServerUrl?.() || `${req.protocol}://${req.get('host')}`;
+function resolveBaseUrl(AgentRuntime, req) {
+  const raw = AgentRuntime?.url || AgentRuntime?.getServerUrl?.() || `${req.protocol}://${req.get('host')}`;
   return String(raw).replace(/\/+$/, '');
 }
 
@@ -79,7 +79,7 @@ export default {
       handler: HttpResponse.asyncHandler(async (req, res) => {
         const contentType = req.headers['content-type'] || '';
         if (!contentType.includes('multipart/form-data')) return HttpResponse.validationError(res, '请使用 multipart/form-data 格式上传文件');
-        const maxFileSize = cfg?.server?.limits?.fileSize || '100mb';
+        const maxFileSize = runtimeConfig?.server?.limits?.fileSize || '100mb';
         let files = [];
         try {
           const upload = createDiskUploader(req, maxFileSize);
@@ -113,14 +113,14 @@ export default {
             md5
           });
         }
-        const safetyCfg = cfg?.server?.contentSafety?.http || {};
+        const safetyCfg = runtimeConfig?.server?.contentSafety?.http || {};
         if (safetyCfg.enabled !== false && safetyCfg.checkUploadMd5 !== false) {
           for (const f of filesWithMd5) {
             const hit = f.md5 ? await bannedWordsService.checkImageMd5(f.md5) : null;
             if (!hit) continue;
             const msg = `上传内容命中违禁图片(hash)：${hit.md5}`;
             if (String(safetyCfg.action || 'reject').toLowerCase() === 'warn') {
-              BotUtil.makeLog('warn', msg, 'file.upload');
+              RuntimeUtil.makeLog('warn', msg, 'file.upload');
               break;
             }
             // 拒绝：删除本次上传的文件（避免落盘残留）
@@ -132,7 +132,7 @@ export default {
         }
 
         const uploadedFiles = [];
-        const baseUrl = resolveBaseUrl(Bot, req);
+        const baseUrl = resolveBaseUrl(AgentRuntime, req);
         for (const file of filesWithMd5) {
           const ext = path.extname(file.originalname) || '.file';
           const isMedia = /\.(jpg|jpeg|png|gif|webp|bmp|svg|mp4|webm|mp3|wav|ogg)$/i.test(ext);
@@ -211,7 +211,7 @@ export default {
             }
           } catch (err) {
             // debug: 文件查找失败是技术细节
-            BotUtil.makeLog('debug', `查找文件失败: ${err.message}`, 'FileAPI');
+            RuntimeUtil.makeLog('debug', `查找文件失败: ${err.message}`, 'FileAPI');
           }
           
           return HttpResponse.notFound(res, '文件不存在');
@@ -250,7 +250,7 @@ export default {
               err,
               { context: 'file.delete', fileId: id, code: ErrorCodes.SYSTEM_ERROR }
             );
-            BotUtil.makeLog('error', `删除文件失败: ${err.message}`, 'FileAPI');
+            RuntimeUtil.makeLog('error', `删除文件失败: ${err.message}`, 'FileAPI');
           }
         }
 
@@ -294,7 +294,7 @@ export default {
           try {
             await fs.unlink(info.path);
             fileMap.delete(id);
-            BotUtil.makeLog('debug', `清理过期文件: ${info.name}`, 'FileAPI');
+            RuntimeUtil.makeLog('debug', `清理过期文件: ${info.name}`, 'FileAPI');
           } catch {}
         }
       }

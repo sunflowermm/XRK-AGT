@@ -20,9 +20,9 @@
 
 ## 技术栈摘要
 
-- **运行时**：Node.js 26+，Express，全局 `Bot`（`src/bot.js`）
+- **运行时**：Node.js 26+，Express，全局 `AgentRuntime`（`src/agent-runtime.js`）
 - **数据**：Redis（框架内置，启动必需）
-- **AI**：`AIStream` 工作流 + LLM/ASR/TTS 工厂 + MCP
+- **AI**：`AiWorkflow` 工作流 + LLM/ASR/TTS 工厂 + MCP
 - **接入**：OneBotv11 / QBQBot / GSUIDCORE / stdin / 自定义 Tasker
 - **渲染**：Playwright（默认）/ Puppeteer；Chromium 可选安装
 
@@ -39,8 +39,8 @@ XRK-AGT/
 ├── package.json
 │
 ├── src/                      # Runtime + 基础设施（勿写业务）
-│   ├── bot.js
-│   ├── infrastructure/       # 加载器、基类、database、config…
+│   ├── agent-runtime.js      # AgentRuntime 门面（鉴权/监听/WS/代理委托 runtime-*）
+│   ├── infrastructure/       # 加载器、基类、database、config、ai-workflow…
 │   ├── utils/                # bootstrap、process-signals、http-business…
 │   ├── factory/              # LLM / ASR / TTS
 │   └── renderers/
@@ -60,12 +60,12 @@ XRK-AGT/
 
 | 路径 | 说明 |
 |------|------|
-| `app.js` → `bootstrap.js` → `start.js` → `bot.js` | 启动链，见 [docs/startup.md](docs/startup.md) |
+| `app.js` → `bootstrap.js` → `start.js` → `agent-runtime.js` | 启动链，见 [docs/startup.md](docs/startup.md) |
 | `core/*/plugin/` | 指令与增强插件 |
 | `core/*/http/` | HTTP API（`/api/` 默认鉴权） |
-| `core/*/stream/` | AI 工作流（`AIStream`） |
+| `core/*/stream/` | AI 工作流（`AiWorkflow`） |
 | `core/*/tasker/` | 平台协议 → 统一事件 |
-| `core/*/events/` | 去重、标准化 → `PluginsLoader.deal` |
+| `core/*/events/` | 去重、标准化 → `PluginLoader.deal` |
 | `core/*/www/<app>/` | 静态前端（如 `/xrk/`） |
 | `core/*/commonconfig/` | 配置 Schema（独立 Core 模板在 `core/<名>/default/`） |
 

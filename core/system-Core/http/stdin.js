@@ -17,7 +17,7 @@ export default {
     {
       method: 'GET',
       path: '/api/stdin/status',
-      handler: HttpResponse.asyncHandler(async (req, res, Bot) => {
+      handler: HttpResponse.asyncHandler(async (req, res, AgentRuntime) => {
         const stdinHandler = getRuntimeGlobal('stdinHandler');
 
         if (!stdinHandler) {
@@ -33,7 +33,7 @@ export default {
           uptime: process.uptime(),
           temp_files: fs.existsSync(tempDir) ? fs.readdirSync(tempDir).length : 0,
           media_files: fs.existsSync(mediaDir) ? fs.readdirSync(mediaDir).length : 0,
-          base_url: Bot.getServerUrl ? Bot.getServerUrl() : `http://localhost:${Bot.httpPort || 3000}`,
+          base_url: AgentRuntime.getServerUrl ? AgentRuntime.getServerUrl() : `http://localhost:${AgentRuntime.httpPort || 3000}`,
           timestamp: Date.now()
         });
       }, 'stdin.status')
@@ -42,7 +42,7 @@ export default {
     {
       method: 'POST',
       path: '/api/stdin/command',
-      handler: HttpResponse.asyncHandler(async (req, res, Bot) => {
+      handler: HttpResponse.asyncHandler(async (req, res, AgentRuntime) => {
         const stdinHandler = getRuntimeGlobal('stdinHandler');
         if (!stdinHandler) {
           return HttpResponse.error(res, new Error('Stdin handler not initialized'), 503, 'stdin.command');
@@ -58,7 +58,7 @@ export default {
         user_info.tasker = 'api';
 
         if (wantJson) {
-          const result = await Bot.callStdin(command, { user_info });
+          const result = await AgentRuntime.callStdin(command, { user_info });
           return HttpResponse.json(res, result);
         }
 
@@ -70,7 +70,7 @@ export default {
     {
       method: 'POST',
       path: '/api/stdin/event',
-      handler: HttpResponse.asyncHandler(async (req, res, Bot) => {
+      handler: HttpResponse.asyncHandler(async (req, res, AgentRuntime) => {
         const stdinHandler = getRuntimeGlobal('stdinHandler');
         if (!stdinHandler) {
           return HttpResponse.error(res, new Error('Stdin handler not initialized'), 503, 'stdin.event');
@@ -88,8 +88,8 @@ export default {
         });
 
         const output = wantJson
-          ? await Bot.em(event_type, event, true, { timeout })
-          : (Bot.em(event_type, event), null);
+          ? await AgentRuntime.em(event_type, event, true, { timeout })
+          : (AgentRuntime.em(event_type, event), null);
 
         return HttpResponse.success(res, {
           event_id: event.message_id,
@@ -101,7 +101,7 @@ export default {
   ],
 
   ws: {
-    stdin: [(conn, req, Bot) => {
+    stdin: [(conn, req, AgentRuntime) => {
       const listener = (data) => {
         conn.sendMsg(JSON.stringify({
           type: 'stdin',
@@ -110,25 +110,25 @@ export default {
         }));
       };
 
-      Bot.on('stdin.command', listener);
-      Bot.on('stdin.output', listener);
+      AgentRuntime.on('stdin.command', listener);
+      AgentRuntime.on('stdin.output', listener);
 
       conn.on('close', () => {
-        Bot.off('stdin.command', listener);
-        Bot.off('stdin.output', listener);
+        AgentRuntime.off('stdin.command', listener);
+        AgentRuntime.off('stdin.output', listener);
       });
     }]
   },
 
-  async init(app, Bot) {
+  async init(app, AgentRuntime) {
     if (!getRuntimeGlobal('stdinHandler')) {
       const StdinModule = await import('../tasker/stdin.js');
       const instance = new StdinModule.default();
       instance.load();
     }
 
-    if (!Bot.url && Bot.getServerUrl) {
-      Bot.url = Bot.getServerUrl();
+    if (!AgentRuntime.url && AgentRuntime.getServerUrl) {
+      AgentRuntime.url = AgentRuntime.getServerUrl();
     }
   }
 };

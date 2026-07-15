@@ -1,11 +1,11 @@
 /**
- * 运行时全局引导（须在 bot / 插件加载前 import 一次）
- * - plugin / segment：见 docs/runtime-surface.md
- * - 业务层勿 import #oicq；插件请 import plugin 基类
+ * 运行时全局引导（须在 AgentRuntime / 插件加载前 import 一次）
+ * - PluginBase / msgSegment：见 docs/runtime-surface.md
+ * - 插件请 import PluginBase 基类；消息段用裸名 msgSegment
  */
-import plugin from '#infrastructure/plugins/plugin.js';
-import { segment } from '#oicq';
+import PluginBase from '#infrastructure/plugins/plugin-base.js';
+import { msgSegment } from '#utils/msg-segment.js';
 import { setRuntimeGlobal } from '#utils/runtime-globals.js';
 
-setRuntimeGlobal('plugin', plugin);
-setRuntimeGlobal('segment', segment);
+setRuntimeGlobal('PluginBase', PluginBase);
+setRuntimeGlobal('msgSegment', msgSegment);

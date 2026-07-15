@@ -9,7 +9,7 @@ import {
   normalizeAnthropicToolHistory
 } from '../../utils/llm/anthropic-chat-utils.js';
 import { createToolNameMapper } from '../../utils/llm/tool-name-utils.js';
-import BotUtil from '../../utils/botutil.js';
+import RuntimeUtil from '../../utils/runtime-util.js';
 import { logPromptCacheUsage } from '../../utils/llm/prompt-cache-policy.js';
 
 /**
@@ -204,7 +204,7 @@ export default class AnthropicCompatibleLLMClient extends AnthropicLLMClient {
           content: typeof r.content === 'string' ? r.content : JSON.stringify(r.content ?? '')
         }));
       } else if (enableMcp) {
-        BotUtil.makeLog(
+        RuntimeUtil.makeLog(
           'info',
           `[AnthropicCompatibleLLMClient] 执行 MCP 工具 ${toolUses.length} 个: [${toolUses.map((t) => t.name).join(', ')}]`,
           'LLMFactory'
@@ -233,7 +233,7 @@ export default class AnthropicCompatibleLLMClient extends AnthropicLLMClient {
       currentMessages.push({ role: 'user', content: toolResultBlocks });
     }
 
-    BotUtil.makeLog('warn', `[AnthropicCompatibleLLMClient] 达到最大工具轮数: ${maxRounds}`, 'LLMFactory');
+    RuntimeUtil.makeLog('warn', `[AnthropicCompatibleLLMClient] 达到最大工具轮数: ${maxRounds}`, 'LLMFactory');
     if (typeof overrides.onTruncated === 'function') overrides.onTruncated();
     return lastText;
   }

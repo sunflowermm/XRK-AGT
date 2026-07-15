@@ -1,4 +1,4 @@
-import AIStream from '#infrastructure/aistream/aistream.js';
+import AiWorkflow from '#infrastructure/ai-workflow/ai-workflow.js';
 import {
   buildWebFetchRuntime,
   runWebFetch,
@@ -14,7 +14,7 @@ const PROVIDER_IDS = WEB_SEARCH_PROVIDERS.map((p) => p.id);
 /**
  * Web 能力（web_fetch + web_search）挂载为 MCP
  */
-export default class WebStream extends AIStream {
+export default class WebStream extends AiWorkflow {
   /** @type {ReturnType<typeof buildWebFetchRuntime>} */
   webFetchRuntime;
 

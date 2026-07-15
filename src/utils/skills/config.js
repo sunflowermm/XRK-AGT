@@ -5,19 +5,19 @@ function uniqueList(list) {
   return [...new Set(list)];
 }
 
-export function resolveSkillRoots(cfg = {}) {
-  const customSkillRoots = normalizeStringArray(cfg.customSkillRoots);
+export function resolveSkillRoots(runtimeConfig = {}) {
+  const customSkillRoots = normalizeStringArray(runtimeConfig.customSkillRoots);
   // 助手 agent：默认不注入 skills；仅当用户在配置里显式提供 customSkillRoots 时才注入
   return uniqueList(customSkillRoots);
 }
 
-export function resolveSkillLimits(cfg = {}) {
+export function resolveSkillLimits(runtimeConfig = {}) {
   return {
-    maxCandidatesPerRoot: cfg.maxCandidatesPerRoot ?? DEFAULT_SKILL_LIMITS.maxCandidatesPerRoot,
-    maxSkillsLoadedPerSource: cfg.maxSkillsLoadedPerSource ?? DEFAULT_SKILL_LIMITS.maxSkillsLoadedPerSource,
-    maxSkillsInPrompt: cfg.maxSkillsInPrompt ?? DEFAULT_SKILL_LIMITS.maxSkillsInPrompt,
-    maxSkillsPromptChars: cfg.maxSkillsPromptChars ?? DEFAULT_SKILL_LIMITS.maxSkillsPromptChars,
-    maxSkillFileBytes: cfg.maxSkillFileBytes ?? DEFAULT_SKILL_LIMITS.maxSkillFileBytes,
+    maxCandidatesPerRoot: runtimeConfig.maxCandidatesPerRoot ?? DEFAULT_SKILL_LIMITS.maxCandidatesPerRoot,
+    maxSkillsLoadedPerSource: runtimeConfig.maxSkillsLoadedPerSource ?? DEFAULT_SKILL_LIMITS.maxSkillsLoadedPerSource,
+    maxSkillsInPrompt: runtimeConfig.maxSkillsInPrompt ?? DEFAULT_SKILL_LIMITS.maxSkillsInPrompt,
+    maxSkillsPromptChars: runtimeConfig.maxSkillsPromptChars ?? DEFAULT_SKILL_LIMITS.maxSkillsPromptChars,
+    maxSkillFileBytes: runtimeConfig.maxSkillFileBytes ?? DEFAULT_SKILL_LIMITS.maxSkillFileBytes,
   };
 }
 

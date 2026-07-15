@@ -51,7 +51,7 @@ export function initOpenAIChatSSE(res) {
  * OpenAI chat.completion.chunk 增量回调（文本 / reasoning / mcp_tools / tool_calls）
  * @returns {{ callback: Function, stats: { totalContent: string, chunkCount: number } }}
  */
-export function createOpenAIStreamDeltaHandler(res, { id, created, model } = {}) {
+export function createOpenAiWorkflowDeltaHandler(res, { id, created, model } = {}) {
   let totalContent = '';
   let isFirstChunk = true;
   let chunkCount = 0;
@@ -146,7 +146,7 @@ export function finishOpenAIChatStream(res, {
 }
 
 /** 流式错误 chunk + [DONE] */
-export function writeOpenAIStreamError(res, { id, created, model, error }) {
+export function writeOpenAiWorkflowError(res, { id, created, model, error }) {
   writeSSEChunk(res, {
     id,
     object: 'chat.completion.chunk',
@@ -177,7 +177,7 @@ export async function pipeOpenAIChatCompletionsStream(res, {
   estimateTokens,
   runWrapped
 }) {
-  const { callback, getStats } = createOpenAIStreamDeltaHandler(res, { id, created, model });
+  const { callback, getStats } = createOpenAiWorkflowDeltaHandler(res, { id, created, model });
   await (typeof runWrapped === 'function'
     ? runWrapped(() => client.chatStream(messages, callback, overrides))
     : client.chatStream(messages, callback, overrides));

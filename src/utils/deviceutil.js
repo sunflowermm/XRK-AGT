@@ -5,7 +5,7 @@
 
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import BotUtil from './botutil.js';
+import RuntimeUtil from './runtime-util.js';
 
 /**
  * 初始化目录
@@ -15,7 +15,7 @@ import BotUtil from './botutil.js';
 export async function initializeDirectories(directories) {
   if (!Array.isArray(directories) || directories.length === 0) return
   await Promise.all(
-    [...new Set(directories.filter(Boolean))].map(dir => BotUtil.mkdir(dir))
+    [...new Set(directories.filter(Boolean))].map(dir => RuntimeUtil.mkdir(dir))
   )
 }
 

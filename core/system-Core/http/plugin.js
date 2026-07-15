@@ -1,11 +1,11 @@
-import PluginsLoader from '#infrastructure/plugins/loader.js';
+import PluginLoader from '#infrastructure/plugins/loader.js';
 import { HttpResponse } from '#utils/http-utils.js';
-import BotUtil from '#utils/botutil.js';
+import RuntimeUtil from '#utils/runtime-util.js';
 
 
 function collectPluginEntries() {
-  const priorityPlugins = PluginsLoader.priority || [];
-  const extendedPlugins = PluginsLoader.extended || [];
+  const priorityPlugins = PluginLoader.priority || [];
+  const extendedPlugins = PluginLoader.extended || [];
   const allPlugins = [...priorityPlugins, ...extendedPlugins];
   const plugins = [];
 
@@ -22,7 +22,7 @@ function collectPluginEntries() {
         task: instance.task ? 1 : 0
       });
     } catch (error) {
-      BotUtil.makeLog('error', `[Plugin API] 初始化插件失败: ${entry.key}`, 'Plugin', error);
+      RuntimeUtil.makeLog('error', `[Plugin API] 初始化插件失败: ${entry.key}`, 'Plugin', error);
     }
   }
 
@@ -30,14 +30,14 @@ function collectPluginEntries() {
 }
 
 function buildPluginStats(plugins = []) {
-  const stats = PluginsLoader.pluginLoadStats || {};
-  const taskList = PluginsLoader.task || [];
+  const stats = PluginLoader.pluginLoadStats || {};
+  const taskList = PluginLoader.task || [];
   return {
     totalPlugins: plugins.length,
     totalLoadTime: stats.totalLoadTime || 0,
     startTime: stats.startTime || 0,
     taskCount: taskList.length,
-    extendedCount: (PluginsLoader.extended || []).length,
+    extendedCount: (PluginLoader.extended || []).length,
     withRules: plugins.filter(p => (p.rule || 0) > 0).length,
     withTasks: plugins.filter(p => p.task > 0).length,
     plugins: stats.plugins || []
@@ -86,7 +86,7 @@ export default {
           return HttpResponse.validationError(res, '缺少插件key参数');
         }
 
-        await PluginsLoader.changePlugin(decodeURIComponent(key));
+        await PluginLoader.changePlugin(decodeURIComponent(key));
         HttpResponse.success(res, null, '插件重载成功');
       }, 'plugin.reload')
     },
@@ -95,7 +95,7 @@ export default {
       method: 'GET',
       path: '/api/plugins/tasks',
       handler: HttpResponse.asyncHandler(async (req, res) => {
-        const taskList = PluginsLoader.task || [];
+        const taskList = PluginLoader.task || [];
         const tasks = taskList.map(t => ({
           name: t.name,
           cron: t.cron,

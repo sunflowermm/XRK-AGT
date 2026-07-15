@@ -78,8 +78,8 @@ sequenceDiagram
 CommonConfig schema：`core/system-Core/commonconfig/system.js`。
 
 ```javascript
-import cfg from '#infrastructure/config/config.js'
-const { host, port } = cfg.redis
+import runtimeConfig from '#infrastructure/config/config.js'
+const { host, port } = runtimeConfig.redis
 ```
 
 连接 URL 由 `buildRedisUrl` 生成；Docker 下 `normalizeHost` 可将 `127.0.0.1` 映射为服务名 `redis`。
@@ -142,7 +142,7 @@ Mongo / Postgres / Qdrant 由 `core/<产品>/` 引入，**不在** Runtime `data
 **配置改了要不要重启？**  
 要。连接仅在启动期建立。
 
-**和 `cfg.db`？**  
+**和 `runtimeConfig.db`？**  
 历史字段；框架内置连接以 **`redis.yaml`** 为准。
 
 ---

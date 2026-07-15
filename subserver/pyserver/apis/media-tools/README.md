@@ -18,7 +18,7 @@ uv pip install -r apis/media-tools/requirements.txt
 子服> media-tools 更新
 ```
 
-主服务代码调用：`Bot.callSubserver('/api/media-tools/...')`
+主服务代码调用：`AgentRuntime.callSubserver('/api/media-tools/...')`
 
 ## API
 

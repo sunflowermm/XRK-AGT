@@ -136,7 +136,7 @@ function injectWorkspaceAssistant(workspaceRoot, maxChars, pushProse, { isMainSe
 }
 
 export async function buildAgentWorkspaceSection(agentWorkspaceCfg = {}, streamName = '') {
-  const cfg = {
+  const runtimeConfig = {
     enabled: true,
     root: '',
     streams: null,
@@ -158,23 +158,23 @@ export async function buildAgentWorkspaceSection(agentWorkspaceCfg = {}, streamN
     ...agentWorkspaceCfg
   };
 
-  if (cfg.enabled === false) return '';
+  if (runtimeConfig.enabled === false) return '';
 
-  if (Array.isArray(cfg.streams) && cfg.streams.length > 0 && streamName) {
-    if (!cfg.streams.includes(streamName)) return '';
+  if (Array.isArray(runtimeConfig.streams) && runtimeConfig.streams.length > 0 && streamName) {
+    if (!runtimeConfig.streams.includes(streamName)) return '';
   }
 
   let workspaceRoot;
   let projectRoot;
   try {
-    workspaceRoot = realpathSyncOrResolve(resolveAgentWorkspaceAbs(cfg.root));
+    workspaceRoot = realpathSyncOrResolve(resolveAgentWorkspaceAbs(runtimeConfig.root));
     projectRoot = realpathSyncOrResolve(getProjectRoot());
     if (!fs.statSync(workspaceRoot).isDirectory()) return '';
   } catch {
     return '';
   }
 
-  const maxProse = cfg.maxTotalChars > 0 ? cfg.maxTotalChars : Number.POSITIVE_INFINITY;
+  const maxProse = runtimeConfig.maxTotalChars > 0 ? runtimeConfig.maxTotalChars : Number.POSITIVE_INFINITY;
   const proseSections = [];
   let proseUsed = 0;
   const proseRoom = () => Math.max(0, maxProse - proseUsed);
@@ -189,15 +189,15 @@ export async function buildAgentWorkspaceSection(agentWorkspaceCfg = {}, streamN
     proseSections.push(block);
   };
 
-  if (cfg.includeAgentMd) {
-    injectWorkspaceAssistant(workspaceRoot, cfg.maxAgentMdChars, pushProse, {
+  if (runtimeConfig.includeAgentMd) {
+    injectWorkspaceAssistant(workspaceRoot, runtimeConfig.maxAgentMdChars, pushProse, {
       isMainSession: streamName === 'v3' || !streamName,
-      includeDiagnostics: cfg.includeDiagnostics,
-      maxDiagnosticsChars: cfg.maxDiagnosticsChars
+      includeDiagnostics: runtimeConfig.includeDiagnostics,
+      maxDiagnosticsChars: runtimeConfig.maxDiagnosticsChars
     });
   }
 
-  const extraMarkdownFiles = Array.isArray(cfg.contextFiles) ? cfg.contextFiles : [];
+  const extraMarkdownFiles = Array.isArray(runtimeConfig.contextFiles) ? runtimeConfig.contextFiles : [];
   for (const rel of extraMarkdownFiles) {
     if (typeof rel !== 'string' || !rel.trim()) continue;
     const safeRel = rel.replace(/\\/g, '/').replace(/^\/+/, '');
@@ -208,7 +208,7 @@ export async function buildAgentWorkspaceSection(agentWorkspaceCfg = {}, streamN
     pushProse(safeRel, got.content);
   }
 
-  if (cfg.includeRules) {
+  if (runtimeConfig.includeRules) {
     const rulesDir = path.join(projectRoot, 'rules');
     try {
       const absFiles = listFilesRecursive(rulesDir, (_fp, name) => name.endsWith('.md') || name.endsWith('.mdc'));
@@ -219,12 +219,12 @@ export async function buildAgentWorkspaceSection(agentWorkspaceCfg = {}, streamN
       let acc = '';
       for (const rel of relFiles) {
         const fp = path.join(rulesDir, ...rel.split('/'));
-        const got = readTextFileUnderWorkspaceRootCached(projectRoot, fp, cfg.maxRulesChars * 4);
+        const got = readTextFileUnderWorkspaceRootCached(projectRoot, fp, runtimeConfig.maxRulesChars * 4);
         if (!got.ok) continue;
         acc += `\n### ${rel}\n\n${got.content}\n`;
-        if (acc.length >= cfg.maxRulesChars) break;
+        if (acc.length >= runtimeConfig.maxRulesChars) break;
       }
-      pushProse('rules', truncate(acc.trim(), cfg.maxRulesChars, 'rules'));
+      pushProse('rules', truncate(acc.trim(), runtimeConfig.maxRulesChars, 'rules'));
     } catch {
       /* no rules dir */
     }
@@ -232,7 +232,7 @@ export async function buildAgentWorkspaceSection(agentWorkspaceCfg = {}, streamN
 
   const parts = [...proseSections];
 
-  const configuredRoots = Array.isArray(cfg.customSkillRoots) ? cfg.customSkillRoots.filter(Boolean).map(String) : [];
+  const configuredRoots = Array.isArray(runtimeConfig.customSkillRoots) ? runtimeConfig.customSkillRoots.filter(Boolean).map(String) : [];
   const skillRootAbs = new Set();
   for (const rel of configuredRoots) {
     skillRootAbs.add(path.isAbsolute(rel) ? rel : path.join(projectRoot, rel));
@@ -246,11 +246,11 @@ export async function buildAgentWorkspaceSection(agentWorkspaceCfg = {}, streamN
   }
   if (skillRootAbs.size > 0) {
     const roots = [...skillRootAbs].sort((a, b) => a.localeCompare(b));
-    const skillsPrompt = buildSkillsPromptFromWorkspace(projectRoot, { ...cfg, customSkillRoots: roots });
+    const skillsPrompt = buildSkillsPromptFromWorkspace(projectRoot, { ...runtimeConfig, customSkillRoots: roots });
     if (skillsPrompt) parts.push(`## Skills\n\n${skillsPrompt}`);
   }
 
-  if (cfg.includeSubagents) {
+  if (runtimeConfig.includeSubagents) {
     for (const rel of SUBAGENT_MANIFEST_RELS) {
       const fp = path.join(projectRoot, rel);
       const got = readTextFileUnderWorkspaceRootCached(projectRoot, fp, 512 * 1024);

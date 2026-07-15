@@ -48,7 +48,7 @@ export const PROTECTED_LOG_BASENAMES = new Set([
 ]);
 
 /**
- * 将原始 `cfg.monitor` / yaml 规范为企业安全默认。
+ * 将原始 `runtimeConfig.monitor` / yaml 规范为企业安全默认。
  *
  * - 观察类开关：缺省偏开（监控本身）
  * - 副作用类开关：仅 `=== true` 才开（browser / network / process / system / 删文件 / 激进 / 自重启）
@@ -227,12 +227,12 @@ export function shouldAutoRestartForHeap(processMem, optimize) {
  * 是否允许执行 OS 级缓存清理（如 Windows `ipconfig /flushdns`）。
  * Windows 另须 `optimize.aggressive === true`。
  *
- * @param {{ system?: { clearCache?: boolean }, optimize?: { aggressive?: boolean } } | null | undefined} cfg
+ * @param {{ system?: { clearCache?: boolean }, optimize?: { aggressive?: boolean } } | null | undefined} runtimeConfig
  * @param {NodeJS.Platform} [platform=process.platform]
  * @returns {boolean}
  */
-export function mayClearOsCache(cfg, platform = process.platform) {
-  if (cfg?.system?.clearCache !== true) return false;
-  if (platform === 'win32' && cfg?.optimize?.aggressive !== true) return false;
+export function mayClearOsCache(runtimeConfig, platform = process.platform) {
+  if (runtimeConfig?.system?.clearCache !== true) return false;
+  if (platform === 'win32' && runtimeConfig?.optimize?.aggressive !== true) return false;
   return true;
 }

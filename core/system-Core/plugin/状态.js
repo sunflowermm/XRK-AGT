@@ -1,15 +1,15 @@
 import os from 'os'
 import moment from 'moment'
 import * as si from 'systeminformation'
-import cfg from '#infrastructure/config/config.js'
-import PluginsLoader from '#infrastructure/plugins/loader.js'
+import runtimeConfig from '#infrastructure/config/config.js'
+import PluginLoader from '#infrastructure/plugins/loader.js'
 
 // 模块级配置
 let showNetworkInfo = true
 let showProcessInfo = true
 let showDiskInfo = true
 
-export class stattools extends plugin {
+export class stattools extends PluginBase {
   constructor() {
     super({
       name: 'System Status',
@@ -24,8 +24,8 @@ export class stattools extends plugin {
   }
 
   async init() {
-    // 从cfg读取配置
-    const agtCfg = cfg.agt || {}
+    // 从runtimeConfig读取配置
+    const agtCfg = runtimeConfig.agt || {}
     const statusCfg = agtCfg.status || {}
     showNetworkInfo = statusCfg.showNetwork !== false
     showProcessInfo = statusCfg.showProcess !== false
@@ -81,15 +81,15 @@ export class stattools extends plugin {
         si.networkInterfaces().catch(() => [])
       ])
 
-      const bot = (globalThis.Bot && (Bot[e.self_id] || Bot)) || {}
+      const bot = (globalThis.AgentRuntime && (AgentRuntime[e.self_id] || AgentRuntime)) || {}
       const startTime = bot.stat?.start_time
       const runtimeSeconds = typeof startTime === 'number'
         ? Math.floor(Date.now() / 1000 - startTime)
         : (time.uptime || os.uptime())
       const botRuntime = this.formatTime(runtimeSeconds)
       
-      const pluginCount = PluginsLoader.priority.length + PluginsLoader.extended.length
-      const taskCount = PluginsLoader.task.length
+      const pluginCount = PluginLoader.priority.length + PluginLoader.extended.length
+      const taskCount = PluginLoader.task.length
 
       // Node进程信息
       const nodeUsage = process.memoryUsage()
@@ -153,15 +153,15 @@ export class stattools extends plugin {
           `  阻塞：${processes.blocked}个`,
           ''
         ] : [],
-        `● Bot信息`,
+        `● AgentRuntime信息`,
         `  昵称：${bot.nickname || '未知'}`,
         `  账号：${bot.uin || e.self_id}`,
         `  运行时长：${botRuntime}`,
         `  Node版本：${nodeVersion}`,
         `  插件数量：${pluginCount}个`,
         `  定时任务：${taskCount}个`,
-        `  日志等级：${cfg.agt?.logging?.level || 'info'}`,
-        `  日志目录：${cfg.agt?.logging?.dir || 'logs'}`
+        `  日志等级：${runtimeConfig.agt?.logging?.level || 'info'}`,
+        `  日志目录：${runtimeConfig.agt?.logging?.dir || 'logs'}`
       ].flat()
 
       if (showNetworkInfo) {

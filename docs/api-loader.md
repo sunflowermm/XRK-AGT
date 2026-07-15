@@ -4,10 +4,10 @@
 > **Loader 模式**：[infrastructure-shared.md](infrastructure-shared.md) · **基类**：[http-api.md](http-api.md) / [base-classes.md](base-classes.md)  
 > **可扩展性**：[框架可扩展性指南](框架可扩展性指南.md)
 
-`ApiLoader` 负责从所有 `core/*/http` 目录动态加载所有 HTTP API 模块，并完成：
+`HttpApiLoader` 负责从所有 `core/*/http` 目录动态加载所有 HTTP API 模块，并完成：
 
 - API 实例化与优先级排序
-- 将路由与 WebSocket 处理器注册到 Express 与 Bot
+- 将路由与 WebSocket 处理器注册到 Express 与 AgentRuntime
 - 监控 API 文件变更，实现热加载
 
 ![Loader 标准模式导读](../resources/mdimg/docs/loader-hot-reload.png)
@@ -34,18 +34,18 @@
 - ✅ **错误隔离**：单个API加载失败不影响其他API
 - ✅ **优先级排序**：支持按优先级排序
 
-> 💡 **实际示例**：system-Core 提供了 **12 个** HTTP API 模块的实际实现，展示了如何使用 ApiLoader 自动加载和管理 API。详见 [system-Core 特性文档](system-core.md#http-api-模块)。
+> 💡 **实际示例**：system-Core 提供了 **12 个** HTTP API 模块的实际实现，展示了如何使用 HttpApiLoader 自动加载和管理 API。详见 [system-Core 特性文档](system-core.md#http-api-模块)。
 
 ---
 
 ## 核心属性
 
-- `apis: Map<string, apiInstance>`：以 **`resolveCoreModuleKey`** 生成的 key 存储实例——相对 **`core/<coreName>/http/`** 的路径、不含 `.js`（如 `ai-workspace`、`my-api`；子目录则为 `sub/foo`）。**不含** `http/` 前缀。
+- `apis: Map<string, apiInstance>`：以 **`resolveQualifiedCoreModuleKey`** 生成的 key 存储实例——形如 `system-Core/ai-workspace`（`Core名/相对 http/ 路径`，不含 `.js`）。**不含** `http/` 前缀。
 - `priority: apiInstance[]`：按优先级排序后的 API 列表。
 - `_hotReload: HotReloadBase | null`：统一文件监视（见 [infrastructure-shared.md](infrastructure-shared.md)）。
 - `loaded: boolean`：是否已经完成初次加载。
 - `app`：当前 Express 实例。
-- `bot`：当前 Bot 实例。
+- `bot`：当前 AgentRuntime 实例。
 
 ---
 
@@ -55,7 +55,7 @@
 
 ```mermaid
 flowchart TB
-    A["ApiLoader.load"] --> B["扫描core/*/http目录"]
+    A["HttpApiLoader.load"] --> B["扫描core/*/http目录"]
     B --> C["收集.js文件"]
     C --> D["遍历文件"]
     D --> E["loadApi加载"]
@@ -92,12 +92,12 @@ flowchart TB
 
 ```mermaid
 sequenceDiagram
-    participant Bot as Bot.run
-    participant Loader as ApiLoader
+    participant AgentRuntime as AgentRuntime.run
+    participant Loader as HttpApiLoader
     participant Express as Express
     participant API as HttpApi实例
     
-    Bot->>Loader: register(app, bot)
+    AgentRuntime->>Loader: register(app, bot)
     Loader->>Loader: 保存引用
     Loader->>Express: 注册全局中间件
     loop 按优先级遍历API
@@ -105,18 +105,18 @@ sequenceDiagram
         alt API有效且启用
             Loader->>API: api.init(app, bot)
             API->>Express: 注册HTTP路由
-            API->>Bot: 注册WebSocket
+            API->>AgentRuntime: 注册WebSocket
             API->>API: 执行initHook
         end
     end
     Loader->>Express: 添加404处理
-    Loader-->>Bot: 注册完成
+    Loader-->>AgentRuntime: 注册完成
 ```
 
 **步骤说明**：
 
 1. **保存引用**：保存 `app` 与 `bot` 引用到 `this.app` 和 `this.bot`
-2. **注册全局中间件**：注入 `req.bot = bot` 和 `req.apiLoader = this`
+2. **注册全局中间件**：注入 `req.agentRuntime = bot` 和 `req.apiLoader = this`
 3. **按优先级初始化**：遍历 `this.priority`（已按优先级降序排序）
    - 检查API有效性（是否为对象）
    - 检查启用状态（`api.enable !== false`）
@@ -129,7 +129,7 @@ sequenceDiagram
 - 按优先级降序排序（高优先级在前）
 - 相同优先级按加载顺序
 
-> **重要**：所有 API 路由都会经过 Bot 的认证中间件与通用中间件栈，确保有统一的安全与日志策略。API 不需要自己实现认证逻辑。
+> **重要**：所有 API 路由都会经过 AgentRuntime 的认证中间件与通用中间件栈，确保有统一的安全与日志策略。API 不需要自己实现认证逻辑。
 
 ---
 
@@ -171,7 +171,7 @@ flowchart TB
 - 手动重载单个 API（调试时）
 
 **注意事项**：
-- 旧路由不会自动卸载，通常需要配合 `Bot` 重启或明确设计幂等初始化逻辑
+- 旧路由不会自动卸载，通常需要配合 `AgentRuntime` 重启或明确设计幂等初始化逻辑
 - 重载时确保 `init` 方法是幂等的（多次调用不会产生副作用）
 - 全局中间件需要确保不会重复挂载
 
@@ -261,13 +261,13 @@ flowchart TB
 按 key 返回对应API实例，不存在则返回 `null`。
 
 **参数**：
-- `key`: API 键名（`resolveCoreModuleKey` 结果，如 `ai-workspace` 或嵌套 `example/ping`；勿加 `http/` 前缀）
+- `key`: API 键名（`resolveQualifiedCoreModuleKey` 结果，如 `system-Core/ai-workspace` 或嵌套 `system-Core/example/ping`；勿加 `http/` 前缀）
 
 **返回值**：`HttpApi` 实例或 `null`
 
 **使用示例**：
 ```javascript
-const api = ApiLoader.getApi('example/ping');
+const api = HttpApiLoader.getApi('example/ping');
 if (api) {
   const info = api.getInfo();
   console.log('API信息:', info);
@@ -282,7 +282,7 @@ if (api) {
 
 1. **创建文件**：在任意 `core/*/http` 目录下创建新的 `.js` 文件（如 `core/my-core/http/my-api.js`）
 2. **导出配置**：按 [HTTP API 基类文档](http-api.md) 中的推荐方式导出 `default`
-3. **自动加载**：`ApiLoader` 会在启动或文件变更时自动加载  
+3. **自动加载**：`HttpApiLoader` 会在启动或文件变更时自动加载  
 4. **开发约定**：鉴权、响应格式、错误处理、参数校验等请遵循 [http-api.md - HTTP 业务层开发建议](http-api.md#http-业务层开发建议)
 
 **示例**：
@@ -310,7 +310,7 @@ export default {
    - 检查路径是否正确（注意大小写）
 
 4. **检查中间件**：
-   - 确认是否被Bot中间件拦截
+   - 确认是否被AgentRuntime中间件拦截
    - 检查认证是否通过
 
 ### 热更新注意事项
@@ -329,10 +329,10 @@ export default {
 
 ### 与工作流系统集成
 
-API可以通过 `StreamLoader` 调用工作流系统：
+API可以通过 `AiStreamLoader` 调用工作流系统：
 
 ```javascript
-import StreamLoader from '#infrastructure/aistream/loader.js';
+import AiStreamLoader from '#infrastructure/ai-workflow/loader.js';
 
 export default {
   name: 'ai-api',
@@ -341,7 +341,7 @@ export default {
       method: 'POST',
       path: '/api/ai/chat', // 自定义 Core 示例路径；内置 AI 见 ai.js（/api/v3/chat/completions 等）
       handler: async (req, res, bot) => {
-        const stream = StreamLoader.getStream('chat');
+        const stream = AiStreamLoader.getStream('chat');
         if (!stream) {
           return res.status(404).json({ success: false, message: '工作流未找到' });
         }

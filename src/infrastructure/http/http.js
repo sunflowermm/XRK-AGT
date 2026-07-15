@@ -1,4 +1,4 @@
-import BotUtil from "#utils/botutil.js";
+import RuntimeUtil from "#utils/runtime-util.js";
 import { HttpResponse } from '#utils/http-utils.js';
 import { ensureSystemCoreAuth } from './auth.js';
 
@@ -48,13 +48,13 @@ export default class HttpApi {
       const { method, path, handler, middleware = [] } = route;
       
       if (!method || !path || !handler) {
-        BotUtil.makeLog('warn', `[HttpApi] ${this.name} 路由配置不完整: method=${method}, path=${path}`, 'HttpApi');
+        RuntimeUtil.makeLog('warn', `[HttpApi] ${this.name} 路由配置不完整: method=${method}, path=${path}`, 'HttpApi');
         continue;
       }
       
       const lowerMethod = method.toLowerCase();
       if (typeof app[lowerMethod] !== 'function') {
-        BotUtil.makeLog('error', `[HttpApi] ${this.name} 不支持的HTTP方法: ${method}`, 'HttpApi');
+        RuntimeUtil.makeLog('error', `[HttpApi] ${this.name} 不支持的HTTP方法: ${method}`, 'HttpApi');
         continue;
       }
       
@@ -88,7 +88,7 @@ export default class HttpApi {
       if (res.headersSent) return;
       
       try {
-        req.bot = bot;
+        req.agentRuntime = bot;
         req.api = this;
         if (route.systemAuth) {
           const ctx = typeof route.systemAuth === 'string' ? route.systemAuth : this.name;
@@ -100,7 +100,7 @@ export default class HttpApi {
         if (!res.headersSent) {
           HttpResponse.error(res, error, 500, `${this.name}.route`);
         } else {
-          BotUtil.makeLog('error', `[HttpApi] ${this.name} 处理请求失败: ${error.message}`, 'HttpApi', error);
+          RuntimeUtil.makeLog('error', `[HttpApi] ${this.name} 处理请求失败: ${error.message}`, 'HttpApi', error);
         }
       }
     };
@@ -133,7 +133,7 @@ export default class HttpApi {
             try {
               rawHandler(conn, req, bot, socket, head);
             } catch (error) {
-              BotUtil.makeLog('error', `[HttpApi] ${this.name} WebSocket处理失败: ${error.message}`, 'HttpApi', error);
+              RuntimeUtil.makeLog('error', `[HttpApi] ${this.name} WebSocket处理失败: ${error.message}`, 'HttpApi', error);
             }
           };
           wrapped.__ownerKey = ownerKey;
@@ -186,21 +186,21 @@ export default class HttpApi {
 
   start() {
     this.enable = true;
-    BotUtil.makeLog('info', `[HttpApi] ${this.name} 已启用`, 'HttpApi');
+    RuntimeUtil.makeLog('info', `[HttpApi] ${this.name} 已启用`, 'HttpApi');
   }
   
   stop() {
     this._disposeWebSocketHandlers();
     this.enable = false;
-    BotUtil.makeLog('info', `[HttpApi] ${this.name} 已停用`, 'HttpApi');
+    RuntimeUtil.makeLog('info', `[HttpApi] ${this.name} 已停用`, 'HttpApi');
   }
   
   async reload(app, bot) {
-    BotUtil.makeLog('info', `[HttpApi] ${this.name} 开始重载`, 'HttpApi');
+    RuntimeUtil.makeLog('info', `[HttpApi] ${this.name} 开始重载`, 'HttpApi');
     this.stop();
     await this.init(app, bot);
     this.start();
-    BotUtil.makeLog('info', `[HttpApi] ${this.name} 重载完成`, 'HttpApi');
+    RuntimeUtil.makeLog('info', `[HttpApi] ${this.name} 重载完成`, 'HttpApi');
   }
 }
 

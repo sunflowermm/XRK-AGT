@@ -13,6 +13,6 @@ export default BaseFactory.createMediaFactoryClass({
   disabledMessage: 'ASR未启用',
   unsupportedMessage: (provider) => `不支持的ASR提供商: ${provider}`,
   providers: new Map([
-    ['volcengine', (deviceId, config, Bot) => new VolcengineASRClient(deviceId, config, Bot)]
+    ['volcengine', (deviceId, config, AgentRuntime) => new VolcengineASRClient(deviceId, config, AgentRuntime)]
   ])
 });

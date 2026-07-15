@@ -182,12 +182,12 @@ export function selectAPI(app, apiId, options = {}) {
         <h3 class="api-form-section-title">路径参数</h3>
         ${pathParams
           .map((p) => {
-            const cfg = api.pathParams[p] ?? {};
+            const runtimeConfig = api.pathParams[p] ?? {};
             return `<div class="form-group">
-            <label class="form-label">${app.escapeHtml(cfg.label || p)} <span style="color:var(--danger)">*</span></label>
+            <label class="form-label">${app.escapeHtml(runtimeConfig.label || p)} <span style="color:var(--danger)">*</span></label>
             <input type="text" class="form-input" id="path_${app.escapeHtml(
               p
-            )}" placeholder="${app.escapeHtml(cfg.placeholder ?? '')}" data-request-field="1">
+            )}" placeholder="${app.escapeHtml(runtimeConfig.placeholder ?? '')}" data-request-field="1">
           </div>`;
           })
           .join('')}

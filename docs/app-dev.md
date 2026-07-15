@@ -1,21 +1,21 @@
 # 应用 & 前后端开发总览
 
-> **文件位置**：`core/system-Core/www/xrk/`、`start.js` 菜单后的 Bot 运行时  
+> **文件位置**：`core/system-Core/www/xrk/`、`start.js` 菜单后的 AgentRuntime 运行时  
 > **启动链**（bootstrap、环境变量、Playwright）：见 **[startup.md](startup.md)** — 本文不重复引导细节。
 
-本篇说明 Web 控制台、前后端协作、`cfg` 配置体系，以及插件 / 工作流 / HTTP API 的整合方式。
+本篇说明 Web 控制台、前后端协作、`runtimeConfig` 配置体系，以及插件 / 工作流 / HTTP API 的整合方式。
 
 ### 核心特性
 
 - ✅ **Web 控制台**：系统状态、API 调试、配置管理（`/xrk/`）
 - ✅ **技术栈整合**：插件 + 工作流 + HTTP API + 渲染器 + 配置 + 事件
-- ✅ **前后端分离**：前端经 HTTP API 与 `Bot` 交互
+- ✅ **前后端分离**：前端经 HTTP API 与 `AgentRuntime` 交互
 
 ---
 
 ## 📚 目录
 
-- [配置系统（cfg 对象）](#配置系统cfg-对象)
+- [配置系统（runtimeConfig 对象）](#配置系统runtimeConfig-对象)
 - [Web 控制台与 API 交互](#web-控制台coresystem-corewwwxrk-与-api-交互)
 - [典型开发场景](#典型开发场景)
 - [建议的前后端协作模式](#建议的前后端协作模式)
@@ -24,9 +24,9 @@
 
 ---
 
-## 配置系统（cfg 对象）
+## 配置系统（runtimeConfig 对象）
 
-XRK-AGT 的配置系统采用**全局配置 + 端口配置**的分离设计，通过 `cfg` 对象统一管理。
+XRK-AGT 的配置系统采用**全局配置 + 端口配置**的分离设计，通过 `runtimeConfig` 对象统一管理。
 
 ### 配置架构
 
@@ -55,7 +55,7 @@ flowchart TB
         S6["其他工厂配置..."]
     end
 
-    subgraph Cfg["cfg 对象 · import cfg"]
+    subgraph Cfg["runtimeConfig 对象 · import runtimeConfig"]
         C1["getGlobalConfig"]
         C2["getServerConfig"]
         C3["快捷访问器"]
@@ -67,13 +67,13 @@ flowchart TB
     Server --> C2
     C1 --> C3
     C2 --> C3
-    C3 --> Bot["Bot.run · cfg 就绪"]
+    C3 --> AgentRuntime["AgentRuntime.run · runtimeConfig 就绪"]
 
     style Default fill:#E6F3FF
     style Global fill:#E8F5E9
     style Server fill:#FFF3E0
     style Cfg fill:#FFF9C4
-    style Bot fill:#E3F2FD
+    style AgentRuntime fill:#E3F2FD
     style pathG fill:#C8E6C9
     style pathS fill:#FFE0B2
 ```
@@ -100,11 +100,11 @@ flowchart TB
 
 ```javascript
 // 通过快捷访问器
-const agtConfig = cfg.agt;
-const redisConfig = cfg.redis;
+const agtConfig = runtimeConfig.agt;
+const redisConfig = runtimeConfig.redis;
 
 // 或通过方法
-const deviceConfig = cfg.getGlobalConfig('device');
+const deviceConfig = runtimeConfig.getGlobalConfig('device');
 ```
 
 #### 2. 端口配置（随端口变化）
@@ -126,27 +126,27 @@ const deviceConfig = cfg.getGlobalConfig('device');
 
 ```javascript
 // 通过快捷访问器
-const serverConfig = cfg.server;
-const chatbotConfig = cfg.chatbot;
+const serverConfig = runtimeConfig.server;
+const chatbotConfig = runtimeConfig.chatbot;
 
 // 或通过方法
-const groupConfig = cfg.getServerConfig('group');
+const groupConfig = runtimeConfig.getServerConfig('group');
 ```
 
-### cfg 对象 API
+### runtimeConfig 对象 API
 
 #### 核心方法
 
 
 | 方法                        | 说明           | 示例                                                         |
 | ------------------------- | ------------ | ---------------------------------------------------------- |
-| `getGlobalConfig(name)`   | 获取全局配置       | `cfg.getGlobalConfig('agt')`                               |
-| `getServerConfig(name)`   | 获取端口配置       | `cfg.getServerConfig('server')`                            |
-| `getConfig(name)`         | 自动判断全局/端口配置  | `cfg.getConfig('agt')` → 全局 `cfg.getConfig('server')` → 端口 |
-| `setConfig(name, data)`   | 保存配置（自动判断类型） | `cfg.setConfig('server', {...})`                           |
+| `getGlobalConfig(name)`   | 获取全局配置       | `runtimeConfig.getGlobalConfig('agt')`                               |
+| `getServerConfig(name)`   | 获取端口配置       | `runtimeConfig.getServerConfig('server')`                            |
+| `getConfig(name)`         | 自动判断全局/端口配置  | `runtimeConfig.getConfig('agt')` → 全局 `runtimeConfig.getConfig('server')` → 端口 |
+| `setConfig(name, data)`   | 保存配置（自动判断类型） | `runtimeConfig.setConfig('server', {...})`                           |
 | `getConfigDir()`          | 获取当前端口配置目录   | `data/server_bots/8080`                                    |
 | `getGlobalConfigDir()`    | 获取全局配置目录     | `data/server_bots`                                         |
-| `getRendererConfig(type)` | 获取渲染器配置      | `cfg.getRendererConfig('puppeteer')`                       |
+| `getRendererConfig(type)` | 获取渲染器配置      | `runtimeConfig.getRendererConfig('puppeteer')`                       |
 | `watch(file, name, key)`  | 监听配置变更       | 自动调用，无需手动使用                                                |
 
 
@@ -154,46 +154,46 @@ const groupConfig = cfg.getServerConfig('group');
 
 **全局配置访问器**：
 
-- `cfg.agt` - AGT 配置
-- `cfg.device` - 设备配置
-- `cfg.monitor` - 监控配置
-- `cfg.notice` - 通知配置
-- `cfg.redis` - Redis 配置
+- `runtimeConfig.agt` - AGT 配置
+- `runtimeConfig.device` - 设备配置
+- `runtimeConfig.monitor` - 监控配置
+- `runtimeConfig.notice` - 通知配置
+- `runtimeConfig.redis` - Redis 配置
 
 **端口配置访问器**：
 
-- `cfg.aistream` - AI 工作流与工厂默认提供商等（`getServerConfig('aistream')`，文件在端口目录）
-- `cfg.server` - 服务器配置
-- `cfg.chatbot` - 聊天机器人配置
-- `cfg.group` - 群组配置
-- `cfg.volcengine_llm` - 火山引擎 LLM 配置
-- `cfg.renderer` - 渲染器配置（合并 puppeteer + playwright）
+- `runtimeConfig.aistream` - AI 工作流与工厂默认提供商等（`getServerConfig('aistream')`，文件在端口目录）
+- `runtimeConfig.server` - 服务器配置
+- `runtimeConfig.chatbot` - 聊天机器人配置
+- `runtimeConfig.group` - 群组配置
+- `runtimeConfig.volcengine_llm` - 火山引擎 LLM 配置
+- `runtimeConfig.renderer` - 渲染器配置（合并 puppeteer + playwright）
 
 **便捷方法**：
 
-- `cfg.masterQQ` - 获取主人 QQ 号列表
-- `cfg.master` - 获取主人映射对象
-- `cfg.getGroup(groupId)` - 获取群组配置
-- `cfg.port` - 获取当前端口号（只读）
+- `runtimeConfig.masterQQ` - 获取主人 QQ 号列表
+- `runtimeConfig.master` - 获取主人映射对象
+- `runtimeConfig.getGroup(groupId)` - 获取群组配置
+- `runtimeConfig.port` - 获取当前端口号（只读）
 
 ### 配置加载流程
 
 ```mermaid
 sequenceDiagram
-    participant Bot as Bot.run()
-    participant Cfg as cfg 对象
+    participant AgentRuntime as AgentRuntime.run()
+    participant Cfg as runtimeConfig 对象
     participant File as 文件系统
     
-    Bot->>Cfg: 初始化（读取端口参数）
+    AgentRuntime->>Cfg: 初始化（读取端口参数）
     Cfg->>File: 检查全局配置目录
     Cfg->>File: 检查端口配置目录
     File-->>Cfg: 目录不存在，创建并复制默认配置
-    Bot->>Cfg: 访问 cfg.server
+    AgentRuntime->>Cfg: 访问 runtimeConfig.server
     Cfg->>File: 读取 data/server_bots/{port}/server.yaml
     File-->>Cfg: 返回配置内容
     Cfg->>Cfg: 缓存到内存
-    Cfg-->>Bot: 返回配置对象
-    Bot->>Bot: 使用配置启动服务
+    Cfg-->>AgentRuntime: 返回配置对象
+    AgentRuntime->>AgentRuntime: 使用配置启动服务
 ```
 
 
@@ -202,22 +202,22 @@ sequenceDiagram
 
 ```javascript
 // 在插件中使用配置
-export default class MyPlugin extends plugin {
+export default class MyPlugin extends PluginBase {
   constructor() {
     super({ name: '示例插件' });
   }
   
   async onMessage(e) {
     // 读取端口配置
-    const serverConfig = cfg.server;
-    const chatbotConfig = cfg.chatbot;
+    const serverConfig = runtimeConfig.server;
+    const chatbotConfig = runtimeConfig.chatbot;
     
     // 读取全局配置
-    const redisConfig = cfg.redis;
-    const aistreamConfig = cfg.aistream;
+    const redisConfig = runtimeConfig.redis;
+    const aistreamConfig = runtimeConfig.aistream;
     
     // 读取群组配置
-    const groupConfig = cfg.getGroup(e.group_id);
+    const groupConfig = runtimeConfig.getGroup(e.group_id);
     
     // 使用配置
     if (groupConfig.enabled) {
@@ -234,7 +234,7 @@ export default {
     path: '/api/config/server',
     handler: async (req, res) => {
       // 读取配置
-      const serverConfig = cfg.server;
+      const serverConfig = runtimeConfig.server;
       res.json({ success: true, data: serverConfig });
     }
   }, {
@@ -242,7 +242,7 @@ export default {
     path: '/api/config/server',
     handler: async (req, res) => {
       // 保存配置
-      const success = cfg.setConfig('server', req.body);
+      const success = runtimeConfig.setConfig('server', req.body);
       res.json({ success, message: success ? '保存成功' : '保存失败' });
     }
   }]
@@ -290,15 +290,15 @@ export default {
 sequenceDiagram
     participant FE as 前端<br/>Web控制台
     participant API as HTTP API<br/>core/*/http
-    participant Bot as Bot实例
-    participant Cfg as cfg对象
+    participant AgentRuntime as AgentRuntime实例
+    participant Cfg as runtimeConfig对象
 
     Note over FE,Cfg: 读取系统状态
     FE->>API: GET /api/system/status
-    API->>Bot: 获取运行信息
+    API->>AgentRuntime: 获取运行信息
     API->>Cfg: 读取 server/monitor 配置
     Cfg-->>API: 返回配置数据
-    Bot-->>API: 返回运行信息
+    AgentRuntime-->>API: 返回运行信息
     API-->>FE: 返回状态数据(JSON)
 
     Note over FE,Cfg: 保存配置
@@ -313,7 +313,7 @@ sequenceDiagram
 
 前端开发者需要关注：
 
-- 所有可调用的 API 列表，可以通过 `/api/...` 中某个「API 列表接口」获取（例如 `ApiLoader.getApiList()` 暴露的接口）。
+- 所有可调用的 API 列表，可以通过 `/api/...` 中某个「API 列表接口」获取（例如 `HttpApiLoader.getApiList()` 暴露的接口）。
 - XRK-AGT 采用常规的 REST + JSON 交互模式，支持跨域配置与 API-Key 认证。
 
 ---
@@ -324,11 +324,11 @@ sequenceDiagram
 
 ```mermaid
 flowchart TB
-    A[1. 创建API文件<br/>core/*/http/config-manager.js] --> B[2. 使用cfg对象或ConfigBase<br/>读写配置]
+    A[1. 创建API文件<br/>core/*/http/config-manager.js] --> B[2. 使用runtimeConfig对象或ConfigBase<br/>读写配置]
     B --> C[3. 前端注册路由<br/>core/system-Core/www/xrk/app.js]
     C --> D[4. 使用fetch调用API]
     D --> E[5. 渲染表单并提交]
-    E --> F(6. API保存配置<br/>cfg.setConfig)
+    E --> F(6. API保存配置<br/>runtimeConfig.setConfig)
 
     style A fill:#E6F3FF
     style B fill:#FFE6CC
@@ -349,16 +349,16 @@ flowchart TB
 sequenceDiagram
     participant FE as 前端页面
     participant API as HTTP API
-    participant Bot as Bot实例
+    participant AgentRuntime as AgentRuntime实例
     participant Plugin as 插件
     
     FE->>API: POST /api/plugins/run-task
     API->>API: 构造事件对象 e
-    API->>Bot: 触发事件或调用插件方法
-    Bot->>Plugin: 执行插件业务逻辑
+    API->>AgentRuntime: 触发事件或调用插件方法
+    AgentRuntime->>Plugin: 执行插件业务逻辑
     Plugin->>Plugin: 处理消息/调用工作流
-    Plugin-->>Bot: 返回处理结果
-    Bot-->>API: 返回结果数据
+    Plugin-->>AgentRuntime: 返回处理结果
+    AgentRuntime-->>API: 返回结果数据
     API-->>FE: 返回 JSON 响应
 ```
 
@@ -397,7 +397,7 @@ flowchart TB
 
 ## 建议的前后端协作模式
 
-- **后端优先提供清晰的 API 文档**：基于 `HttpApi.getInfo()` 和 `ApiLoader.getApiList()` 生成接口列表，前端直接复用。
+- **后端优先提供清晰的 API 文档**：基于 `HttpApi.getInfo()` 和 `HttpApiLoader.getApiList()` 生成接口列表，前端直接复用。
 - **统一使用 JSON 结构**：所有接口尽量遵循 `{ success, data, message }` 结构，简化前端错误处理。
 - **通过 ConfigBase 提供「结构化配置」**：前端不直接操作 YAML，而是通过字段定义自动生成表单。
 - **渲染输出统一走 Renderer**：无论是截图、报表、预览，尽量经由 `Renderer` 管理模板与静态资源，保持一致的目录结构。
@@ -433,7 +433,7 @@ flowchart TB
         end
         
         subgraph Workflow["工作流系统"]
-            W1[AIStream基类<br/>core/*/stream]
+            W1[AiWorkflow基类<br/>core/*/stream]
             W2[函数调用<br/>Function Calling]
             W3[上下文增强<br/>RAG流程]
             W4[记忆系统<br/>Redis存储]
@@ -442,7 +442,7 @@ flowchart TB
         subgraph Infrastructure["基础设施层"]
             I1[配置系统<br/>Cfg/ConfigBase]
             I2[渲染器<br/>Renderer]
-            I3[事件系统<br/>Bot.em]
+            I3[事件系统<br/>AgentRuntime.em]
             I4[Tasker<br/>协议适配器]
         end
     end
@@ -487,7 +487,7 @@ flowchart TB
 
 ```javascript
 // 1. 创建插件（core/my-core/plugin/chat.js）
-export default class ChatPlugin extends plugin {
+export default class ChatPlugin extends PluginBase {
   constructor() {
     super({
       name: '聊天插件',
@@ -519,7 +519,7 @@ export default class ChatPlugin extends plugin {
 
 ```javascript
 // 1. 创建插件（core/my-core/plugin/assistant.js）
-export default class AssistantPlugin extends plugin {
+export default class AssistantPlugin extends PluginBase {
   constructor() {
     super({
       name: '智能助手',
@@ -559,7 +559,7 @@ export default class AssistantPlugin extends plugin {
 
 ```javascript
 // 1. 创建HTTP API（core/my-core/http/ai-chat.js）
-import StreamLoader from '#infrastructure/aistream/loader.js';
+import AiStreamLoader from '#infrastructure/ai-workflow/loader.js';
 
 export default {
   name: 'ai-chat-api',
@@ -570,7 +570,7 @@ export default {
       path: '/api/ai/chat',
       handler: async (req, res, bot) => {
         const { message, streamName = 'chat' } = req.body;
-        const stream = StreamLoader.getStream(streamName);
+        const stream = AiStreamLoader.getStream(streamName);
         
         if (!stream) {
           return res.status(404).json({
@@ -624,7 +624,7 @@ async function sendMessage(message) {
 
 ```javascript
 // 1. 创建插件（core/my-core/plugin/report.js）
-export default class ReportPlugin extends plugin {
+export default class ReportPlugin extends PluginBase {
   constructor() {
     super({
       name: '报表生成',
@@ -662,7 +662,7 @@ export default {
       method: 'GET',
       path: '/api/report/generate',
       handler: async (req, res, bot) => {
-        const type = bot.cfg?.agt?.browser?.renderer || 'playwright';
+        const type = bot.runtimeConfig?.agt?.browser?.renderer || 'playwright';
         const renderer = bot.renderer?.[type];
         if (!renderer) {
           return res.status(503).json({
@@ -697,7 +697,7 @@ export default {
 
 ```javascript
 // 1. 创建跨平台插件（core/my-core/plugin/unified.js）
-export default class UnifiedPlugin extends plugin {
+export default class UnifiedPlugin extends PluginBase {
   constructor() {
     super({
       name: '统一处理',
@@ -717,7 +717,7 @@ export default class UnifiedPlugin extends plugin {
     });
     
     // 记录跨平台日志
-    BotUtil.makeLog('info', 
+    RuntimeUtil.makeLog('info', 
       `[${source}] 用户 ${e.user_id}: ${e.msg}`, 
       'UnifiedPlugin'
     );
@@ -738,7 +738,7 @@ export default class UnifiedPlugin extends plugin {
 | **数据可视化** | 插件 + 工作流 + 渲染器        | `Renderer` + 模板系统                 |
 | **多平台**   | Tasker + 插件 + 事件系统    | 通用事件监听                            |
 | **配置管理**  | HTTP API + ConfigBase | 动态表单生成                            |
-| **实时通信**  | WebSocket + 事件系统      | `Bot.em` + 事件订阅                   |
+| **实时通信**  | WebSocket + 事件系统      | `AgentRuntime.em` + 事件订阅                   |
 
 
 ### 开发流程建议
@@ -792,7 +792,7 @@ flowchart TB
 - **[PROJECT_OVERVIEW.md](../PROJECT_OVERVIEW.md)**：目录树
 - **[system-Core 特性](system-core.md)**：Web 控制台与内置 API/工作流 ⭐
 - **[框架可扩展性指南](框架可扩展性指南.md)**：扩展点与 Core 开发
-- **[aistream.md](aistream.md)** · **[plugin-base.md](plugin-base.md)** · **[bot.md](bot.md)** · **[http-api.md](http-api.md)** · **[config-base.md](config-base.md)** · **[renderer.md](renderer.md)**
+- **[aistream.md](aistream.md)** · **[plugin-base.md](plugin-base.md)** · **[agent-runtime.md](agent-runtime.md)** · **[http-api.md](http-api.md)** · **[config-base.md](config-base.md)** · **[renderer.md](renderer.md)**
 
 ---
 

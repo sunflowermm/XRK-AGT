@@ -1,4 +1,4 @@
-import cfg from '#infrastructure/config/config.js';
+import runtimeConfig from '#infrastructure/config/config.js';
 import { ProxyAgent } from 'undici';
 
 function sleep(ms) {
@@ -13,7 +13,7 @@ function normalizeTimeoutMs(v, fallback) {
 
 function getDefaultProxyUrl() {
   // 约定：优先读取 server.yaml 的 outbound.proxy；未配置则不启用
-  const p = cfg?.server?.outbound?.proxy;
+  const p = runtimeConfig?.server?.outbound?.proxy;
   return typeof p === 'string' && p.trim() ? p.trim() : null;
 }
 

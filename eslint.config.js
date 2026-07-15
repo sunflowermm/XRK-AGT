@@ -64,9 +64,10 @@ export default [
       ecmaVersion: 'latest',
       sourceType: 'module',
       globals: {
-        Bot: 'readonly',
+        AgentRuntime: 'readonly',
         logger: 'readonly',
-        plugin: 'readonly',
+        PluginBase: 'readonly',
+        msgSegment: 'readonly',
         Renderer: 'readonly',
         redis: 'readonly'
       }

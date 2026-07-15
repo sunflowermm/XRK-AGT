@@ -2,7 +2,7 @@
 
 | 项 | 说明 |
 |----|------|
-| **源码** | `src/infrastructure/plugins/plugin.js` |
+| **源码** | `src/infrastructure/plugins/plugin-base.js` |
 | **加载器** | `src/infrastructure/plugins/loader.js` → [plugins-loader.md](plugins-loader.md) |
 | **放置位置** | `core/<core名>/plugin/*.js`（自动扫描，零配置） |
 | **扩展总览** | [框架可扩展性指南](框架可扩展性指南.md) |
@@ -31,14 +31,14 @@
 
 ![插件事件链路导读](../resources/mdimg/docs/plugin-event-pipeline.png)
 
-插件处于事件中心：Tasker → 监听器 → `PluginsLoader.deal(e)` → `accept` / `rule` / 工作流。Loader 细节见 [plugins-loader.md](plugins-loader.md)。
+插件处于事件中心：Tasker → 监听器 → `PluginLoader.deal(e)` → `accept` / `rule` / 工作流。Loader 细节见 [plugins-loader.md](plugins-loader.md)。
 
 **职责边界**
 
 | 组件 | 职责 |
 |------|------|
 | `plugin` | 单个插件的结构与行为（规则、上下文、回复、工作流） |
-| `PluginsLoader` | 加载、排序、冷却/节流、定时任务、事件历史 |
+| `PluginLoader` | 加载、排序、冷却/节流、定时任务、事件历史 |
 | HTTP / Web 控制台 | 入口与管理界面，**不承载**消息业务逻辑 |
 
 业务层优先「**插件 + 工作流**」；详见 [system-core.md](system-core.md) 业务层章节。
@@ -88,15 +88,15 @@ classDiagram
         +Object bot
     }
 
-    class AIStream {
+    class AiWorkflow {
         +process(e, msg, options)
     }
 
     plugin --> EventObject : 运行时注入 e
-    plugin --> AIStream : getStream
+    plugin --> AiWorkflow : getStream
 
     note for plugin "⚠️ 勿在 constructor 内定义可变状态<br/>用类字段、模块变量或 init()"
-    note for EventObject "由 PluginsLoader.initPlugins 注入"
+    note for EventObject "由 PluginLoader.initPlugins 注入"
 ```
 
 ### `super({ ... })` 字段
@@ -120,7 +120,7 @@ classDiagram
 |------|------|
 | `this.e` | 当前事件；方法执行时由加载器注入 |
 | `this.reply()` | 优先 `e.reply`，否则 `bot.sendMsg` / tasker |
-| `this.getStream()` | 访问已加载的 `AIStream` 工作流 |
+| `this.getStream()` | 访问已加载的 `AiWorkflow` 工作流 |
 
 工作流 `process()` 内部通常已发送回复，插件侧**一般无需再 `reply()`**。
 
@@ -265,7 +265,7 @@ async chat(e) {
 | `'return'` | 停止整条插件链 |
 
 ```javascript
-export default class OneBotEnhancer extends plugin {
+export default class OneBotEnhancer extends PluginBase {
   constructor() {
     super({ name: 'OneBot增强', event: 'onebot.*', priority: 1, rule: [] });
   }
@@ -301,10 +301,10 @@ export default class OneBotEnhancer extends plugin {
 
 ```javascript
 // ✅ 模块级配置
-const cfg = { path: './data/x.json' };
+const runtimeConfig = { path: './data/x.json' };
 
 // ✅ 类字段（勿在 constructor 里 new Map/{}）
-export default class MyPlugin extends plugin {
+export default class MyPlugin extends PluginBase {
   counter = 0;
 
   async init() {
@@ -329,15 +329,15 @@ export default class MyPlugin extends plugin {
 - [ ] `name` / `dsc` 可读，高频规则设 `log: false`
 - [ ] 多轮对话结束后调用 `finish`
 - [ ] 工作流调用包 `try/catch`，避免吞错
-- [ ] 使用 `#` 别名导入，勿 `import { segment } from '#oicq'`（用全局 `segment`）
+- [ ] 消息段用裸名 `msgSegment`
 - [ ] 业务只放 `core/`，勿写入 `src/`
 
 ### 系统集成
 
 | 能力 | 访问方式 |
 |------|----------|
-| 子 Bot | `e.bot`、`Bot[self_id]` |
-| 全局 Bot | 全局 `Bot` |
+| 子 AgentRuntime | `e.bot`、`AgentRuntime[self_id]` |
+| 全局 AgentRuntime | 全局 `AgentRuntime` |
 | Redis | 全局 `redis`（启动后由 [database.md](database.md) 初始化） |
 | 其它数据库 | 由业务 Core 自行封装（如本地 `mongodb-Core`），非 Runtime 内置 |
 | 配置 | 经 HTTP / `ConfigBase`，勿在插件内直接写 YAML 路径 |

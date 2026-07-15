@@ -6,15 +6,16 @@ alwaysApply: false
 
 # Core 业务代码约定
 
-## 底层与基类
+## 底层与基类（Core 开发者边界）
 
-- **不改底层**：不得修改 `src/infrastructure/`、`src/utils/` 等底层代码。
-- **充分利用底层**：继承基类并按文档实现接口即可；commonconfig 用足 ConfigBase 的 schema、getStructure、read、write、validate，插件/HTTP/工作流用足各自基类能力，不重复实现、不伸手改 src/。
+- **Core 不改 Runtime**：在 `core/` 写业务时，**不得**修改 `src/infrastructure/`、`src/utils/`、`src/factory/` 等 Runtime 代码；缺能力应提 issue 或请框架开发者扩展基类/工具。
+- **框架开发者**：维护 `src/` 与 Loader/工厂/基类时**可以且应当**改 `src/`，并通过 `docs/` 与 commonconfig 暴露给 Core。
+- **充分利用底层**：继承基类并按文档实现接口；commonconfig 用足 ConfigBase；插件/HTTP/工作流用足各自基类能力，不重复造轮、不在 Core 内复制 `src/` 逻辑。
 
 ## 放码位置
 
 - 插件：`core/*/plugin/*.js`；HTTP API：`core/*/http/*.js`；工作流：`core/*/stream/*.js`。各自继承对应基类，行为符合 `docs/` 中对应文档。
-- 基类路径（无 package.json 时用 `#`）：插件 `#infrastructure/plugins/plugin.js`，HTTP `#infrastructure/http/http.js`，工作流 `#infrastructure/aistream/aistream.js`。有 package.json 时改为相对路径至 `src/`（如 `../../../src/infrastructure/...`）。
+- 基类路径（无 package.json 时用 `#`）：插件 `#infrastructure/plugins/plugin-base.js`，HTTP `#infrastructure/http/http.js`，工作流 `#infrastructure/ai-workflow/ai-workflow.js`。有 package.json 时改为相对路径至 `src/`（如 `../../../src/infrastructure/...`）。
 
 ## 导入约定
 
@@ -24,8 +25,8 @@ alwaysApply: false
 ## 编码约定
 
 - constructor 内不定义缓存/状态容器，用类字段或 `init()` 初始化。
-- 插件/事件/Tasker：使用全局 `Bot`、`segment`（不要 import Bot 或 segment）。
-- HTTP handler：使用 `HttpResponse`（`#utils/http-utils.js`）与注入的 `req.bot`。详见 `xrk-dev-requirements.mdc`。
+- 插件/事件/Tasker：使用全局 `AgentRuntime`、`msgSegment`（不要 import AgentRuntime 或 msgSegment）。
+- HTTP handler：使用 `HttpResponse`（`#utils/http-utils.js`）与注入的 `req.agentRuntime`。详见 `xrk-dev-requirements.mdc`。
 
 ## Node 26 运行时（Core 必守）
 

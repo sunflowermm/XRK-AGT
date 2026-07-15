@@ -64,8 +64,8 @@ export function normalizeWorkspaceId(raw) {
 }
 
 export function getConfiguredDefaultWorkspaceId() {
-  const cfg = getAistreamConfigOptional();
-  const raw = cfg?.workspace?.defaultId;
+  const runtimeConfig = getAistreamConfigOptional();
+  const raw = runtimeConfig?.workspace?.defaultId;
   if (raw != null && String(raw).trim() !== '') {
     return normalizeWorkspaceId(raw);
   }
@@ -129,7 +129,7 @@ export function seedWorkspaceFromBundle(workspaceAbs) {
 
 /**
  * 解析 prompt 注入 / 控制台读写用的工作区绝对路径。
- * cfg.root 留空 → data/ai-workspace/{defaultId}；显式路径则相对项目根解析。
+ * runtimeConfig.root 留空 → data/ai-workspace/{defaultId}；显式路径则相对项目根解析。
  */
 export function resolveAgentWorkspaceAbs(cfgRoot = '') {
   if (cfgRoot != null && String(cfgRoot).trim() !== '') {

@@ -1,7 +1,7 @@
 const RESTART_KEY = 'AGT:restart'
 const SHUTDOWN_KEY = 'AGT:shutdown'
 
-export class Restart extends plugin {
+export class Restart extends PluginBase {
   constructor(e = '') {
     super({
       name: '重启与关机',
@@ -21,9 +21,9 @@ export class Restart extends plugin {
     if (Restart._ackDone) return
     Restart._ackDone = true
     const ack = (uid) => uid && Restart._sendRestartAck(uid)
-    Bot.on('device.online', (d) => ack(d?.device_id))
-    Bot.on('ready', (d) => ack(d?.self_id ?? d?.uin))
-    setTimeout(() => (Bot.uin || []).forEach(ack), 5000)
+    AgentRuntime.on('device.online', (d) => ack(d?.device_id))
+    AgentRuntime.on('ready', (d) => ack(d?.self_id ?? d?.uin))
+    setTimeout(() => (AgentRuntime.uin || []).forEach(ack), 5000)
     logger.mark('[重启] 已注册重连/就绪回复耗时')
   }
 
@@ -41,15 +41,15 @@ export class Restart extends plugin {
       if (!raw) return
       const d = JSON.parse(raw)
       const msg = `重启完成，耗时 ${((Date.now() - (d.time || 0)) / 1000).toFixed(1)} 秒`
-      const bot = Bot[uid]
+      const bot = AgentRuntime[uid]
       let sent = false
       if (bot?.reply) {
         sent = await bot.reply(msg).then(() => true).catch(() => false)
       } else if (bot?.sendMsg && (d.tasker === 'device' || !d.id)) {
         sent = await bot.sendMsg(msg).then(() => true).catch(() => false)
-      } else if (d.tasker === 'onebot' && d.id && (d.isGroup ? Bot.sendGroupMsg : Bot.sendFriendMsg)) {
-        if (d.isGroup) await Bot.sendGroupMsg(d.uin, d.id, msg)
-        else await Bot.sendFriendMsg(d.uin, d.id, msg)
+      } else if (d.tasker === 'onebot' && d.id && (d.isGroup ? AgentRuntime.sendGroupMsg : AgentRuntime.sendFriendMsg)) {
+        if (d.isGroup) await AgentRuntime.sendGroupMsg(d.uin, d.id, msg)
+        else await AgentRuntime.sendFriendMsg(d.uin, d.id, msg)
         sent = true
       }
       if (sent) logger.mark(`[重启] 已向 ${uid} 回复耗时`)
@@ -59,7 +59,7 @@ export class Restart extends plugin {
   }
 
   _uin() {
-    return this.e?.self_id || this.e?.bot?.uin || Bot.uin?.[0]
+    return this.e?.self_id || this.e?.bot?.uin || AgentRuntime.uin?.[0]
   }
 
   async restart() {

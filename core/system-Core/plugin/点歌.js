@@ -5,7 +5,7 @@ const SONG_URL_API = 'https://music.163.com/song/media/outer/url'
 const LIMIT = 5
 const HEADERS = { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36', 'Referer': 'https://music.163.com/' }
 
-export class MusicPlugin extends plugin {
+export class MusicPlugin extends PluginBase {
   constructor() {
     super({
       name: '点歌插件',
@@ -59,7 +59,7 @@ export class MusicPlugin extends plugin {
     const song = list[num - 1]
     const artist = song.artists.map(a => a.name).join('、')
     const songUrl = `${SONG_URL_API}?id=${song.id}.mp3`
-    await this.reply([`🎵 ${song.name} - ${artist}`, segment.record(songUrl, song.name)])
+    await this.reply([`🎵 ${song.name} - ${artist}`, msgSegment.record(songUrl, song.name)])
     this.finish('musicChooseContext')
     return true
   }

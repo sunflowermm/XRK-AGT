@@ -6,7 +6,7 @@
 import WebSocket from 'ws';
 import zlib from 'zlib';
 import { v4 as uuidv4 } from 'uuid';
-import BotUtil from '#utils/botutil.js';
+import RuntimeUtil from '#utils/runtime-util.js';
 
 export default class VolcengineASRClient {
     _timeoutEmittedSet = new Set();
@@ -15,12 +15,12 @@ export default class VolcengineASRClient {
      * 构造函数
      * @param {string} deviceId - 设备ID
      * @param {Object} config - ASR配置
-     * @param {Object} Bot - Bot实例
+     * @param {Object} AgentRuntime - AgentRuntime实例
      */
-    constructor(deviceId, config, Bot) {
+    constructor(deviceId, config, AgentRuntime) {
         this.deviceId = deviceId;
         this.config = config;
-        this.Bot = Bot;
+        this.AgentRuntime = AgentRuntime;
         
         // WebSocket相关
         this.ws = null;
@@ -85,7 +85,7 @@ export default class VolcengineASRClient {
             const old = this._timeoutEmittedQueue.shift();
             if (old) this._timeoutEmittedSet.delete(old);
         }
-        this.Bot.em('device.asr_timeout', {
+        this.AgentRuntime.em('device.asr_timeout', {
             post_type: 'device',
             event_type: 'asr_timeout',
             device_id: this.deviceId,
@@ -121,18 +121,18 @@ export default class VolcengineASRClient {
      * @private
      */
     _fullClientRequest(audioInfo) {
-        const cfg = this.config || {};
+        const runtimeConfig = this.config || {};
 
         // 音频参数：以外部传入为主，配置仅作为默认值，字段名对齐火山官方 audio 配置
-        const audioFormat = audioInfo?.format || cfg.format || 'pcm';
-        const audioCodec = audioInfo?.codec || cfg.codec || 'raw';
-        const rate = audioInfo?.rate || cfg.sampleRate || 16000;
-        const bits = audioInfo?.bits || cfg.bits || 16;
-        const channel = audioInfo?.channel || cfg.channel || cfg.channels || 1;
+        const audioFormat = audioInfo?.format || runtimeConfig.format || 'pcm';
+        const audioCodec = audioInfo?.codec || runtimeConfig.codec || 'raw';
+        const rate = audioInfo?.rate || runtimeConfig.sampleRate || 16000;
+        const bits = audioInfo?.bits || runtimeConfig.bits || 16;
+        const channel = audioInfo?.channel || runtimeConfig.channel || runtimeConfig.channels || 1;
         const audioOptions = audioInfo?.audioOptions || {};
 
         // request 参数：允许按会话传入 modelName，其次才用配置
-        const modelName = audioInfo?.modelName || cfg.modelName || 'bigmodel';
+        const modelName = audioInfo?.modelName || runtimeConfig.modelName || 'bigmodel';
         const requestOptions = audioInfo?.requestOptions || {};
 
         const payload = {
@@ -150,15 +150,15 @@ export default class VolcengineASRClient {
             },
             request: {
                 model_name: modelName,
-                enable_itn: cfg.enableItn,
-                enable_punc: cfg.enablePunc,
-                enable_ddc: cfg.enableDdc,
-                show_utterances: cfg.showUtterances,
-                result_type: cfg.resultType,
-                enable_accelerate_text: cfg.enableAccelerateText,
-                accelerate_score: cfg.accelerateScore,
-                end_window_size: cfg.endWindowSize,
-                force_to_speech_time: cfg.forceToSpeechTime,
+                enable_itn: runtimeConfig.enableItn,
+                enable_punc: runtimeConfig.enablePunc,
+                enable_ddc: runtimeConfig.enableDdc,
+                show_utterances: runtimeConfig.showUtterances,
+                result_type: runtimeConfig.resultType,
+                enable_accelerate_text: runtimeConfig.enableAccelerateText,
+                accelerate_score: runtimeConfig.accelerateScore,
+                end_window_size: runtimeConfig.endWindowSize,
+                force_to_speech_time: runtimeConfig.forceToSpeechTime,
                 ...requestOptions
             }
         };
@@ -258,7 +258,7 @@ export default class VolcengineASRClient {
         this._pingTimer = setInterval(() => {
             try {
                 if (this.ws && this.connected) {
-                    BotUtil.makeLog('debug', `[ASR] 发送 Ping`, this.deviceId);
+                    RuntimeUtil.makeLog('debug', `[ASR] 发送 Ping`, this.deviceId);
                     this.ws.ping();
                     this._startPongTimer();
                 }
@@ -286,7 +286,7 @@ export default class VolcengineASRClient {
     _startPongTimer() {
         this._clearPongTimer();
         this._pongTimer = setTimeout(() => {
-            BotUtil.makeLog('warn', `[ASR] Pong超时，断开连接`, this.deviceId);
+            RuntimeUtil.makeLog('warn', `[ASR] Pong超时，断开连接`, this.deviceId);
             if (this.ws) {
                 try {
                     this.ws.terminate();
@@ -350,7 +350,7 @@ export default class VolcengineASRClient {
                         this.lastMessageAt = Date.now();
                         this.reconnectAttempts = 0;
 
-                        BotUtil.makeLog('info', `⚡ [ASR] WebSocket已连接`, this.deviceId);
+                        RuntimeUtil.makeLog('info', `⚡ [ASR] WebSocket已连接`, this.deviceId);
                         this._startPingTimer();
                         resolve();
                     });
@@ -365,7 +365,7 @@ export default class VolcengineASRClient {
 
                         if (!msg) return;
 
-                        BotUtil.makeLog('debug', `[ASR] 收到消息 type=${msg.type} isLast=${msg.isLast ?? '-'}`, this.deviceId);
+                        RuntimeUtil.makeLog('debug', `[ASR] 收到消息 type=${msg.type} isLast=${msg.isLast ?? '-'}`, this.deviceId);
 
                         if (msg.type === 'error') {
                             this._handleError(msg);
@@ -375,7 +375,7 @@ export default class VolcengineASRClient {
                         if (msg.type === 'result') {
                             if (!this.performanceMetrics.firstResultTime && this.performanceMetrics.audioStartTime) {
                                 this.performanceMetrics.firstResultTime = Date.now() - this.performanceMetrics.audioStartTime;
-                                BotUtil.makeLog('info',
+                                RuntimeUtil.makeLog('info',
                                     `⚡ [ASR性能] 首字返回: ${this.performanceMetrics.firstResultTime}ms`,
                                     this.deviceId
                                 );
@@ -386,7 +386,7 @@ export default class VolcengineASRClient {
                             if (msg.isLast) {
                                 if (this.currentUtterance) {
                                     const totalTime = Date.now() - this.performanceMetrics.audioStartTime;
-                                    BotUtil.makeLog('info',
+                                    RuntimeUtil.makeLog('info',
                                         `⚡ [ASR性能] 总处理时间: ${totalTime}ms`,
                                         this.deviceId
                                     );
@@ -404,19 +404,19 @@ export default class VolcengineASRClient {
                     ws.on('pong', () => {
                         this._clearPongTimer();
                         this.lastMessageAt = Date.now();
-                        BotUtil.makeLog('debug', `[ASR] 收到 Pong`, this.deviceId);
+                        RuntimeUtil.makeLog('debug', `[ASR] 收到 Pong`, this.deviceId);
                     });
 
                     ws.on('error', (err) => {
                         clearTimeout(connectTimeout);
 
                         if (err.message.includes('401')) {
-                            BotUtil.makeLog('error',
+                            RuntimeUtil.makeLog('error',
                                 `❌ [ASR] 认证失败(401): 请检查appKey和accessKey`,
                                 this.deviceId
                             );
                         } else {
-                            BotUtil.makeLog('error',
+                            RuntimeUtil.makeLog('error',
                                 `❌ [ASR] WebSocket错误: ${err.message}`,
                                 this.deviceId
                             );
@@ -433,7 +433,7 @@ export default class VolcengineASRClient {
 
                     ws.on('close', (code) => {
                         if (this.ws !== ws) return;
-                        BotUtil.makeLog('info', `✓ [ASR] WebSocket关闭 (code=${code})`, this.deviceId);
+                        RuntimeUtil.makeLog('info', `✓ [ASR] WebSocket关闭 (code=${code})`, this.deviceId);
                         this.connected = false;
                         this.connecting = false;
 
@@ -486,7 +486,7 @@ export default class VolcengineASRClient {
             10000
         );
 
-        BotUtil.makeLog('info',
+        RuntimeUtil.makeLog('info',
             `🔄 [ASR] 将在${delay}ms后重连（第${this.reconnectAttempts}次）`,
             this.deviceId
         );
@@ -494,7 +494,7 @@ export default class VolcengineASRClient {
         setTimeout(() => {
             if (!this.connected && !this.connecting) {
                 this._ensureConnected().catch(e => {
-                    BotUtil.makeLog('error', `❌ [ASR] 重连失败: ${e.message}`, this.deviceId);
+                    RuntimeUtil.makeLog('error', `❌ [ASR] 重连失败: ${e.message}`, this.deviceId);
                 });
             }
         }, delay);
@@ -511,11 +511,11 @@ export default class VolcengineASRClient {
         if (errorCode === 45000081) {
             const idleMs = this.lastMessageAt ? Date.now() - this.lastMessageAt : -1;
             const sessionId = this.currentUtterance?.sessionId ?? null;
-            BotUtil.makeLog('warn', `⚠️ [ASR] 服务器超时，清理状态`, this.deviceId);
-            BotUtil.makeLog('debug', `[ASR] 超时上下文: lastMessageAt距今=${idleMs}ms sessionId=${sessionId} errorMessage=${msg.errorMessage || ''}`, this.deviceId);
+            RuntimeUtil.makeLog('warn', `⚠️ [ASR] 服务器超时，清理状态`, this.deviceId);
+            RuntimeUtil.makeLog('debug', `[ASR] 超时上下文: lastMessageAt距今=${idleMs}ms sessionId=${sessionId} errorMessage=${msg.errorMessage || ''}`, this.deviceId);
             const last = this._lastIntermediateText?.trim();
             if (last && this.currentUtterance) {
-                this.Bot.em('device.asr_result', {
+                this.AgentRuntime.em('device.asr_result', {
                     post_type: 'device',
                     event_type: 'asr_result',
                     device_id: this.deviceId,
@@ -533,7 +533,7 @@ export default class VolcengineASRClient {
         } else if (errorCode === 45000000) {
             this.sequence = 1;
         } else {
-            BotUtil.makeLog('error',
+            RuntimeUtil.makeLog('error',
                 `❌ [ASR错误] ${errorCode}: ${msg.errorMessage}`,
                 this.deviceId
             );
@@ -562,14 +562,14 @@ export default class VolcengineASRClient {
                 else this._lastIntermediateText = '';
 
                 if (isLast) {
-                    BotUtil.makeLog('debug', `[ASR] 最终: "${text}"`, this.deviceId);
+                    RuntimeUtil.makeLog('debug', `[ASR] 最终: "${text}"`, this.deviceId);
                 } else {
-                    BotUtil.makeLog('debug', `[ASR] 中间: "${text}"`, this.deviceId);
+                    RuntimeUtil.makeLog('debug', `[ASR] 中间: "${text}"`, this.deviceId);
                 }
 
                 // 发送事件
-                if (this.Bot[this.deviceId]) {
-                    this.Bot.em('device.asr_result', {
+                if (this.AgentRuntime[this.deviceId]) {
+                    this.AgentRuntime.em('device.asr_result', {
                         post_type: 'device',
                         event_type: 'asr_result',
                         device_id: this.deviceId,
@@ -584,7 +584,7 @@ export default class VolcengineASRClient {
                 }
             }
         } catch (e) {
-            BotUtil.makeLog('error',
+            RuntimeUtil.makeLog('error',
                 `❌ [ASR] 处理结果失败: ${e.message}`,
                 this.deviceId
             );
@@ -600,7 +600,7 @@ export default class VolcengineASRClient {
             this._clearIdleTimer();
             this._idleTimer = setTimeout(() => {
                 if (this.ws && this.connected && !this.currentUtterance) {
-                    BotUtil.makeLog('info', `✓ [ASR] 空闲超时，关闭连接`, this.deviceId);
+                    RuntimeUtil.makeLog('info', `✓ [ASR] 空闲超时，关闭连接`, this.deviceId);
                     this.ws.close();
                 }
             }, this.config.idleCloseMs);
@@ -691,7 +691,7 @@ export default class VolcengineASRClient {
         });
 
         this.ws.send(fullReq);
-        BotUtil.makeLog('info', `⚡ [ASR会话] 开始: ${sessionId}`, this.deviceId);
+        RuntimeUtil.makeLog('info', `⚡ [ASR会话] 开始: ${sessionId}`, this.deviceId);
     }
 
     /**
@@ -710,7 +710,7 @@ export default class VolcengineASRClient {
             this.lastAudioAt = Date.now();
             return true;
         } catch (e) {
-            BotUtil.makeLog('error', `❌ [ASR] 发送音频失败: ${e.message}`, this.deviceId);
+            RuntimeUtil.makeLog('error', `❌ [ASR] 发送音频失败: ${e.message}`, this.deviceId);
             return false;
         }
     }
@@ -735,13 +735,13 @@ export default class VolcengineASRClient {
             this.ws.send(last);
 
             const sessionId = this.currentUtterance.sessionId;
-            BotUtil.makeLog('info', `✓ [ASR会话] 结束: ${sessionId}`, this.deviceId);
+            RuntimeUtil.makeLog('info', `✓ [ASR会话] 结束: ${sessionId}`, this.deviceId);
 
             // endUtterance 发送 end 后，服务端应回一条 isLast=true；
             // 若超时未收到则强制清理并通知上层（默认 8 秒，避免长句/网络抖动导致误判）
             const cleanupTimer = setTimeout(() => {
                 if (this.currentUtterance && this.currentUtterance.sessionId === sessionId) {
-                    BotUtil.makeLog('warn', `[ASR] 会话 ${sessionId} 超时未收到最终结果，强制清理`, this.deviceId);
+                    RuntimeUtil.makeLog('warn', `[ASR] 会话 ${sessionId} 超时未收到最终结果，强制清理`, this.deviceId);
                     if (this.currentUtterance._cleanupTimer) {
                         clearTimeout(this.currentUtterance._cleanupTimer);
                         this.currentUtterance._cleanupTimer = null;
@@ -760,7 +760,7 @@ export default class VolcengineASRClient {
             return true;
 
         } catch (e) {
-            BotUtil.makeLog('error', `❌ [ASR] 结束失败: ${e.message}`, this.deviceId);
+            RuntimeUtil.makeLog('error', `❌ [ASR] 结束失败: ${e.message}`, this.deviceId);
             this.currentUtterance = null;
             this._armIdleTimer();
             return false;

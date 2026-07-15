@@ -18,7 +18,7 @@ function pickOutboundFileRef(data) {
 
 const RICH_MEDIA = new Set(["image", "video", "record"])
 
-Bot.tasker.push(
+AgentRuntime.tasker.push(
   new (class OneBotv11Tasker {
     id = "QQ"
     name = "OneBotv11"
@@ -30,7 +30,7 @@ Bot.tasker.push(
      * 生成日志消息（隐藏base64内容）
      */
     makeLog(msg) {
-      return Bot.String(msg).replace(/base64:\/\/.*?(,|]|")/g, "base64://...$1")
+      return AgentRuntime.String(msg).replace(/base64:\/\/.*?(,|]|")/g, "base64://...$1")
     }
 
     /**
@@ -43,15 +43,15 @@ Bot.tasker.push(
       const cache = Promise.withResolvers()
       this.echo.set(echo, cache)
       const timeout = setTimeout(() => {
-        cache.reject(Bot.makeError("请求超时", request, { timeout: this.timeout }))
-        Bot.makeLog("warn", [`API调用超时: ${action}`, request], data.self_id)
+        cache.reject(AgentRuntime.makeError("请求超时", request, { timeout: this.timeout }))
+        AgentRuntime.makeLog("warn", [`API调用超时: ${action}`, request], data.self_id)
         this.echo.delete(echo)
       }, this.timeout)
 
       return cache.promise
         .then(data => {
           if (data.retcode !== 0 && data.retcode !== 1)
-            throw Bot.makeError(data.msg || data.wording, request, { error: data })
+            throw AgentRuntime.makeError(data.msg || data.wording, request, { error: data })
           return data.data
             ? new Proxy(data, {
               get: (target, prop) => target.data[prop] ?? target[prop],
@@ -59,7 +59,7 @@ Bot.tasker.push(
             : data
         })
         .catch(err => {
-          Bot.makeLog("warn", [`API调用失败: ${action}`, err.message], data.self_id)
+          AgentRuntime.makeLog("warn", [`API调用失败: ${action}`, err.message], data.self_id)
           throw err
         })
         .finally(() => {
@@ -69,7 +69,7 @@ Bot.tasker.push(
     }
 
     async makeFile(file, opts = {}) {
-      file = await Bot.Buffer(file, {
+      file = await AgentRuntime.Buffer(file, {
         http: true,
         size: opts.preferPath ? 1 : 1048576,
         ...opts,
@@ -105,7 +105,7 @@ Bot.tasker.push(
             forward.push(...i.data)
             continue
           case "forward":
-            Bot.makeLog(
+            AgentRuntime.makeLog(
               "warn",
               `忽略无法直接发送的 forward 段 id=${i.data?.id ?? i.data?.message_id ?? "?"}`,
               "OneBotv11",
@@ -153,7 +153,7 @@ Bot.tasker.push(
       return this.sendMsg(
         msg,
         message => {
-          Bot.makeLog(
+          AgentRuntime.makeLog(
             "info",
             `发送好友消息：${this.makeLog(message)}`,
             `${data.self_id} => ${data.user_id}`,
@@ -175,7 +175,7 @@ Bot.tasker.push(
       return this.sendMsg(
         msg,
         message => {
-          Bot.makeLog(
+          AgentRuntime.makeLog(
             "info",
             `发送群消息：${this.makeLog(message)}`,
             `${data.self_id} => ${data.group_id}`,
@@ -195,7 +195,7 @@ Bot.tasker.push(
       const params = data.group_id
         ? { group_id: data.group_id, user_id: target }
         : { user_id: target }
-      Bot.makeLog("info", `发送戳一戳：${user_id}`, data.group_id ? `${data.self_id} => ${data.group_id}` : `${data.self_id} => ${data.user_id}`, true)
+      AgentRuntime.makeLog("info", `发送戳一戳：${user_id}`, data.group_id ? `${data.self_id} => ${data.group_id}` : `${data.self_id} => ${data.user_id}`, true)
       return data.bot.sendApi("send_poke", params)
     }
 
@@ -203,7 +203,7 @@ Bot.tasker.push(
       return this.sendMsg(
         msg,
         message => {
-          Bot.makeLog(
+          AgentRuntime.makeLog(
             "info",
             `发送频道消息：${this.makeLog(message)}`,
             `${data.self_id}] => ${data.guild_id}-${data.channel_id}`,
@@ -215,12 +215,12 @@ Bot.tasker.push(
             message,
           })
         },
-        msg => Bot.sendForwardMsg(msg => this.sendGuildMsg(data, msg), msg),
+        msg => AgentRuntime.sendForwardMsg(msg => this.sendGuildMsg(data, msg), msg),
       )
     }
 
     async recallMsg(data, message_id) {
-      Bot.makeLog("info", `撤回消息：${message_id}`, data.self_id)
+      AgentRuntime.makeLog("info", `撤回消息：${message_id}`, data.self_id)
       if (!Array.isArray(message_id)) message_id = [message_id]
       const msgs = []
       for (const id of message_id) {
@@ -228,7 +228,7 @@ Bot.tasker.push(
           const result = await data.bot.sendApi("delete_msg", { message_id: id })
           msgs.push(result)
         } catch (err) {
-          Bot.makeLog("warn", `撤回消息失败: ${err.message}`, data.self_id)
+          AgentRuntime.makeLog("warn", `撤回消息失败: ${err.message}`, data.self_id)
           msgs.push(null)
         }
       }
@@ -379,7 +379,7 @@ Bot.tasker.push(
     /** 拉取聊天记录，支持多 ID 回退与嵌套展开 */
     async getForwardMsg(data, message_id, depth = 0, altIds = []) {
       if (depth > 8) {
-        Bot.makeLog("warn", "getForwardMsg 嵌套层级过深，已停止展开", data.self_id)
+        AgentRuntime.makeLog("warn", "getForwardMsg 嵌套层级过深，已停止展开", data.self_id)
         return []
       }
 
@@ -439,7 +439,7 @@ Bot.tasker.push(
                 break
               }
             } catch (err) {
-              Bot.makeLog(
+              AgentRuntime.makeLog(
                 "warn",
                 `展开嵌套聊天记录失败 id=${id}: ${err.message}`,
                 data.self_id,
@@ -494,7 +494,7 @@ Bot.tasker.push(
     }
 
     async sendFriendForwardMsg(data, msg) {
-      Bot.makeLog(
+      AgentRuntime.makeLog(
         "info",
         `发送好友转发消息：${this.makeLog(msg)}`,
         `${data.self_id} => ${data.user_id}`,
@@ -507,7 +507,7 @@ Bot.tasker.push(
     }
 
     async sendGroupForwardMsg(data, msg) {
-      Bot.makeLog(
+      AgentRuntime.makeLog(
         "info",
         `发送群转发消息：${this.makeLog(msg)}`,
         `${data.self_id} => ${data.group_id}`,
@@ -524,7 +524,7 @@ Bot.tasker.push(
         const result = await data.bot.sendApi("get_friend_list");
         return result?.data || [];
       } catch (err) {
-        Bot.makeLog("error", `获取好友列表失败: ${err.message}`, data.self_id);
+        AgentRuntime.makeLog("error", `获取好友列表失败: ${err.message}`, data.self_id);
         return [];
       }
     }
@@ -568,7 +568,7 @@ Bot.tasker.push(
         }
         return info;
       } catch (err) {
-        Bot.makeLog("error", `获取好友信息失败: ${err.message}`, data.self_id);
+        AgentRuntime.makeLog("error", `获取好友信息失败: ${err.message}`, data.self_id);
         return null;
       }
     }
@@ -579,7 +579,7 @@ Bot.tasker.push(
         const result = await data.bot.sendApi("get_group_list");
         array = result?.data || [];
       } catch (err) {
-        Bot.makeLog("error", `获取群列表失败: ${err.message}`, data.self_id);
+        AgentRuntime.makeLog("error", `获取群列表失败: ${err.message}`, data.self_id);
         array = [];
       }
 
@@ -651,7 +651,7 @@ Bot.tasker.push(
         }
         return info;
       } catch (err) {
-        Bot.makeLog("error", `获取群信息失败: ${err.message}`, data.self_id);
+        AgentRuntime.makeLog("error", `获取群信息失败: ${err.message}`, data.self_id);
         return null;
       }
     }
@@ -663,7 +663,7 @@ Bot.tasker.push(
         });
         return result?.data || [];
       } catch (err) {
-        Bot.makeLog("error", `获取群成员列表失败: ${err.message}`, data.self_id);
+        AgentRuntime.makeLog("error", `获取群成员列表失败: ${err.message}`, data.self_id);
         return [];
       }
     }
@@ -712,9 +712,9 @@ Bot.tasker.push(
         if (group?.guild) continue;
         try {
           await this.getMemberMap({ ...data, group_id });
-          Bot.makeLog("debug", `已加载群 ${group_id} 的成员列表`, data.self_id);
+          AgentRuntime.makeLog("debug", `已加载群 ${group_id} 的成员列表`, data.self_id);
         } catch (err) {
-          Bot.makeLog("error", `加载群 ${group_id} 成员失败: ${err.message}`, data.self_id);
+          AgentRuntime.makeLog("error", `加载群 ${group_id} 成员失败: ${err.message}`, data.self_id);
         }
       }
 
@@ -746,7 +746,7 @@ Bot.tasker.push(
 
         return info;
       } catch (err) {
-        Bot.makeLog("error", `获取群成员信息失败: ${err.message}`, data.self_id);
+        AgentRuntime.makeLog("error", `获取群成员信息失败: ${err.message}`, data.self_id);
         return null;
       }
     }
@@ -756,7 +756,7 @@ Bot.tasker.push(
         const result = await data.bot.sendApi("get_guild_list");
         return result?.data || [];
       } catch (err) {
-        Bot.makeLog("debug", `获取频道列表失败: ${err.message}`, data.self_id);
+        AgentRuntime.makeLog("debug", `获取频道列表失败: ${err.message}`, data.self_id);
         return [];
       }
     }
@@ -774,7 +774,7 @@ Bot.tasker.push(
         });
         return result?.data || [];
       } catch (err) {
-        Bot.makeLog("debug", `获取子频道列表失败: ${err.message}`, data.self_id);
+        AgentRuntime.makeLog("debug", `获取子频道列表失败: ${err.message}`, data.self_id);
         return [];
       }
     }
@@ -831,7 +831,7 @@ Bot.tasker.push(
           if (list.finished) break;
           next_token = list.next_token;
         } catch (err) {
-          Bot.makeLog("debug", `获取频道成员列表失败: ${err.message}`, data.self_id);
+          AgentRuntime.makeLog("debug", `获取频道成员列表失败: ${err.message}`, data.self_id);
           break;
         }
       }
@@ -876,19 +876,19 @@ Bot.tasker.push(
       });
     }
     setProfile(data, profile) {
-      Bot.makeLog("info", `设置资料：${Bot.String(profile)}`, data.self_id)
+      AgentRuntime.makeLog("info", `设置资料：${AgentRuntime.String(profile)}`, data.self_id)
       return data.bot.sendApi("set_qq_profile", profile)
     }
 
     async setAvatar(data, file) {
-      Bot.makeLog("info", `设置头像：${file}`, data.self_id)
+      AgentRuntime.makeLog("info", `设置头像：${file}`, data.self_id)
       return data.bot.sendApi("set_qq_avatar", {
         file: await this.makeFile(file),
       })
     }
 
     sendLike(data, times) {
-      Bot.makeLog("info", `点赞：${times}次`, `${data.self_id} => ${data.user_id}`, true)
+      AgentRuntime.makeLog("info", `点赞：${times}次`, `${data.self_id} => ${data.user_id}`, true)
       return data.bot.sendApi("send_like", {
         user_id: data.user_id,
         times,
@@ -896,7 +896,7 @@ Bot.tasker.push(
     }
 
     setGroupName(data, group_name) {
-      Bot.makeLog("info", `设置群名：${group_name}`, `${data.self_id} => ${data.group_id}`, true)
+      AgentRuntime.makeLog("info", `设置群名：${group_name}`, `${data.self_id} => ${data.group_id}`, true)
       return data.bot.sendApi("set_group_name", {
         group_id: data.group_id,
         group_name,
@@ -904,7 +904,7 @@ Bot.tasker.push(
     }
 
     async setGroupAvatar(data, file) {
-      Bot.makeLog("info", `设置群头像：${file}`, `${data.self_id} => ${data.group_id}`, true)
+      AgentRuntime.makeLog("info", `设置群头像：${file}`, `${data.self_id} => ${data.group_id}`, true)
       return data.bot.sendApi("set_group_portrait", {
         group_id: data.group_id,
         file: await this.makeFile(file),
@@ -912,7 +912,7 @@ Bot.tasker.push(
     }
 
     setGroupAdmin(data, user_id, enable) {
-      Bot.makeLog(
+      AgentRuntime.makeLog(
         "info",
         `${enable ? "设置" : "取消"}群管理员：${user_id}`,
         `${data.self_id} => ${data.group_id}`,
@@ -926,7 +926,7 @@ Bot.tasker.push(
     }
 
     setGroupCard(data, user_id, card) {
-      Bot.makeLog(
+      AgentRuntime.makeLog(
         "info",
         `设置群名片：${card}`,
         `${data.self_id} => ${data.group_id}, ${user_id}`,
@@ -940,7 +940,7 @@ Bot.tasker.push(
     }
 
     setGroupTitle(data, user_id, special_title, duration) {
-      Bot.makeLog(
+      AgentRuntime.makeLog(
         "info",
         `设置群头衔：${special_title} ${duration}`,
         `${data.self_id} => ${data.group_id}, ${user_id}`,
@@ -955,14 +955,14 @@ Bot.tasker.push(
     }
 
     sendGroupSign(data) {
-      Bot.makeLog("info", "群打卡", `${data.self_id} => ${data.group_id}`, true)
+      AgentRuntime.makeLog("info", "群打卡", `${data.self_id} => ${data.group_id}`, true)
       return data.bot.sendApi("set_group_sign", {
         group_id: data.group_id,
       })
     }
 
     setGroupBan(data, user_id, duration) {
-      Bot.makeLog(
+      AgentRuntime.makeLog(
         "info",
         `禁言群成员：${duration}秒`,
         `${data.self_id} => ${data.group_id}, ${user_id}`,
@@ -976,7 +976,7 @@ Bot.tasker.push(
     }
 
     setGroupWholeKick(data, enable) {
-      Bot.makeLog(
+      AgentRuntime.makeLog(
         "info",
         `${enable ? "开启" : "关闭"}全员禁言`,
         `${data.self_id} => ${data.group_id}`,
@@ -989,7 +989,7 @@ Bot.tasker.push(
     }
 
     setGroupKick(data, user_id, reject_add_request) {
-      Bot.makeLog(
+      AgentRuntime.makeLog(
         "info",
         `踢出群成员${reject_add_request ? "拒绝再次加群" : ""}`,
         `${data.self_id} => ${data.group_id}, ${user_id}`,
@@ -1003,7 +1003,7 @@ Bot.tasker.push(
     }
 
     setGroupLeave(data, is_dismiss) {
-      Bot.makeLog("info", is_dismiss ? "解散" : "退群", `${data.self_id} => ${data.group_id}`, true)
+      AgentRuntime.makeLog("info", is_dismiss ? "解散" : "退群", `${data.self_id} => ${data.group_id}`, true)
       return data.bot.sendApi("set_group_leave", {
         group_id: data.group_id,
         is_dismiss,
@@ -1019,7 +1019,7 @@ Bot.tasker.push(
     }
 
     async sendFriendFile(data, file, name = path.basename(file)) {
-      Bot.makeLog(
+      AgentRuntime.makeLog(
         "info",
         `发送好友文件：${name}(${file})`,
         `${data.self_id} => ${data.user_id}`,
@@ -1033,7 +1033,7 @@ Bot.tasker.push(
     }
 
     async sendGroupFile(data, file, folder, name = path.basename(file)) {
-      Bot.makeLog(
+      AgentRuntime.makeLog(
         "info",
         `发送群文件：${folder || ""}/${name}(${file})`,
         `${data.self_id} => ${data.group_id}`,
@@ -1048,7 +1048,7 @@ Bot.tasker.push(
     }
 
     deleteGroupFile(data, file_id, busid) {
-      Bot.makeLog(
+      AgentRuntime.makeLog(
         "info",
         `删除群文件：${file_id}(${busid})`,
         `${data.self_id} => ${data.group_id}`,
@@ -1062,7 +1062,7 @@ Bot.tasker.push(
     }
 
     createGroupFileFolder(data, name) {
-      Bot.makeLog("info", `创建群文件夹：${name}`, `${data.self_id} => ${data.group_id}`, true)
+      AgentRuntime.makeLog("info", `创建群文件夹：${name}`, `${data.self_id} => ${data.group_id}`, true)
       return data.bot.sendApi("create_group_file_folder", {
         group_id: data.group_id,
         name,
@@ -1111,7 +1111,7 @@ Bot.tasker.push(
     }
 
     deleteFriend(data) {
-      Bot.makeLog("info", "删除好友", `${data.self_id} => ${data.user_id}`, true)
+      AgentRuntime.makeLog("info", "删除好友", `${data.self_id} => ${data.user_id}`, true)
       return data.bot
         .sendApi("delete_friend", { user_id: data.user_id })
         .finally(this.getFriendMap.bind(this, data))
@@ -1151,7 +1151,7 @@ Bot.tasker.push(
     }
 
     setEmojiLike(data, message_id, emoji_id, set = true) {
-      Bot.makeLog("info", `设置表情回应：${emoji_id} (${set ? '贴' : '取消'})`, `${data.self_id} => ${data.group_id}, ${message_id}`, true)
+      AgentRuntime.makeLog("info", `设置表情回应：${emoji_id} (${set ? '贴' : '取消'})`, `${data.self_id} => ${data.group_id}, ${message_id}`, true)
       return data.bot.sendApi("set_msg_emoji_like", {
         message_id: String(message_id),
         emoji_id: Number(emoji_id),
@@ -1161,7 +1161,7 @@ Bot.tasker.push(
 
     
     setGroupKickMembers(data, user_ids) {
-      Bot.makeLog("info", `批量踢出群成员：${user_ids.length}人`, `${data.self_id} => ${data.group_id}`, true)
+      AgentRuntime.makeLog("info", `批量踢出群成员：${user_ids.length}人`, `${data.self_id} => ${data.group_id}`, true)
       return data.bot.sendApi("set_group_kick_members", {
         group_id: data.group_id,
         user_ids: Array.isArray(user_ids) ? user_ids : [user_ids]
@@ -1187,7 +1187,7 @@ Bot.tasker.push(
     }
 
     setGroupTodo(data, content) {
-      Bot.makeLog("info", `设置群代办：${content}`, `${data.self_id} => ${data.group_id}`, true)
+      AgentRuntime.makeLog("info", `设置群代办：${content}`, `${data.self_id} => ${data.group_id}`, true)
       return data.bot.sendApi("set_group_todo", {
         group_id: data.group_id,
         content
@@ -1195,7 +1195,7 @@ Bot.tasker.push(
     }
 
     setGroupRemark(data, remark) {
-      Bot.makeLog("info", `设置群备注：${remark}`, `${data.self_id} => ${data.group_id}`, true)
+      AgentRuntime.makeLog("info", `设置群备注：${remark}`, `${data.self_id} => ${data.group_id}`, true)
       return data.bot.sendApi("set_group_remark", {
         group_id: data.group_id,
         remark
@@ -1203,7 +1203,7 @@ Bot.tasker.push(
     }
 
     setGroupAddOption(data, option) {
-      Bot.makeLog("info", `设置群添加选项：${option}`, `${data.self_id} => ${data.group_id}`, true)
+      AgentRuntime.makeLog("info", `设置群添加选项：${option}`, `${data.self_id} => ${data.group_id}`, true)
       return data.bot.sendApi("set_group_add_option", {
         group_id: data.group_id,
         option
@@ -1211,7 +1211,7 @@ Bot.tasker.push(
     }
 
     setGroupBotAddOption(data, option) {
-      Bot.makeLog("info", `设置群机器人添加选项：${option}`, `${data.self_id} => ${data.group_id}`, true)
+      AgentRuntime.makeLog("info", `设置群机器人添加选项：${option}`, `${data.self_id} => ${data.group_id}`, true)
       return data.bot.sendApi("set_group_bot_add_option", {
         group_id: data.group_id,
         option
@@ -1231,7 +1231,7 @@ Bot.tasker.push(
     }
 
     setGroupSearch(data, enable) {
-      Bot.makeLog("info", `${enable ? '开启' : '关闭'}群搜索`, `${data.self_id} => ${data.group_id}`, true)
+      AgentRuntime.makeLog("info", `${enable ? '开启' : '关闭'}群搜索`, `${data.self_id} => ${data.group_id}`, true)
       return data.bot.sendApi("set_group_search", {
         group_id: data.group_id,
         enable: Boolean(enable)
@@ -1253,7 +1253,7 @@ Bot.tasker.push(
     sendGroupNotice(data, content, options = {}) {
       const { image, pinned, type, confirm_required, is_show_edit_card, tip_window_type } = options
       
-      Bot.makeLog("info", `发送群公告：${content.substring(0, 50)}${content.length > 50 ? '...' : ''}`, `${data.self_id} => ${data.group_id}`, true)
+      AgentRuntime.makeLog("info", `发送群公告：${content.substring(0, 50)}${content.length > 50 ? '...' : ''}`, `${data.self_id} => ${data.group_id}`, true)
       
       const params = {
         group_id: data.group_id,
@@ -1277,7 +1277,7 @@ Bot.tasker.push(
      * @returns {Promise}
      */
     getGroupNotice(data) {
-      Bot.makeLog("info", `获取群公告`, `${data.self_id} => ${data.group_id}`, true)
+      AgentRuntime.makeLog("info", `获取群公告`, `${data.self_id} => ${data.group_id}`, true)
       return data.bot.sendApi("_get_group_notice", {
         group_id: data.group_id
       })
@@ -1290,7 +1290,7 @@ Bot.tasker.push(
      * @returns {Promise}
      */
     deleteGroupNotice(data, notice_id) {
-      Bot.makeLog("info", `删除群公告：${notice_id}`, `${data.self_id} => ${data.group_id}`, true)
+      AgentRuntime.makeLog("info", `删除群公告：${notice_id}`, `${data.self_id} => ${data.group_id}`, true)
       return data.bot.sendApi("_delete_group_notice", {
         group_id: data.group_id,
         notice_id: String(notice_id)
@@ -1299,7 +1299,7 @@ Bot.tasker.push(
 
 
     moveGroupFile(data, file_id, busid, folder_id) {
-      Bot.makeLog("info", `移动群文件：${file_id}`, `${data.self_id} => ${data.group_id}`, true)
+      AgentRuntime.makeLog("info", `移动群文件：${file_id}`, `${data.self_id} => ${data.group_id}`, true)
       return data.bot.sendApi("move_group_file", {
         group_id: data.group_id,
         file_id,
@@ -1309,7 +1309,7 @@ Bot.tasker.push(
     }
 
     renameGroupFile(data, file_id, busid, name) {
-      Bot.makeLog("info", `重命名群文件：${name}`, `${data.self_id} => ${data.group_id}`, true)
+      AgentRuntime.makeLog("info", `重命名群文件：${name}`, `${data.self_id} => ${data.group_id}`, true)
       return data.bot.sendApi("rename_group_file", {
         group_id: data.group_id,
         file_id,
@@ -1319,7 +1319,7 @@ Bot.tasker.push(
     }
 
     saveFileToCache(data, file_id, busid) {
-      Bot.makeLog("info", `转存为永久文件：${file_id}`, `${data.self_id} => ${data.group_id}`, true)
+      AgentRuntime.makeLog("info", `转存为永久文件：${file_id}`, `${data.self_id} => ${data.group_id}`, true)
       return data.bot.sendApi("save_file_to_cache", {
         group_id: data.group_id,
         file_id,
@@ -1336,12 +1336,12 @@ Bot.tasker.push(
     }
 
     clearCache(data) {
-      Bot.makeLog("info", "清空缓存", data.self_id)
+      AgentRuntime.makeLog("info", "清空缓存", data.self_id)
       return data.bot.sendApi("clear_cache", {})
     }
 
     deleteGroupFileFolder(data, folder_id) {
-      Bot.makeLog("info", `删除群文件夹：${folder_id}`, `${data.self_id} => ${data.group_id}`, true)
+      AgentRuntime.makeLog("info", `删除群文件夹：${folder_id}`, `${data.self_id} => ${data.group_id}`, true)
       return data.bot.sendApi("delete_group_file_folder", {
         group_id: data.group_id,
         folder_id
@@ -1397,14 +1397,14 @@ Bot.tasker.push(
     }
 
     setOnlineStatus(data, status) {
-      Bot.makeLog("info", `设置在线状态：${status}`, data.self_id)
+      AgentRuntime.makeLog("info", `设置在线状态：${status}`, data.self_id)
       return data.bot.sendApi("set_online_status", {
         status
       })
     }
 
     setCustomOnlineStatus(data, text, face) {
-      Bot.makeLog("info", `设置自定义在线状态：${text}`, data.self_id)
+      AgentRuntime.makeLog("info", `设置自定义在线状态：${text}`, data.self_id)
       return data.bot.sendApi("set_custom_online_status", {
         text,
         face
@@ -1412,7 +1412,7 @@ Bot.tasker.push(
     }
 
     setFriendRemark(data, user_id, remark) {
-      Bot.makeLog("info", `设置好友备注：${remark}`, `${data.self_id} => ${user_id}`, true)
+      AgentRuntime.makeLog("info", `设置好友备注：${remark}`, `${data.self_id} => ${user_id}`, true)
       return data.bot.sendApi("set_friend_remark", {
         user_id,
         remark
@@ -1472,7 +1472,7 @@ Bot.tasker.push(
     }
 
     logout(data) {
-      Bot.makeLog("info", "账号退出", data.self_id)
+      AgentRuntime.makeLog("info", "账号退出", data.self_id)
       return data.bot.sendApi("logout", {})
     }
 
@@ -1648,14 +1648,14 @@ Bot.tasker.push(
     }
 
     /**
-     * 建立连接时初始化Bot实例
+     * 建立连接时初始化AgentRuntime实例
      * 关键优化：先初始化基础信息并立即触发connect事件，耗时操作异步执行
      */
     async connect(data, ws) {
       const self_id = data.self_id
       
-      // 初始化Bot基础结构（保留OneBot特定功能）
-      Bot[self_id] = {
+      // 初始化AgentRuntime基础结构（保留OneBot特定功能）
+      AgentRuntime[self_id] = {
         tasker: this,
         ws: ws,
         sendApi: this.sendApi.bind(this, data, ws),
@@ -1709,24 +1709,24 @@ Bot.tasker.push(
 
         // 便捷发送方法，供路由/插件直接调用
         sendFriendMsg: (user_id, msg, extra = {}) =>
-          this.sendFriendMsg({ ...data, ...extra, self_id, user_id, bot: Bot[self_id] }, msg),
+          this.sendFriendMsg({ ...data, ...extra, self_id, user_id, bot: AgentRuntime[self_id] }, msg),
         sendGroupMsg: (group_id, msg, extra = {}) =>
-          this.sendGroupMsg({ ...data, ...extra, self_id, group_id, bot: Bot[self_id] }, msg),
+          this.sendGroupMsg({ ...data, ...extra, self_id, group_id, bot: AgentRuntime[self_id] }, msg),
         sendMsg: (params, msg) => {
-          if (params?.group_id) return this.sendGroupMsg({ ...data, ...params, bot: Bot[self_id] }, msg)
-          if (params?.user_id) return this.sendFriendMsg({ ...data, ...params, bot: Bot[self_id] }, msg)
-          return Promise.reject(Bot.makeError("发送失败：缺少 user_id 或 group_id", params))
+          if (params?.group_id) return this.sendGroupMsg({ ...data, ...params, bot: AgentRuntime[self_id] }, msg)
+          if (params?.user_id) return this.sendFriendMsg({ ...data, ...params, bot: AgentRuntime[self_id] }, msg)
+          return Promise.reject(AgentRuntime.makeError("发送失败：缺少 user_id 或 group_id", params))
         },
         sendFriendForwardMsg: (user_id, messages, extra = {}) =>
-          this.sendFriendForwardMsg({ ...data, ...extra, self_id, user_id, bot: Bot[self_id] }, messages),
+          this.sendFriendForwardMsg({ ...data, ...extra, self_id, user_id, bot: AgentRuntime[self_id] }, messages),
         sendGroupForwardMsg: (group_id, messages, extra = {}) =>
-          this.sendGroupForwardMsg({ ...data, ...extra, self_id, group_id, bot: Bot[self_id] }, messages),
+          this.sendGroupForwardMsg({ ...data, ...extra, self_id, group_id, bot: AgentRuntime[self_id] }, messages),
         sendForwardMsg: (params, messages) => {
           if (params?.group_id)
-            return this.sendGroupForwardMsg({ ...data, ...params, bot: Bot[self_id] }, messages)
+            return this.sendGroupForwardMsg({ ...data, ...params, bot: AgentRuntime[self_id] }, messages)
           if (params?.user_id)
-            return this.sendFriendForwardMsg({ ...data, ...params, bot: Bot[self_id] }, messages)
-          return Promise.reject(Bot.makeError("发送转发消息失败：缺少 user_id 或 group_id", params))
+            return this.sendFriendForwardMsg({ ...data, ...params, bot: AgentRuntime[self_id] }, messages)
+          return Promise.reject(AgentRuntime.makeError("发送转发消息失败：缺少 user_id 或 group_id", params))
         },
 
         pickMember: this.pickMember.bind(this, data),
@@ -1785,9 +1785,9 @@ Bot.tasker.push(
         _initializing: false
       }
       
-      data.bot = Bot[self_id]
+      data.bot = AgentRuntime[self_id]
 
-      if (!Bot.uin.includes(self_id)) Bot.uin.push(self_id)
+      if (!AgentRuntime.uin.includes(self_id)) AgentRuntime.uin.push(self_id)
 
       try {
         await data.bot.sendApi("_set_model_show", {
@@ -1802,7 +1802,7 @@ Bot.tasker.push(
         const loginInfo = await data.bot.sendApi("get_login_info")
         data.bot.info = loginInfo?.data || {}
       } catch (err) {
-        Bot.makeLog("warn", `获取登录信息失败: ${err.message}`, self_id)
+        AgentRuntime.makeLog("warn", `获取登录信息失败: ${err.message}`, self_id)
         data.bot.info = {}
       }
 
@@ -1817,7 +1817,7 @@ Bot.tasker.push(
           },
         }
       } catch (err) {
-        Bot.makeLog("warn", `获取版本信息失败: ${err.message}`, self_id)
+        AgentRuntime.makeLog("warn", `获取版本信息失败: ${err.message}`, self_id)
         data.bot.version = {
           id: this.id,
           name: this.name,
@@ -1827,8 +1827,8 @@ Bot.tasker.push(
         }
       }
 
-      Bot.makeLog("mark", `${this.name}(${this.id}) ${data.bot.version.version} 已连接`, self_id)
-      Bot.em(`connect.${self_id}`, data)
+      AgentRuntime.makeLog("mark", `${this.name}(${this.id}) ${data.bot.version.version} 已连接`, self_id)
+      AgentRuntime.em(`connect.${self_id}`, data)
       
       data.bot._initializing = true
       setImmediate(async () => {
@@ -1837,14 +1837,14 @@ Bot.tasker.push(
             const guildProfile = await data.bot.sendApi("get_guild_service_profile")
             data.bot.guild_info = guildProfile?.data
           } catch (err) {
-            Bot.makeLog("debug", `获取频道资料失败: ${err.message}`, self_id)
+            AgentRuntime.makeLog("debug", `获取频道资料失败: ${err.message}`, self_id)
           }
 
           try {
             const clients = await data.bot.sendApi("get_online_clients")
             data.bot.clients = clients?.clients
           } catch (err) {
-            Bot.makeLog("debug", `获取在线客户端失败: ${err.message}`, self_id)
+            AgentRuntime.makeLog("debug", `获取在线客户端失败: ${err.message}`, self_id)
           }
 
           // 获取cookies
@@ -1866,27 +1866,27 @@ Bot.tasker.push(
                     data.bot.cookies[domain] = result.cookies
                   }
                 } catch (err) {
-                  Bot.makeLog("debug", `获取 ${domain} cookies 失败: ${err.message}`, self_id)
+                  AgentRuntime.makeLog("debug", `获取 ${domain} cookies 失败: ${err.message}`, self_id)
                 }
               }
             }
           } catch (err) {
-            Bot.makeLog("warn", `获取cookies失败: ${err.message}`, self_id)
+            AgentRuntime.makeLog("warn", `获取cookies失败: ${err.message}`, self_id)
           }
 
           try {
             const csrfToken = await data.bot.sendApi("get_csrf_token")
             data.bot.bkn = csrfToken?.token
           } catch (err) {
-            Bot.makeLog("debug", `获取CSRF token失败: ${err.message}`, self_id)
+            AgentRuntime.makeLog("debug", `获取CSRF token失败: ${err.message}`, self_id)
           }
 
           // 加载好友列表
           try {
             await data.bot.getFriendMap()
-            Bot.makeLog("debug", `好友列表加载完成`, self_id)
+            AgentRuntime.makeLog("debug", `好友列表加载完成`, self_id)
           } catch (err) {
-            Bot.makeLog("warn", `获取好友列表失败: ${err.message}`, self_id)
+            AgentRuntime.makeLog("warn", `获取好友列表失败: ${err.message}`, self_id)
             if (!(data.bot.fl instanceof Map)) {
               data.bot.fl = new Map()
             }
@@ -1895,9 +1895,9 @@ Bot.tasker.push(
           // 加载群和群成员列表
           try {
             await data.bot.getGroupMemberMap()
-            Bot.makeLog("debug", `群列表和成员列表加载完成`, self_id)
+            AgentRuntime.makeLog("debug", `群列表和成员列表加载完成`, self_id)
           } catch (err) {
-            Bot.makeLog("warn", `获取群成员列表失败: ${err.message}`, self_id)
+            AgentRuntime.makeLog("warn", `获取群成员列表失败: ${err.message}`, self_id)
             if (!(data.bot.gml instanceof Map)) {
               data.bot.gml = new Map()
             }
@@ -1905,11 +1905,11 @@ Bot.tasker.push(
 
           data.bot._ready = true
           data.bot._initializing = false
-          Bot.em(`ready.${self_id}`, data)
-          Bot.em('ready', { ...data, self_id: self_id, uin: self_id })
+          AgentRuntime.em(`ready.${self_id}`, data)
+          AgentRuntime.em('ready', { ...data, self_id: self_id, uin: self_id })
           
         } catch (err) {
-          Bot.makeLog("error", `后台数据加载失败: ${err.message}`, self_id)
+          AgentRuntime.makeLog("error", `后台数据加载失败: ${err.message}`, self_id)
           data.bot._ready = true
           data.bot._initializing = false
         }
@@ -1924,10 +1924,10 @@ Bot.tasker.push(
     normalizeMessageData(data) {
       // 基础字段检查
       data.post_type = data.post_type || 'message'
-      data.bot = data.bot || (data.self_id ? Bot[data.self_id] : null)
+      data.bot = data.bot || (data.self_id ? AgentRuntime[data.self_id] : null)
       
       if (!data.bot) {
-        Bot.makeLog("warn", `Bot对象不存在，忽略消息：${data.self_id}`, data.self_id)
+        AgentRuntime.makeLog("warn", `AgentRuntime对象不存在，忽略消息：${data.self_id}`, data.self_id)
         return false
       }
       
@@ -2115,7 +2115,7 @@ Bot.tasker.push(
                    data.bot?.fl?.get?.(data.user_id)?.nickname ||
                    data.user_id
       
-      Bot.makeLog(
+      AgentRuntime.makeLog(
         "info",
         `好友消息：${name ? `[${name}] ` : ""}${data.raw_message}`,
         `${data.self_id} <= ${data.user_id}`,
@@ -2137,7 +2137,7 @@ Bot.tasker.push(
         user_name = user?.card || user?.nickname
       }
       
-      Bot.makeLog(
+      AgentRuntime.makeLog(
         "info",
         `群消息：${user_name ? `[${group_name ? `${group_name}, ` : ""}${user_name}] ` : ""}${data.raw_message}`,
         `${data.self_id} <= ${data.group_id}, ${data.user_id}`,
@@ -2153,9 +2153,9 @@ Bot.tasker.push(
       data.message_type = "group"
       data.group_id = `${data.guild_id}-${data.channel_id}`
       
-      Bot.makeLog(
+      AgentRuntime.makeLog(
         "info",
-        `频道消息：[${data.sender?.nickname || ''}] ${Bot.String(data.message)}`,
+        `频道消息：[${data.sender?.nickname || ''}] ${AgentRuntime.String(data.message)}`,
         `${data.self_id} <= ${data.group_id}, ${data.user_id}`,
         true
       )
@@ -2183,16 +2183,16 @@ Bot.tasker.push(
       if (handler) {
         handler()
       } else {
-        Bot.makeLog("warn", `未知消息类型：${data.message_type}，原始数据：${Bot.String(data.raw || data)}`, data.self_id)
+        AgentRuntime.makeLog("warn", `未知消息类型：${data.message_type}，原始数据：${AgentRuntime.String(data.raw || data)}`, data.self_id)
       }
       
       // 触发事件
       const onebotEvent = `onebot.${data.post_type}`
       try {
-        Bot.em(onebotEvent, data)
+        AgentRuntime.em(onebotEvent, data)
         return true
       } catch (err) {
-        Bot.makeLog("error", `触发事件失败：${err.message}`, data.self_id, err)
+        AgentRuntime.makeLog("error", `触发事件失败：${err.message}`, data.self_id, err)
         return false
       }
     }
@@ -2203,7 +2203,7 @@ Bot.tasker.push(
     async makeNotice(data) {
       switch (data.notice_type) {
         case "friend_recall":
-          Bot.makeLog(
+          AgentRuntime.makeLog(
             "info",
             `好友消息撤回：${data.message_id}`,
             `${data.self_id} <= ${data.user_id}`,
@@ -2211,7 +2211,7 @@ Bot.tasker.push(
           )
           break
         case "group_recall":
-          Bot.makeLog(
+          AgentRuntime.makeLog(
             "info",
             `群消息撤回：${data.operator_id} => ${data.user_id} ${data.message_id}`,
             `${data.self_id} <= ${data.group_id}`,
@@ -2219,7 +2219,7 @@ Bot.tasker.push(
           )
           break
         case "group_increase": {
-          Bot.makeLog(
+          AgentRuntime.makeLog(
             "info",
             `群成员增加：${data.operator_id} => ${data.user_id} ${data.sub_type}`,
             `${data.self_id} <= ${data.group_id}`,
@@ -2232,7 +2232,7 @@ Bot.tasker.push(
           break
         }
         case "group_decrease": {
-          Bot.makeLog(
+          AgentRuntime.makeLog(
             "info",
             `群成员减少：${data.operator_id} => ${data.user_id} ${data.sub_type}`,
             `${data.self_id} <= ${data.group_id}`,
@@ -2248,7 +2248,7 @@ Bot.tasker.push(
           break
         }
         case "group_admin":
-          Bot.makeLog(
+          AgentRuntime.makeLog(
             "info",
             `群管理员变动：${data.sub_type}`,
             `${data.self_id} <= ${data.group_id}, ${data.user_id}`,
@@ -2258,9 +2258,9 @@ Bot.tasker.push(
           data.bot.pickMember(data.group_id, data.user_id).getInfo()
           break
         case "group_upload":
-          Bot.makeLog(
+          AgentRuntime.makeLog(
             "info",
-            `群文件上传：${Bot.String(data.file)}`,
+            `群文件上传：${AgentRuntime.String(data.file)}`,
             `${data.self_id} <= ${data.group_id}, ${data.user_id}`,
             true,
           )
@@ -2272,10 +2272,10 @@ Bot.tasker.push(
             message: [{ ...data.file, type: "file" }],
             raw_message: `[文件：${data.file.name}]`,
           }
-          Bot.em("onebot.message", fileEventData)
+          AgentRuntime.em("onebot.message", fileEventData)
           break
         case "group_ban":
-          Bot.makeLog(
+          AgentRuntime.makeLog(
             "info",
             `群禁言：${data.operator_id} => ${data.user_id} ${data.sub_type} ${data.duration}秒`,
             `${data.self_id} <= ${data.group_id}`,
@@ -2284,7 +2284,7 @@ Bot.tasker.push(
           data.bot.pickMember(data.group_id, data.user_id).getInfo()
           break
         case "group_msg_emoji_like":
-          Bot.makeLog(
+          AgentRuntime.makeLog(
             "info",
             [`群消息回应：${data.message_id}`, data.likes],
             `${data.self_id} <= ${data.group_id}, ${data.user_id}`,
@@ -2292,7 +2292,7 @@ Bot.tasker.push(
           )
           break
         case "friend_add":
-          Bot.makeLog("info", "好友添加", `${data.self_id} <= ${data.user_id}`, true)
+          AgentRuntime.makeLog("info", "好友添加", `${data.self_id} <= ${data.user_id}`, true)
           data.bot.pickFriend(data.user_id).getInfo()
           break
         case "notify":
@@ -2303,21 +2303,21 @@ Bot.tasker.push(
             case "poke":
               data.operator_id = data.user_id
               if (data.group_id)
-                Bot.makeLog(
+                AgentRuntime.makeLog(
                   "info",
                   `群戳一戳：${data.operator_id} => ${data.target_id}`,
                   `${data.self_id} <= ${data.group_id}`,
                   true,
                 )
               else
-                Bot.makeLog(
+                AgentRuntime.makeLog(
                   "info",
                   `好友戳一戳：${data.operator_id} => ${data.target_id}`,
                   data.self_id,
                 )
               break
             case "honor":
-              Bot.makeLog(
+              AgentRuntime.makeLog(
                 "info",
                 `群荣誉：${data.honor_type}`,
                 `${data.self_id} <= ${data.group_id}, ${data.user_id}`,
@@ -2326,7 +2326,7 @@ Bot.tasker.push(
               data.bot.pickMember(data.group_id, data.user_id).getInfo()
               break
             case "title":
-              Bot.makeLog(
+              AgentRuntime.makeLog(
                 "info",
                 `群头衔：${data.title}`,
                 `${data.self_id} <= ${data.group_id}, ${data.user_id}`,
@@ -2335,7 +2335,7 @@ Bot.tasker.push(
               data.bot.pickMember(data.group_id, data.user_id).getInfo()
               break
             case "group_name":
-              Bot.makeLog(
+              AgentRuntime.makeLog(
                 "info",
                 `群名更改：${data.name_new}`,
                 `${data.self_id} <= ${data.group_id}, ${data.user_id}`,
@@ -2348,10 +2348,10 @@ Bot.tasker.push(
               data.notice_type = "input"
               data.end ??= data.event_type !== 1
               data.message ||= data.status_text || `对方${data.end ? "结束" : "正在"}输入...`
-              Bot.makeLog("info", data.message, `${data.self_id} <= ${data.user_id}`, true)
+              AgentRuntime.makeLog("info", data.message, `${data.self_id} <= ${data.user_id}`, true)
               break
             case "profile_like":
-              Bot.makeLog(
+              AgentRuntime.makeLog(
                 "info",
                 `资料卡点赞：${data.times}次`,
                 `${data.self_id} <= ${data.operator_id}`,
@@ -2359,11 +2359,11 @@ Bot.tasker.push(
               )
               break
             default:
-              Bot.makeLog("warn", `未知通知：${Bot.String(data.raw || data)}`, data.self_id)
+              AgentRuntime.makeLog("warn", `未知通知：${AgentRuntime.String(data.raw || data)}`, data.self_id)
           }
           break
         case "group_card":
-          Bot.makeLog(
+          AgentRuntime.makeLog(
             "info",
             `群名片更新：${data.card_old} => ${data.card_new}`,
             `${data.self_id} <= ${data.group_id}, ${data.user_id}`,
@@ -2372,9 +2372,9 @@ Bot.tasker.push(
           data.bot.pickMember(data.group_id, data.user_id).getInfo()
           break
         case "offline_file":
-          Bot.makeLog(
+          AgentRuntime.makeLog(
             "info",
-            `离线文件：${Bot.String(data.file)}`,
+            `离线文件：${AgentRuntime.String(data.file)}`,
             `${data.self_id} <= ${data.user_id}`,
             true,
           )
@@ -2386,12 +2386,12 @@ Bot.tasker.push(
             message: [{ ...data.file, type: "file" }],
             raw_message: `[文件：${data.file.name}]`,
           }
-          Bot.em("onebot.message", offlineFileEventData)
+          AgentRuntime.em("onebot.message", offlineFileEventData)
           break
         case "client_status":
-          Bot.makeLog(
+          AgentRuntime.makeLog(
             "info",
-            `客户端${data.online ? "上线" : "下线"}：${Bot.String(data.client)}`,
+            `客户端${data.online ? "上线" : "下线"}：${AgentRuntime.String(data.client)}`,
             data.self_id,
           )
           data.clients = (await data.bot.sendApi("get_online_clients")).clients
@@ -2399,7 +2399,7 @@ Bot.tasker.push(
           break
         case "essence":
           data.notice_type = "group_essence"
-          Bot.makeLog(
+          AgentRuntime.makeLog(
             "info",
             `群精华消息：${data.operator_id} => ${data.sender_id} ${data.sub_type} ${data.message_id}`,
             `${data.self_id} <= ${data.group_id}`,
@@ -2407,7 +2407,7 @@ Bot.tasker.push(
           )
           break
         case "guild_channel_recall":
-          Bot.makeLog(
+          AgentRuntime.makeLog(
             "info",
             `频道消息撤回：${data.operator_id} => ${data.user_id} ${data.message_id}`,
             `${data.self_id} <= ${data.guild_id}-${data.channel_id}`,
@@ -2416,27 +2416,27 @@ Bot.tasker.push(
           break
         case "message_reactions_updated":
           data.notice_type = "guild_message_reactions_updated"
-          Bot.makeLog(
+          AgentRuntime.makeLog(
             "info",
-            `频道消息表情贴：${data.message_id} ${Bot.String(data.current_reactions)}`,
+            `频道消息表情贴：${data.message_id} ${AgentRuntime.String(data.current_reactions)}`,
             `${data.self_id} <= ${data.guild_id}-${data.channel_id}, ${data.user_id}`,
             true,
           )
           break
         case "channel_updated":
           data.notice_type = "guild_channel_updated"
-          Bot.makeLog(
+          AgentRuntime.makeLog(
             "info",
-            `子频道更新：${Bot.String(data.old_info)} => ${Bot.String(data.new_info)}`,
+            `子频道更新：${AgentRuntime.String(data.old_info)} => ${AgentRuntime.String(data.new_info)}`,
             `${data.self_id} <= ${data.guild_id}-${data.channel_id}, ${data.user_id}`,
             true,
           )
           break
         case "channel_created":
           data.notice_type = "guild_channel_created"
-          Bot.makeLog(
+          AgentRuntime.makeLog(
             "info",
-            `子频道创建：${Bot.String(data.channel_info)}`,
+            `子频道创建：${AgentRuntime.String(data.channel_info)}`,
             `${data.self_id} <= ${data.guild_id}-${data.channel_id}, ${data.user_id}`,
             true,
           )
@@ -2444,9 +2444,9 @@ Bot.tasker.push(
           break
         case "channel_destroyed":
           data.notice_type = "guild_channel_destroyed"
-          Bot.makeLog(
+          AgentRuntime.makeLog(
             "info",
-            `子频道删除：${Bot.String(data.channel_info)}`,
+            `子频道删除：${AgentRuntime.String(data.channel_info)}`,
             `${data.self_id} <= ${data.guild_id}-${data.channel_id}, ${data.user_id}`,
             true,
           )
@@ -2455,11 +2455,11 @@ Bot.tasker.push(
         case "bot_offline":
           data.post_type = "system"
           data.notice_type = "offline"
-          Bot.makeLog("info", `${data.tag || "账号下线"}：${data.message}`, data.self_id)
-          Bot.sendMasterMsg(`[${data.self_id}] ${data.tag || "账号下线"}：${data.message}`)
+          AgentRuntime.makeLog("info", `${data.tag || "账号下线"}：${data.message}`, data.self_id)
+          AgentRuntime.sendMasterMsg(`[${data.self_id}] ${data.tag || "账号下线"}：${data.message}`)
           break
         default:
-          Bot.makeLog("warn", `未知通知：${Bot.String(data.raw || data)}`, data.self_id)
+          AgentRuntime.makeLog("warn", `未知通知：${AgentRuntime.String(data.raw || data)}`, data.self_id)
       }
 
       let notice = data.notice_type.split("_")
@@ -2480,7 +2480,7 @@ Bot.tasker.push(
       data.isOneBot = true
       
       const onebotNoticeEvent = `onebot.${data.post_type}`
-      Bot.em(onebotNoticeEvent, data)
+      AgentRuntime.em(onebotNoticeEvent, data)
     }
 
     /**
@@ -2489,7 +2489,7 @@ Bot.tasker.push(
     makeRequest(data) {
       switch (data.request_type) {
         case "friend":
-          Bot.makeLog(
+          AgentRuntime.makeLog(
             "info",
             `加好友请求：${data.comment}(${data.flag})`,
             `${data.self_id} <= ${data.user_id}`,
@@ -2501,7 +2501,7 @@ Bot.tasker.push(
           }
           break
         case "group":
-          Bot.makeLog(
+          AgentRuntime.makeLog(
             "info",
             `加群请求：${data.sub_type} ${data.comment}(${data.flag})`,
             `${data.self_id} <= ${data.group_id}, ${data.user_id}`,
@@ -2512,7 +2512,7 @@ Bot.tasker.push(
           }
           break
         default:
-          Bot.makeLog("warn", `未知请求：${Bot.String(data.raw || data)}`, data.self_id)
+          AgentRuntime.makeLog("warn", `未知请求：${AgentRuntime.String(data.raw || data)}`, data.self_id)
       }
 
       data.bot.request_list.push(data)
@@ -2520,7 +2520,7 @@ Bot.tasker.push(
       data.isOneBot = true
       
       const onebotRequestEvent = `onebot.${data.post_type}`
-      Bot.em(onebotRequestEvent, data)
+      AgentRuntime.em(onebotRequestEvent, data)
     }
 
     /**
@@ -2542,7 +2542,7 @@ Bot.tasker.push(
           this.connect(data, ws)
           break
         default:
-          Bot.makeLog("warn", `未知消息：${Bot.String(data.raw || data)}`, data.self_id)
+          AgentRuntime.makeLog("warn", `未知消息：${AgentRuntime.String(data.raw || data)}`, data.self_id)
       }
     }
 
@@ -2553,18 +2553,18 @@ Bot.tasker.push(
       try {
         data = {
           ...JSON.parse(data),
-          raw: Bot.String(data),
+          raw: AgentRuntime.String(data),
         }
       } catch (err) {
-        return Bot.makeLog("error", ["解码数据失败", data, err])
+        return AgentRuntime.makeLog("error", ["解码数据失败", data, err])
       }
 
       if (data.post_type) {
-        if (data.meta_event_type !== "lifecycle" && !Bot.uin.includes(data.self_id)) {
-          Bot.makeLog("warn", `找不到对应Bot，忽略消息：${Bot.String(data.raw || data)}`, data.self_id)
+        if (data.meta_event_type !== "lifecycle" && !AgentRuntime.uin.includes(data.self_id)) {
+          AgentRuntime.makeLog("warn", `找不到对应AgentRuntime，忽略消息：${AgentRuntime.String(data.raw || data)}`, data.self_id)
           return false
         }
-        data.bot = Bot[data.self_id]
+        data.bot = AgentRuntime[data.self_id]
 
         switch (data.post_type) {
           case "meta_event":
@@ -2577,7 +2577,7 @@ Bot.tasker.push(
             return this.makeRequest(data)
           case "message_sent":
             try {
-              Bot.em("onebot.message_sent", data)
+              AgentRuntime.em("onebot.message_sent", data)
             } catch {
             }
             return true
@@ -2586,15 +2586,15 @@ Bot.tasker.push(
         const cache = this.echo.get(data.echo)
         if (cache) return cache.resolve(data)
       }
-      Bot.makeLog("warn", `未知消息：${Bot.String(data.raw || data)}`, data.self_id)
+      AgentRuntime.makeLog("warn", `未知消息：${AgentRuntime.String(data.raw || data)}`, data.self_id)
     }
 
     /**
      * 加载适配器
      */
     load() {
-      if (!Array.isArray(Bot.wsf[this.path])) Bot.wsf[this.path] = []
-      Bot.wsf[this.path].push((ws, ...args) =>
+      if (!Array.isArray(AgentRuntime.wsf[this.path])) AgentRuntime.wsf[this.path] = []
+      AgentRuntime.wsf[this.path].push((ws, ...args) =>
         ws.on("message", data => this.message(data, ws, ...args)),
       )
     }

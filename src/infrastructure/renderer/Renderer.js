@@ -1,7 +1,7 @@
 import template from 'art-template'
 import fs from 'node:fs'
 import os from 'node:os'
-import BotUtil from '#utils/botutil.js'
+import RuntimeUtil from '#utils/runtime-util.js'
 import { HotReloadBase } from '#utils/hot-reload-base.js'
 
 /**
@@ -52,7 +52,7 @@ export default class Renderer {
       try {
         this.html[tplFile] = fs.readFileSync(tplFile, 'utf8')
       } catch {
-        BotUtil.makeLog('error', `加载html错误：${tplFile}`, 'Renderer')
+        RuntimeUtil.makeLog('error', `加载html错误：${tplFile}`, 'Renderer')
         return false
       }
 
@@ -63,7 +63,7 @@ export default class Renderer {
     const tmpHtml = template.render(this.html[tplFile], data)
     fs.writeFileSync(savePath, tmpHtml)
 
-    BotUtil.makeLog('debug', `[图片生成][使用模板] ${savePath}`, 'Renderer')
+    RuntimeUtil.makeLog('debug', `[图片生成][使用模板] ${savePath}`, 'Renderer')
 
     return savePath;
   }
@@ -79,7 +79,7 @@ export default class Renderer {
       invalidateCoreCacheOnAdd: false,
       onChange: () => {
         delete this.html[tplFile]
-        BotUtil.makeLog('info', `[修改html模板] ${tplFile}`, 'Renderer')
+        RuntimeUtil.makeLog('info', `[修改html模板] ${tplFile}`, 'Renderer')
       }
     }).then((ok) => {
       if (ok) this._tplHotReloads.set(tplFile, hotReload)
@@ -103,7 +103,7 @@ export default class Renderer {
         }
       }
     } catch (e) {
-      BotUtil.makeLog('error', `获取MAC地址失败: ${e.message}`, 'Renderer');
+      RuntimeUtil.makeLog('error', `获取MAC地址失败: ${e.message}`, 'Renderer');
     }
     return macAddr;
   }

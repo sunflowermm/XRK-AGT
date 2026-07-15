@@ -10,18 +10,18 @@ class HandlerManager {
 
   /**
    * 添加事件处理器
-   * @param {Object} cfg - 配置对象
-   * @param {string} cfg.ns - 命名空间
-   * @param {Function} cfg.fn - 处理函数
-   * @param {Object} cfg.self - 上下文对象
-   * @param {number} [cfg.priority=500] - 优先级（数字越小优先级越高）
-   * @param {string} [cfg.key] - 事件键名
-   * @param {string} [cfg.event] - 事件名（key的别名）
+   * @param {Object} runtimeConfig - 配置对象
+   * @param {string} runtimeConfig.ns - 命名空间
+   * @param {Function} runtimeConfig.fn - 处理函数
+   * @param {Object} runtimeConfig.self - 上下文对象
+   * @param {number} [runtimeConfig.priority=500] - 优先级（数字越小优先级越高）
+   * @param {string} [runtimeConfig.key] - 事件键名
+   * @param {string} [runtimeConfig.event] - 事件名（key的别名）
    * @returns {boolean} 是否添加成功
    */
-  add(cfg) {
-    const { ns, fn, self, priority = 500 } = cfg
-    const key = cfg.key || cfg.event || ''
+  add(runtimeConfig) {
+    const { ns, fn, self, priority = 500 } = runtimeConfig
+    const key = runtimeConfig.key || runtimeConfig.event || ''
 
     // 参数验证
     if (!this._validateParams(key, fn, ns)) {

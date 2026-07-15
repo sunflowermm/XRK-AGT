@@ -13,6 +13,6 @@ export default BaseFactory.createMediaFactoryClass({
   disabledMessage: 'TTS未启用',
   unsupportedMessage: (provider) => `不支持的TTS提供商: ${provider}`,
   providers: new Map([
-    ['volcengine', (deviceId, config, Bot) => new VolcengineTTSClient(deviceId, config, Bot)]
+    ['volcengine', (deviceId, config, AgentRuntime) => new VolcengineTTSClient(deviceId, config, AgentRuntime)]
   ])
 });

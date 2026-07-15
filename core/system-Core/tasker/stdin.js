@@ -1,6 +1,6 @@
 /**
  * 标准输入 Tasker
- * 与 OneBotv11 / ExampleTasker 等一致：单类、id/name/path、load() 中初始化并注册 Bot.stdin
+ * 与 OneBotv11 / ExampleTasker 等一致：单类、id/name/path、load() 中初始化并注册 AgentRuntime.stdin
  */
 import { createInterface } from 'readline';
 import fs from 'fs';
@@ -9,7 +9,7 @@ import { exec } from 'child_process';
 import path from 'path';
 import { ulid } from 'ulid';
 import crypto from 'crypto';
-import BotUtil from '#utils/botutil.js';
+import RuntimeUtil from '#utils/runtime-util.js';
 import paths from '#utils/paths.js';
 import { setRuntimeGlobal, getRuntimeGlobal } from '#utils/runtime-globals.js';
 
@@ -38,10 +38,10 @@ function cleanupTempFiles() {
       });
     }
     if (cleaned > 0) {
-      BotUtil.makeLog('debug', `已清理 ${cleaned} 个临时文件`, LOG_TAG);
+      RuntimeUtil.makeLog('debug', `已清理 ${cleaned} 个临时文件`, LOG_TAG);
     }
   } catch (error) {
-    BotUtil.makeLog('error', `清理临时文件错误: ${error.message}`, LOG_TAG);
+    RuntimeUtil.makeLog('error', `清理临时文件错误: ${error.message}`, LOG_TAG);
   }
 }
 
@@ -71,8 +71,8 @@ export default class StdinTasker {
   }
 
   initStdinBot() {
-    if (!Bot.stdin) {
-      if (!Bot.uin.includes(this.botId)) Bot.uin.push(this.botId);
+    if (!AgentRuntime.stdin) {
+      if (!AgentRuntime.uin.includes(this.botId)) AgentRuntime.uin.push(this.botId);
       const stdinBot = {
         uin: this.botId,
         self_id: this.botId,
@@ -84,10 +84,10 @@ export default class StdinTasker {
         version: { id: 'stdin', name: 'StdinBot', version: '1.0.5' },
         config: { master: true },
         sendMsg: async (msg) => this.sendMsg(msg, 'stdin', { user_id: 'stdin' }),
-        runCommand: async (command, options = {}) => Bot.callStdin
-          ? Bot.callStdin(command, { ...options, tasker: 'stdin' })
+        runCommand: async (command, options = {}) => AgentRuntime.callStdin
+          ? AgentRuntime.callStdin(command, { ...options, tasker: 'stdin' })
           : this.processCommand(command, options),
-        pickUser: (user_id) => Bot.pickFriend ? Bot.pickFriend(user_id) : null,
+        pickUser: (user_id) => AgentRuntime.pickFriend ? AgentRuntime.pickFriend(user_id) : null,
         pickFriend: (user_id) => ({
           user_id,
           nickname: user_id,
@@ -112,17 +112,17 @@ export default class StdinTasker {
         fileToUrl: async (filePath, _opts = {}) => {
           try {
             if (typeof filePath === 'string' && filePath.startsWith('http')) return filePath;
-            const baseUrl = Bot.getServerUrl ? Bot.getServerUrl() : `http://localhost:${Bot.httpPort || 3000}`;
+            const baseUrl = AgentRuntime.getServerUrl ? AgentRuntime.getServerUrl() : `http://localhost:${AgentRuntime.httpPort || 3000}`;
             return await this.processFileToUrl(filePath, baseUrl);
           } catch (err) {
-            BotUtil.makeLog('error', `文件转URL失败: ${err.message}`, LOG_TAG);
+            RuntimeUtil.makeLog('error', `文件转URL失败: ${err.message}`, LOG_TAG);
             return '';
           }
         },
         _ready: true
       };
-      Bot.stdin = stdinBot;
-      Bot[this.botId] = stdinBot;
+      AgentRuntime.stdin = stdinBot;
+      AgentRuntime[this.botId] = stdinBot;
     }
   }
 
@@ -131,7 +131,7 @@ export default class StdinTasker {
       let buffer, fileName, fileExt = 'file';
       if (Buffer.isBuffer(filePath)) {
         buffer = filePath;
-        const fileType = await BotUtil.fileType({ buffer });
+        const fileType = await RuntimeUtil.fileType({ buffer });
         fileExt = fileType?.type?.ext || 'file';
         fileName = `${ulid()}.${fileExt}`;
       } else if (typeof filePath === 'string') {
@@ -149,10 +149,10 @@ export default class StdinTasker {
       const targetPath = path.join(mediaDir, fileName);
       await fs.promises.writeFile(targetPath, buffer);
       const url = `${baseUrl}/media/${fileName}`;
-      BotUtil.makeLog('debug', `文件已保存: ${targetPath} -> ${url}`, LOG_TAG);
+      RuntimeUtil.makeLog('debug', `文件已保存: ${targetPath} -> ${url}`, LOG_TAG);
       return url;
     } catch (error) {
-      BotUtil.makeLog('error', `processFileToUrl错误: ${error.message}`, LOG_TAG);
+      RuntimeUtil.makeLog('error', `processFileToUrl错误: ${error.message}`, LOG_TAG);
       throw error;
     }
   }
@@ -160,7 +160,7 @@ export default class StdinTasker {
   async processCommand(input, userInfo = {}) {
     try {
       if (Array.isArray(input)) {
-        BotUtil.makeLog('info', '收到消息数组', LOG_TAG);
+        RuntimeUtil.makeLog('info', '收到消息数组', LOG_TAG);
         const event = this.createEvent(input, userInfo);
         await this.handleEvent(event);
         return { success: true, code: 200, message: '命令已处理', event_id: event.message_id, timestamp: Date.now() };
@@ -195,18 +195,18 @@ export default class StdinTasker {
         return { ...builtinCommands[command](), timestamp: Date.now() };
       }
 
-      BotUtil.makeLog('info', `[命令] ${trimmedInput}`, LOG_TAG);
+      RuntimeUtil.makeLog('info', `[命令] ${trimmedInput}`, LOG_TAG);
       const event = this.createEvent(trimmedInput, userInfo);
       await this.handleEvent(event);
       return { success: true, code: 200, message: '命令已处理', event_id: event.message_id, timestamp: Date.now() };
     } catch (error) {
-      BotUtil.makeLog('error', `处理命令错误: ${error.message}`, LOG_TAG);
+      RuntimeUtil.makeLog('error', `处理命令错误: ${error.message}`, LOG_TAG);
       return { success: false, code: 500, error: error.message, stack: error.stack, timestamp: Date.now() };
     }
   }
 
   async handleEvent(event) {
-    Bot.em('stdin.message', event);
+    AgentRuntime.em('stdin.message', event);
   }
 
   async processMessageContent(content) {
@@ -240,7 +240,7 @@ export default class StdinTasker {
     try {
       let buffer, fileName, fileExt = 'file', mimeType = 'application/octet-stream';
       if (item.file || item.url || item.path) {
-        const fileInfo = await BotUtil.fileType({ file: item.file || item.url || item.path, name: item.name });
+        const fileInfo = await RuntimeUtil.fileType({ file: item.file || item.url || item.path, name: item.name });
         buffer = fileInfo.buffer;
         fileName = fileInfo.name || item.name;
         fileExt = fileInfo.type?.ext || 'file';
@@ -255,7 +255,7 @@ export default class StdinTasker {
         fileName = item.name;
       }
       if (!buffer) {
-        BotUtil.makeLog('warn', `无法获取文件内容: ${JSON.stringify(item)}`, LOG_TAG);
+        RuntimeUtil.makeLog('warn', `无法获取文件内容: ${JSON.stringify(item)}`, LOG_TAG);
         return item;
       }
       if (!fileName) fileName = `${ulid()}.${fileExt}`;
@@ -265,14 +265,14 @@ export default class StdinTasker {
       }
       const filePath = path.join(mediaDir, fileName);
       await fs.promises.writeFile(filePath, buffer);
-      const baseUrl = Bot.getServerUrl ? Bot.getServerUrl() : `http://localhost:${Bot.httpPort || 3000}`;
+      const baseUrl = AgentRuntime.getServerUrl ? AgentRuntime.getServerUrl() : `http://localhost:${AgentRuntime.httpPort || 3000}`;
       const fileUrl = `${baseUrl}/media/${fileName}`;
-      BotUtil.makeLog('debug', `媒体文件已保存: ${filePath} -> ${fileUrl}`, LOG_TAG);
+      RuntimeUtil.makeLog('debug', `媒体文件已保存: ${filePath} -> ${fileUrl}`, LOG_TAG);
       if (item.type === 'image' && process.env.OPEN_IMAGES === 'true') this.openImageFile(filePath);
       const md5 = crypto.createHash('md5').update(buffer).digest('hex');
       return { type: item.type, file: fileUrl, url: fileUrl, path: path.resolve(filePath), name: fileName, size: buffer.length, md5, mime: mimeType };
     } catch (error) {
-      BotUtil.makeLog('error', `处理媒体文件错误: ${error.message}`, LOG_TAG);
+      RuntimeUtil.makeLog('error', `处理媒体文件错误: ${error.message}`, LOG_TAG);
       return item;
     }
   }
@@ -283,7 +283,7 @@ export default class StdinTasker {
       const platform = os.platform();
       if (commands[platform]) exec(commands[platform]);
     } catch (error) {
-      BotUtil.makeLog('error', `打开图片失败: ${error.message}`, LOG_TAG);
+      RuntimeUtil.makeLog('error', `打开图片失败: ${error.message}`, LOG_TAG);
     }
   }
 
@@ -329,7 +329,7 @@ export default class StdinTasker {
         role: userInfo.sender?.role || userInfo.role || 'master',
         user_id: userInfo.sender?.user_id || userId
       },
-      bot: Bot.stdin || Bot[this.botId],
+      bot: AgentRuntime.stdin || AgentRuntime[this.botId],
       isMaster: userInfo.isMaster !== undefined ? userInfo.isMaster : true,
       isPrivate: !userInfo.group_id,
       isGroup: !!userInfo.group_id,
@@ -344,12 +344,12 @@ export default class StdinTasker {
     }
     event.friend = {
       sendMsg: async (msg) => this.sendMsg(msg, nickname, userInfo),
-      recallMsg: () => BotUtil.makeLog('mark', `[${nickname}] 撤回消息`, LOG_TAG),
+      recallMsg: () => RuntimeUtil.makeLog('mark', `[${nickname}] 撤回消息`, LOG_TAG),
       makeForwardMsg: async (forwardMsg) => this.makeForwardMsg(forwardMsg)
     };
     event.member = { info: { user_id: userId, nickname, last_sent_time: time }, getAvatarUrl: () => userInfo.avatar || `https://q1.qlogo.cn/g?b=qq&s=0&nk=${userId}` };
     event.recall = () => {
-      BotUtil.makeLog('mark', `[${nickname}] 撤回消息`, LOG_TAG);
+      RuntimeUtil.makeLog('mark', `[${nickname}] 撤回消息`, LOG_TAG);
       return true;
     };
     event.group = {
@@ -391,20 +391,20 @@ export default class StdinTasker {
       }
     }
     if (userInfo.tasker !== 'api' && textLogs.length > 0) {
-      BotUtil.makeLog('info', textLogs.join('\n'), LOG_TAG);
+      RuntimeUtil.makeLog('info', textLogs.join('\n'), LOG_TAG);
     }
-    Bot.em('stdin.output', { nickname, content: processedItems, user_info: userInfo });
+    AgentRuntime.em('stdin.output', { nickname, content: processedItems, user_info: userInfo });
     return { message_id: `${userInfo.user_id || 'stdin'}_${Date.now()}`, content: processedItems, time: Date.now() / 1000 };
   }
 
   async makeForwardMsg(forwardMsg) {
     if (!Array.isArray(forwardMsg)) {
-      BotUtil.makeLog('error', '转发消息必须是数组格式', LOG_TAG);
+      RuntimeUtil.makeLog('error', '转发消息必须是数组格式', LOG_TAG);
       return [];
     }
-    BotUtil.makeLog('info', `收到转发消息: ${JSON.stringify(forwardMsg, null, 2)}`, LOG_TAG);
+    RuntimeUtil.makeLog('info', `收到转发消息: ${JSON.stringify(forwardMsg, null, 2)}`, LOG_TAG);
     return forwardMsg;
   }
 }
 
-Bot.tasker.push(new StdinTasker());
+AgentRuntime.tasker.push(new StdinTasker());

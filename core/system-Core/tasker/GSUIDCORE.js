@@ -1,11 +1,11 @@
-Bot.tasker.push(
+AgentRuntime.tasker.push(
   new (class GSUIDCoreTasker {
     id = "GSUIDCore"
     name = "早柚核心(时雨崽)"
     path = this.id
 
     makeLog(msg) {
-      return Bot.String(msg).replace(/base64:\/\/.*?"/g, 'base64://..."')
+      return AgentRuntime.String(msg).replace(/base64:\/\/.*?"/g, 'base64://..."')
     }
 
     makeButton(button) {
@@ -58,7 +58,7 @@ Bot.tasker.push(
         if (typeof i !== "object") i = { type: "text", text: i }
 
         if (i.file) {
-          i.file = await Bot.Buffer(i.file, {
+          i.file = await AgentRuntime.Buffer(i.file, {
             http: true,
             size: 10485760,
           })
@@ -102,7 +102,7 @@ Bot.tasker.push(
             i = i.data
             break
           default:
-            i = { type: "text", data: Bot.String(i) }
+            i = { type: "text", data: AgentRuntime.String(i) }
         }
         msgs.push(i)
       }
@@ -111,7 +111,7 @@ Bot.tasker.push(
 
     async sendFriendMsg(data, msg) {
       const content = await this.makeMsg(msg)
-      Bot.makeLog(
+      AgentRuntime.makeLog(
         "info",
         `发送好友消息：${this.makeLog(content)}`,
         `${data.self_id} => ${data.user_id}`,
@@ -130,7 +130,7 @@ Bot.tasker.push(
     async sendGroupMsg(data, msg) {
       const target = data.group_id.split("-")
       const content = await this.makeMsg(msg)
-      Bot.makeLog(
+      AgentRuntime.makeLog(
         "info",
         `发送群消息：${this.makeLog(content)}`,
         `${data.self_id} => ${data.group_id}`,
@@ -148,9 +148,9 @@ Bot.tasker.push(
 
     pickFriend(id, user_id) {
       const i = {
-        ...Bot[id].fl.get(user_id),
+        ...AgentRuntime[id].fl.get(user_id),
         self_id: id,
-        bot: Bot[id],
+        bot: AgentRuntime[id],
         user_id: user_id,
       }
       return {
@@ -162,10 +162,10 @@ Bot.tasker.push(
 
     pickMember(id, group_id, user_id) {
       const i = {
-        ...Bot[id].fl.get(user_id),
-        ...Bot[id].gml.get(group_id)?.get(user_id),
+        ...AgentRuntime[id].fl.get(user_id),
+        ...AgentRuntime[id].gml.get(group_id)?.get(user_id),
         self_id: id,
-        bot: Bot[id],
+        bot: AgentRuntime[id],
         group_id: group_id,
         user_id: user_id,
       }
@@ -177,9 +177,9 @@ Bot.tasker.push(
 
     pickGroup(id, group_id) {
       const i = {
-        ...Bot[id].gl.get(group_id),
+        ...AgentRuntime[id].gl.get(group_id),
         self_id: id,
-        bot: Bot[id],
+        bot: AgentRuntime[id],
         group_id: group_id,
       }
       return {
@@ -190,7 +190,7 @@ Bot.tasker.push(
     }
 
     makeBot(data, ws) {
-      Bot[data.self_id] = {
+      AgentRuntime[data.self_id] = {
         tasker: this,
         ws: ws,
         get sendApi() {
@@ -214,17 +214,17 @@ Bot.tasker.push(
         gl: new Map(),
         gml: new Map(),
       }
-      data.bot = Bot[data.self_id]
+      data.bot = AgentRuntime[data.self_id]
 
-      Bot.makeLog("mark", `${this.name}(${this.id}) 已连接`, data.self_id)
-      Bot.em(`connect.${data.self_id}`, data)
+      AgentRuntime.makeLog("mark", `${this.name}(${this.id}) 已连接`, data.self_id)
+      AgentRuntime.em(`connect.${data.self_id}`, data)
     }
 
     message(raw, ws) {
       try {
         raw = JSON.parse(raw)
       } catch (err) {
-        return Bot.makeLog("error", ["解码数据失败", raw, err])
+        return AgentRuntime.makeLog("error", ["解码数据失败", raw, err])
       }
 
       const data = {
@@ -244,8 +244,8 @@ Bot.tasker.push(
         raw_message: "",
       }
 
-      if (Bot[data.self_id]) {
-        data.bot = Bot[data.self_id]
+      if (AgentRuntime[data.self_id]) {
+        data.bot = AgentRuntime[data.self_id]
         data.bot.ws = ws
       } else {
         this.makeBot(data, ws)
@@ -280,17 +280,17 @@ Bot.tasker.push(
             break
           case "node":
             data.message.push({ type: "node", data: i.data })
-            data.raw_message += `[合并转发：${Bot.String(i.data)}]`
+            data.raw_message += `[合并转发：${AgentRuntime.String(i.data)}]`
             break
           default:
             data.message.push(i)
-            data.raw_message += Bot.String(i)
+            data.raw_message += AgentRuntime.String(i)
         }
       }
 
       if (raw.user_type === "direct") {
         data.message_type = "private"
-        Bot.makeLog(
+        AgentRuntime.makeLog(
           "info",
           `好友消息：${data.raw_message}`,
           `${data.self_id} <= ${data.user_id}`,
@@ -312,7 +312,7 @@ Bot.tasker.push(
           ...data.sender,
         })
 
-        Bot.makeLog(
+        AgentRuntime.makeLog(
           "info",
           `群消息：${data.raw_message}`,
           `${data.self_id} <= ${data.group_id}, ${data.user_id}`,
@@ -320,12 +320,12 @@ Bot.tasker.push(
         )
       }
 
-      Bot.em(`${data.post_type}.${data.message_type}`, data)
+      AgentRuntime.em(`${data.post_type}.${data.message_type}`, data)
     }
 
     load() {
-      if (!Array.isArray(Bot.wsf[this.path])) Bot.wsf[this.path] = []
-      Bot.wsf[this.path].push((ws, ...args) =>
+      if (!Array.isArray(AgentRuntime.wsf[this.path])) AgentRuntime.wsf[this.path] = []
+      AgentRuntime.wsf[this.path].push((ws, ...args) =>
         ws.on("message", data => this.message(data, ws, ...args)),
       )
     }

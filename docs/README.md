@@ -55,13 +55,13 @@
 - **[文档审查清单](文档审查清单.md)** - 发布前文档准确性、互链与数字一致性 ⭐
 - **[项目概览](../PROJECT_OVERVIEW.md)** - 目录树与文档入口（架构图见底层架构设计）
 - **[底层架构设计](底层架构设计.md)** - Runtime / Infrastructure / Core 分层与 AI 链路（**架构单一事实源**） ⭐
-- **[启动与引导](startup.md)** - `app.js` → bootstrap → `start.js` → Bot，环境变量与 Playwright ⭐
-- **[运行时挂载面](runtime-surface.md)** - 全局对象、Bot Proxy、Loader 单例、按场景写法 ⭐ **开发首读**
+- **[启动与引导](startup.md)** - `app.js` → bootstrap → `start.js` → AgentRuntime，环境变量与 Playwright ⭐
+- **[运行时挂载面](runtime-surface.md)** - 全局对象、AgentRuntime Proxy、Loader 单例、按场景写法 ⭐ **开发首读**
 - **[底层写法规范](coding-style.md)** - 全局裸名、状态/I/O/异步/HTTP、性能速查 ⭐
-- **[业务基类契约](base-classes.md)** - plugin / HttpApi / AIStream 最小 export
+- **[业务基类契约](base-classes.md)** - plugin / HttpApi / AiWorkflow 最小 export
 - **[文档编写规范](DOCSTYLE.md)** - 维护者标注化模板
 - **[Node 26 运行时约定](node-26-runtime.md)** - 版本要求、已用 API（禁止项见 skill `xrk-node-runtime`）
-- **[Bot 主类文档](bot.md)** - Bot 生命周期、HTTP/WebSocket（挂载面见 runtime-surface）
+- **[AgentRuntime 主类文档](agent-runtime.md)** - AgentRuntime 生命周期、HTTP/WebSocket（挂载面见 runtime-surface）
 - **[基础设施共享约定](infrastructure-shared.md)** - Loader 标准模式、热重载、`bootstrap-globals`
 - **[框架可扩展性指南](框架可扩展性指南.md)** - 7 大扩展点与 Core 开发完整说明，包含最佳实践和代码质量规范 ⭐
 
@@ -74,7 +74,7 @@
 ### 🔌 插件与事件系统
 
 - **[插件基类文档](plugin-base.md)** - `plugin` 基类：事件链路、规则/上下文、工作流集成 ⭐
-- **[插件加载器文档](plugins-loader.md)** - `PluginsLoader` 的插件加载、事件调度、冷却与节流机制
+- **[插件加载器文档](plugins-loader.md)** - `PluginLoader` 的插件加载、事件调度、冷却与节流机制
 - **[事件系统标准化文档](事件系统标准化文档.md)** - 事件命名规范、字段责任、处理流程、事件监听器开发指南
 
 ### 🔄 Tasker 系统（任务层/事件生成器）
@@ -86,7 +86,7 @@
 ### 🌐 HTTP/API 层
 
 - **[HTTP API 基类文档](http-api.md)** - `HttpApi` 基类，统一路由、WebSocket 与中间件注册方式
-- **[API 加载器文档](api-loader.md)** - `ApiLoader` 的 API 自动加载、排序与热重载机制
+- **[API 加载器文档](api-loader.md)** - `HttpApiLoader` 的 API 自动加载、排序与热重载机制
 - **[Server 服务器架构文档](server.md)** - HTTP/HTTPS/WebSocket 服务、反向代理、静态文件服务等完整说明
 - **[鉴权与认证（AUTH）](AUTH.md)** - 系统级 API Key、各层职责与推荐鉴权方式
 - **[HTTP 业务层文档](http-business-layer.md)** - 重定向、CDN、反向代理增强、负载均衡等企业级功能
@@ -95,10 +95,10 @@
 ### 🤖 AI 工作流
 
 - **说明**：Node 侧统一通过工作流 + MCP 工具完成能力编排；如需 Python 侧能力，请在子服务端按 `apis/<group>/*.py` 扩展自定义接口。
-- **[底层架构设计](底层架构设计.md)** - AI 主链路、AIStream 链路、子服务端职责边界（权威）
+- **[底层架构设计](底层架构设计.md)** - AI 主链路、AiWorkflow 链路、子服务端职责边界（权威）
 - **[MCP 完整指南](mcp-guide.md)** - MCP 工具注册与连接
 - **[MCP 配置指南](mcp-config-guide.md)** - Cursor、Claude Desktop 等外部平台连接配置
-- **[AIStream 工作流基类文档](aistream.md)** - `AIStream` 基类技术文档，涵盖 Embedding、多提供商支持、Function Calling 与上下文增强（MCP 工具 vs Call Function 见该文档）
+- **[AiWorkflow 工作流基类文档](aistream.md)** - `AiWorkflow` 基类技术文档，涵盖 Embedding、多提供商支持、Function Calling 与上下文增强（MCP 工具 vs Call Function 见该文档）
 - **[工厂系统文档](factory.md)** - LLM（含多模态）/ASR/TTS 工厂系统，统一管理多厂商 AI 服务提供商
 - **[子服务端 API 文档](subserver-api.md)** - Python 子服务端底层系统接口与扩展装载说明
 
@@ -107,18 +107,18 @@
 - **[配置基类文档](config-base.md)** - 配置基类 `ConfigBase`，包括 YAML/JSON 读写、校验、按路径读写、多文件配置等
 - **[Redis（框架内置数据库）](database.md)** - 连接配置、启动流程、全局客户端、环境变量与 Docker ⭐
 - **[渲染器基类文档](renderer.md)** - 渲染器基类 `Renderer`，模板渲染与文件监听机制
-- **[BotUtil 工具类文档](botutil.md)** - 工具类 `BotUtil`，封装日志、缓存、文件/网络操作与异步控制等基础能力
+- **[RuntimeUtil 工具类文档](runtime-util.md)** - 工具类 `RuntimeUtil`，封装日志、缓存、文件/网络操作与异步控制等基础能力
 
 ### 🧱 基础设施约定
 
-- **[运行时挂载面](runtime-surface.md)** - Bot / global / req 注入透明清单 ⭐
+- **[运行时挂载面](runtime-surface.md)** - AgentRuntime / global / req 注入透明清单 ⭐
 - **[业务扩展基类契约](base-classes.md)** - 各基类最小 export
 - **[基础设施共享约定](infrastructure-shared.md)** - Loader 标准模式、热重载、`bootstrap-globals`
 - **[文档编写规范](DOCSTYLE.md)** - 文档分层与单篇模板
 
 ### 📱 应用开发
 
-- **[应用开发指南](app-dev.md)** - Web 控制台、前后端协作、cfg 体系
+- **[应用开发指南](app-dev.md)** - Web 控制台、前后端协作、runtimeConfig 体系
 - **[启动与引导](startup.md)** - 引导链、环境变量、Playwright 浏览器 ⭐
 - **[Docker 部署指南](docker.md)** - Docker 容器化部署说明，包含 docker-compose 配置和使用指南
 
@@ -129,8 +129,8 @@
 | 角色 | 首读 | 扩展 |
 |------|------|------|
 | 插件开发者 | **[runtime-surface.md](runtime-surface.md)** · [base-classes.md](base-classes.md) · [框架可扩展性指南](框架可扩展性指南.md) · [plugin-base.md](plugin-base.md) | [plugins-loader.md](plugins-loader.md) · [aistream.md](aistream.md) |
-| Tasker 开发者 | [tasker-loader.md](tasker-loader.md) · [tasker-base-spec.md](tasker-base-spec.md) | [tasker-onebotv11.md](tasker-onebotv11.md) · [bot.md](bot.md) |
-| 后端 / API | [http-api.md](http-api.md) · [base-classes.md](base-classes.md) · [bot.md](bot.md) · [AUTH.md](AUTH.md) | [api-loader.md](api-loader.md) · [infrastructure-shared.md](infrastructure-shared.md) |
+| Tasker 开发者 | [tasker-loader.md](tasker-loader.md) · [tasker-base-spec.md](tasker-base-spec.md) | [tasker-onebotv11.md](tasker-onebotv11.md) · [agent-runtime.md](agent-runtime.md) |
+| 后端 / API | [http-api.md](http-api.md) · [base-classes.md](base-classes.md) · [agent-runtime.md](agent-runtime.md) · [AUTH.md](AUTH.md) | [api-loader.md](api-loader.md) · [infrastructure-shared.md](infrastructure-shared.md) |
 | 运维 / 配置 | [config-base.md](config-base.md) · [database.md](database.md) · [docker.md](docker.md) | [factory.md](factory.md) · [server.md](server.md) |
 | 前端 / 渲染 | [app-dev.md](app-dev.md) · [renderer.md](renderer.md) | [system-core.md](system-core.md) · [http-api.md](http-api.md) |
 
@@ -155,7 +155,7 @@
 
 1. 阅读 **[HTTP API 基类文档](http-api.md)** 与 **[API 加载器文档](api-loader.md)**
 2. 在任意 core 目录的 `http/` 子目录下新建一个 `.js` 文件，导出一个符合 `HttpApi` 结构的对象或类
-3. 重启或等待 `ApiLoader` 热重载，使用浏览器或 Postman 验证新接口
+3. 重启或等待 `HttpApiLoader` 热重载，使用浏览器或 Postman 验证新接口
 
 ### 接入新的 IM 平台（创建新 Tasker）
 
@@ -164,10 +164,10 @@
 
 ### 创建新的 AI 工作流
 
-1. 阅读 **[AIStream 工作流基类文档](aistream.md)** 了解基类设计
+1. 阅读 **[AiWorkflow 工作流基类文档](aistream.md)** 了解基类设计
 2. 阅读 **[工厂系统文档](factory.md)** 了解如何选择和使用 LLM 提供商
 3. 在任意 core 目录的 `stream/` 子目录中创建新的工作流文件
-4. 基于 `AIStream` 实现自定义工作流逻辑
+4. 基于 `AiWorkflow` 实现自定义工作流逻辑
 5. 在插件或 API 中调用新工作流
 
 ### 接入新的 AI 服务提供商
@@ -192,22 +192,22 @@
 
 ---
 
-## 🔍 全局对象与 Bot
+## 🔍 全局对象与 AgentRuntime
 
-**完整挂载表**（含 Proxy 透传 `BotUtil`、HTTP 业务层方法、`req.bot`）：**[runtime-surface.md](runtime-surface.md)**。
+**完整挂载表**（含 Proxy 透传 `RuntimeUtil`、HTTP 业务层方法、`req.agentRuntime`）：**[runtime-surface.md](runtime-surface.md)**。
 
-Bot 生命周期、HTTP/WS、关闭流程：**[bot.md](bot.md)**。OneBot 子 Bot 结构：**[tasker-onebotv11.md](tasker-onebotv11.md)**。
+AgentRuntime 生命周期、HTTP/WS、关闭流程：**[agent-runtime.md](agent-runtime.md)**。OneBot 子 AgentRuntime 结构：**[tasker-onebotv11.md](tasker-onebotv11.md)**。
 
 ---
 
 ## ⚠️ 重要提示
 
 1. **架构层次**：理解基础设施层（辅助层）和业务层的区别，基础设施层提供通用能力，业务层实现具体功能
-2. **全局对象访问**：始终通过 `Bot[self_id]` 访问 Bot 实例，不要直接使用 `e.bot`（除非确保已初始化）
+2. **全局对象访问**：始终通过 `AgentRuntime[self_id]` 访问 AgentRuntime 实例，不要直接使用 `e.bot`（除非确保已初始化）
 3. **事件命名**：遵循 `tasker.类型.子类型` 格式，如 `onebot.message.group.normal`
 4. **错误处理**：异步操作用 try/catch；基础设施层用 `Error.isError` / `normalizeError`
-5. **Bot 实例**：通过 `node app` 启动，勿手动 `new Bot()`
-6. **Ctrl+C**：服务端 1 次重启 / 3 次回菜单（见 [bot.md](bot.md)）；勿在业务代码自行 `process.on('SIGINT')`
+5. **AgentRuntime 实例**：通过 `node app` 启动，勿手动 `new AgentRuntime()`
+6. **Ctrl+C**：服务端 1 次重启 / 3 次回菜单（见 [agent-runtime.md](agent-runtime.md)）；勿在业务代码自行 `process.on('SIGINT')`
 7. **Node.js ≥ 26**、**pnpm** 为硬性要求（见 [node-26-runtime.md](node-26-runtime.md)）
 
 ---

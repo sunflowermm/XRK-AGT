@@ -6,7 +6,7 @@ export default class StdinEvent extends EventListenerBase {
   }
 
   async init() {
-    const bot = this.bot || Bot
+    const bot = this.bot || AgentRuntime
     bot.on('stdin.message', (e) => this.handleEvent(e))
   }
 

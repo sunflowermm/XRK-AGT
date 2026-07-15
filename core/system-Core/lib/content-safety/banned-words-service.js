@@ -1,9 +1,9 @@
-import cfg from '#infrastructure/config/config.js';
+import runtimeConfig from '#infrastructure/config/config.js';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 
 function resolvePaths() {
-  const agtCfg = cfg.agt || {};
+  const agtCfg = runtimeConfig.agt || {};
   const filesCfg = agtCfg.files || {};
   const bannedWordsPath = filesCfg.bannedWordsPath || 'data/bannedWords/';
   const bannedImagesPath = filesCfg.bannedImagesPath || 'data/bannedWords/images/';

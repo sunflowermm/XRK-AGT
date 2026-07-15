@@ -79,7 +79,7 @@ export default class BaseFactory {
         return baseFactory.isProviderSupported(provider);
       }
 
-      static createClient(deviceId, config = {}, Bot) {
+      static createClient(deviceId, config = {}, AgentRuntime) {
         if (!config.enabled) {
           throw new Error(disabledMessage);
         }
@@ -90,7 +90,7 @@ export default class BaseFactory {
           throw new Error(unsupportedMessage(provider));
         }
 
-        return factory(deviceId, config, Bot);
+        return factory(deviceId, config, AgentRuntime);
       }
     };
   }

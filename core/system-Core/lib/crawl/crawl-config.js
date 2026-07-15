@@ -2,7 +2,7 @@
  * crawl 运行时配置 — 单一来源：aistream.crawl + renderer.playwright + overrides
  * 优先级：调用方 overrides > aistream.yaml > renderer.playwright > 默认值
  */
-import cfg from '#infrastructure/config/config.js';
+import runtimeConfig from '#infrastructure/config/config.js';
 import { getAistreamConfigOptional } from '#utils/aistream-config.js';
 import { createRequire } from 'node:module';
 
@@ -126,7 +126,7 @@ export function getCrawlConfigSection() {
 
 export function getPlaywrightRendererConfig() {
   try {
-    return cfg.getRendererConfig?.('playwright') ?? {};
+    return runtimeConfig.getRendererConfig?.('playwright') ?? {};
   } catch {
     return {};
   }

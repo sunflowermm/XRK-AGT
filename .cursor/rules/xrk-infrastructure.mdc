@@ -14,7 +14,7 @@ alwaysApply: false
 
 - 错误处理：使用 `#utils/error-handler.js` 的 `errorHandler.handle()` 与 `ErrorCodes`；HTTP 响应用 `HttpResponse.error()`。
 - 归一化：`#utils/normalize-error.js` 的 `normalizeError()`；判错用 `Error.isError()`，禁止 `instanceof Error`。
-- 日志：使用 `BotUtil.makeLog`（或注入的 logger），不在业务逻辑处随意 `console.log`。
+- 日志：使用 `RuntimeUtil.makeLog`（或注入的 logger），不在业务逻辑处随意 `console.log`。
 
 ## Node 26 工具（本层新增/统一出口）
 
@@ -31,4 +31,4 @@ alwaysApply: false
 
 ## 接口稳定
 
-- 修改基类或加载器对外 API 时，需兼容现有 core 与 `docs/` 文档；优先新增可选参数，避免破坏性变更。
+- 修改基类或加载器对外 API 时，须同步更新 `docs/`、skills、rules 与依赖该 API 的 Core；**勿**长期保留兼容别名。破坏性重命名应一次改净标识符与文档。

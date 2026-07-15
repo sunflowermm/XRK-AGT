@@ -1,8 +1,8 @@
 import os from 'os';
 import si from 'systeminformation';
 import { exec } from '#utils/exec-async.js';
-import cfg from '#infrastructure/config/config.js';
-import StreamLoader from '#infrastructure/aistream/loader.js';
+import runtimeConfig from '#infrastructure/config/config.js';
+import AiStreamLoader from '#infrastructure/ai-workflow/loader.js';
 import { collectBotInventory, summarizeBots } from '#infrastructure/http/utils/botInventory.js';
 import { HttpResponse } from '#utils/http-utils.js';
 
@@ -498,7 +498,7 @@ function __ensureSysSamplers() {
   }
 }
 
-async function buildSystemSnapshot(Bot, { includeHistory = false } = {}) {
+async function buildSystemSnapshot(AgentRuntime, { includeHistory = false } = {}) {
           if (!__cpuCache.ts || (Date.now() - __cpuCache.ts > 5_000)) {
             __sampleCpuOnce();
           }
@@ -553,9 +553,9 @@ async function buildSystemSnapshot(Bot, { includeHistory = false } = {}) {
     }
   }
 
-  const bots = await collectBotInventory(Bot, { includeDevices: true });
-  const workflowStats = StreamLoader.getStats();
-  const workflowList = StreamLoader.getStreamsByPriority().map(stream => ({
+  const bots = await collectBotInventory(AgentRuntime, { includeDevices: true });
+  const workflowStats = AiStreamLoader.getStats();
+  const workflowList = AiStreamLoader.getStreamsByPriority().map(stream => ({
     name: stream.name,
     description: stream.description,
     priority: stream.priority,
@@ -606,14 +606,14 @@ async function buildSystemSnapshot(Bot, { includeHistory = false } = {}) {
     timestamp: Date.now(),
     system,
             bot: {
-              url: Bot.url,
-              port: Bot.port,
-              startTime: Bot.stat?.start_time || Date.now() / 1000,
-              uptime: Bot.stat?.start_time ? (Date.now() / 1000) - Bot.stat.start_time : process.uptime()
+              url: AgentRuntime.url,
+              port: AgentRuntime.port,
+              startTime: AgentRuntime.stat?.start_time || Date.now() / 1000,
+              uptime: AgentRuntime.stat?.start_time ? (Date.now() / 1000) - AgentRuntime.stat.start_time : process.uptime()
             },
             bots,
             processesTop5,
-    taskers: Bot.tasker,
+    taskers: AgentRuntime.tasker,
     workflows: {
       stats: workflowStats,
       items: workflowList
@@ -669,9 +669,9 @@ export default {
     {
       method: 'GET',
       path: '/api/system/status',
-      handler: HttpResponse.asyncHandler(async (req, res, Bot) => {
+      handler: HttpResponse.asyncHandler(async (req, res, AgentRuntime) => {
         const includeHist = ['24h', '1', 'true'].includes(req.query?.hist) || ['1', 'true'].includes(req.query?.withHistory);
-        const snapshot = await buildSystemSnapshot(Bot, { includeHistory: includeHist });
+        const snapshot = await buildSystemSnapshot(AgentRuntime, { includeHistory: includeHist });
         return HttpResponse.json(res, snapshot);
       }, 'system.status')
     },
@@ -679,9 +679,9 @@ export default {
     {
       method: 'GET',
       path: '/api/system/overview',
-      handler: HttpResponse.asyncHandler(async (req, res, Bot) => {
+      handler: HttpResponse.asyncHandler(async (req, res, AgentRuntime) => {
         const includeHist = ['24h', '1', 'true'].includes(req.query?.hist) || ['1', 'true'].includes(req.query?.withHistory);
-        const snapshot = await buildSystemSnapshot(Bot, { includeHistory: includeHist });
+        const snapshot = await buildSystemSnapshot(AgentRuntime, { includeHistory: includeHist });
         HttpResponse.success(res, {
           timestamp: snapshot.timestamp,
           system: snapshot.system,
@@ -702,8 +702,8 @@ export default {
     {
       method: 'GET',
       path: '/api/status',
-      handler: HttpResponse.asyncHandler(async (req, res, Bot) => {
-        const snapshot = await buildSystemSnapshot(Bot, { includeHistory: false });
+      handler: HttpResponse.asyncHandler(async (req, res, AgentRuntime) => {
+        const snapshot = await buildSystemSnapshot(AgentRuntime, { includeHistory: false });
         HttpResponse.success(res, {
           system: snapshot.system,
           bot: snapshot.bot,
@@ -739,7 +739,7 @@ export default {
         }
 
         HttpResponse.success(res, {
-          config: serialize(cfg)
+          config: serialize(runtimeConfig)
         });
       }
     },
@@ -747,7 +747,7 @@ export default {
     {
       method: 'GET',
       path: '/api/health',
-      handler: HttpResponse.asyncHandler(async (req, res, Bot) => {
+      handler: HttpResponse.asyncHandler(async (req, res, AgentRuntime) => {
         let redisOk = false;
         try {
           const { getRedis } = await import('#infrastructure/database/index.js');
@@ -763,7 +763,7 @@ export default {
           status: 'healthy',
           timestamp: Date.now(),
           services: {
-            bot: Bot.uin && Bot.uin.length > 0 ? 'operational' : 'degraded',
+            bot: AgentRuntime.uin && AgentRuntime.uin.length > 0 ? 'operational' : 'degraded',
             redis: redisOk ? 'operational' : 'down',
             api: 'operational'
           }

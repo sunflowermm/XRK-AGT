@@ -17,4 +17,4 @@ dotnet run
 
 新插件：复制 `Apis/uuid-tools/UuidToolsPlugin.cs`，改组名与路由，并在 `Core/PluginCatalog.cs` 注册。
 
-主服务：**CommonConfig → AIStream → 子服务端 → netserver**
+主服务：**CommonConfig → AiWorkflow → 子服务端 → netserver**

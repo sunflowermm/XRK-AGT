@@ -1,5 +1,5 @@
-import AIStream from '#infrastructure/aistream/aistream.js';
-import BotUtil from '#utils/botutil.js';
+import AiWorkflow from '#infrastructure/ai-workflow/ai-workflow.js';
+import RuntimeUtil from '#utils/runtime-util.js';
 import path from 'path';
 import fs from 'fs/promises';
 import fsSync from 'fs';
@@ -14,7 +14,7 @@ import os from 'os';
  * - save_knowledge（保存知识）
  * - delete_knowledge（删除知识）
  */
-export default class DatabaseStream extends AIStream {
+export default class DatabaseStream extends AiWorkflow {
   dbDir = path.join(os.homedir(), '.xrk', 'knowledge');
   databases = new Map();
 
@@ -93,7 +93,7 @@ export default class DatabaseStream extends AIStream {
         if (!content) return { success: false, error: '知识内容不能为空' };
 
         await this.saveKnowledge(db, content);
-        BotUtil.makeLog('info', `[${this.name}] 保存知识到知识库: ${db}`, 'DatabaseStream');
+        RuntimeUtil.makeLog('info', `[${this.name}] 保存知识到知识库: ${db}`, 'DatabaseStream');
         
         return {
           success: true,
@@ -148,7 +148,7 @@ export default class DatabaseStream extends AIStream {
         if (!db) return { success: false, error: '知识库名称不能为空' };
 
         const results = await this.queryKnowledge(db, keyword);
-        BotUtil.makeLog('info', `[${this.name}] 查询知识库: ${db}，找到 ${results.length} 条`, 'DatabaseStream');
+        RuntimeUtil.makeLog('info', `[${this.name}] 查询知识库: ${db}，找到 ${results.length} 条`, 'DatabaseStream');
 
         return {
           success: true,
@@ -313,7 +313,7 @@ export default class DatabaseStream extends AIStream {
     await fs.writeFile(dbFile, JSON.stringify(records, null, 2), 'utf8');
     this.databases.set(db, records);
     
-    BotUtil.makeLog('info', `[${this.name}] 保存知识到知识库: ${db}`, 'DatabaseStream');
+    RuntimeUtil.makeLog('info', `[${this.name}] 保存知识到知识库: ${db}`, 'DatabaseStream');
   }
 
   /**
@@ -369,7 +369,7 @@ export default class DatabaseStream extends AIStream {
 
       return allResults.slice(0, maxResults);
     } catch (error) {
-      BotUtil.makeLog('debug', `[${this.name}] 检索知识库失败: ${error.message}`, 'DatabaseStream');
+      RuntimeUtil.makeLog('debug', `[${this.name}] 检索知识库失败: ${error.message}`, 'DatabaseStream');
       return [];
     }
   }

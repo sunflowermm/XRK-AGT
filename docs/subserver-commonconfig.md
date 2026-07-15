@@ -9,17 +9,17 @@
 
 | 类型 | 谁编辑 | 谁读取 | 文件 / 入口 |
 |------|--------|--------|-------------|
-| **子服连接** | 主服控制台 | 主服 `Bot.callSubserver` | `aistream.yaml` → **`cfg.subserver`**（系统配置 → AIStream → 子服务端） |
+| **子服连接** | 主服控制台 | 主服 `AgentRuntime.callSubserver` | `aistream.yaml` → **`runtimeConfig.subserver`**（系统配置 → AiWorkflow → 子服务端） |
 | **业务插件** | 主服控制台 | 子服 `load_plugin_config` / 主服 QQ 插件 | `data/<group>/config.yaml` |
 | **子服进程**（可选） | 部署 / 子服本地 | pyserver 启动 | `data/subserver/config.yaml`（监听地址等，与主服「连哪个端口」无关） |
 
-主服编辑子服 **host/port** 时，改的是 **AIStream → 子服务端**（`subserver.runtimes.pyserver` 等），不是业务插件 yaml。
+主服编辑子服 **host/port** 时，改的是 **AiWorkflow → 子服务端**（`subserver.runtimes.pyserver` 等），不是业务插件 yaml。
 
 ---
 
 ## 业务插件 CommonConfig（与主仓 Core 同模式）
 
-schema 放在子服插件目录下的 **`core/commonconfig/`**，由主服 `ConfigLoader` 扫描——**不是**子服 HTTP API，**不是**主仓 `core/*/commonconfig/` 再写一份。
+schema 放在子服插件目录下的 **`core/commonconfig/`**，由主服 `CommonConfigRegistry` 扫描——**不是**子服 HTTP API，**不是**主仓 `core/*/commonconfig/` 再写一份。
 
 ```
 subserver/pyserver/apis/<group>/
@@ -37,7 +37,7 @@ subserver/pyserver/apis/<group>/
     → ConfigBase.write()
     → data/<group>/config.yaml
     → 子服 PluginConfig.get() / reload()
-    → 主服 ConfigLoader.get('<group>').read()
+    → 主服 CommonConfigRegistry.get('<group>').read()
 ```
 
 子服**不提供**配置写入 API；改配置后子服需 **reload 配置或重启** 才能读到新值（各插件可在 `status` 命令里提示）。
@@ -83,15 +83,15 @@ config.reload()  # 主服改 yaml 后可选刷新
 ## 主服侧
 
 ```javascript
-import ConfigLoader from '#infrastructure/commonconfig/loader.js';
-import cfg from '#infrastructure/config/config.js';
+import CommonConfigRegistry from '#infrastructure/commonconfig/loader.js';
+import runtimeConfig from '#infrastructure/config/config.js';
 
 // 业务配置
-const data = await ConfigLoader.get('jmcomic')?.read();
+const data = await CommonConfigRegistry.get('jmcomic')?.read();
 
 // 子服连接
-await Bot.callSubserver('/api/jmcomic/download', { body: { album_id: '123' } });
-// 端点来自 cfg.subserver
+await AgentRuntime.callSubserver('/api/jmcomic/download', { body: { album_id: '123' } });
+// 端点来自 runtimeConfig.subserver
 ```
 
 ---

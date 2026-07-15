@@ -29,8 +29,7 @@
     "#renderers/*": "./src/renderers/*",
     "#modules/*": "./src/modules/*",
     "#infrastructure/*": "./src/infrastructure/*",
-    "#factory/*": "./src/factory/*",
-    "#oicq": "./src/modules/oicq/index.js"
+    "#factory/*": "./src/factory/*"
   },
   "dependencies": {
     "@mariozechner/pi-coding-agent": "0.61.1",
@@ -49,7 +48,6 @@
     "glob": "^13.0.0",
     "helmet": "^8.1.0",
     "http-proxy-middleware": "^3.0.5",
-    "icqq": "^0.6.10",
     "image-size": "^2.0.2",
     "inquirer": "^8.2.5",
     "linkedom": "^0.18.12",

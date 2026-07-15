@@ -71,12 +71,12 @@ flowchart LR
     style Response fill:#2ECC71,stroke:#27AE60,stroke-width:3px,color:#fff
 ```
 
-**流程说明**：请求首先进入HTTP业务层，依次经过重定向检查、CDN处理、反向代理路由，最终返回响应。HTTP业务层在Bot的中间件链中，位于请求体解析之后、路由匹配之前。
+**流程说明**：请求首先进入HTTP业务层，依次经过重定向检查、CDN处理、反向代理路由，最终返回响应。HTTP业务层在AgentRuntime的中间件链中，位于请求体解析之后、路由匹配之前。
 
 ### 文件位置
 
 - **核心实现**：`src/utils/http-business.js`
-- **集成位置**：`src/bot.js`（Bot类中初始化）
+- **集成位置**：`src/agent-runtime.js`（AgentRuntime类中初始化）
 - **配置文件**：`config/default_config/server.yaml`
 
 ---
@@ -782,7 +782,7 @@ class ProxyManager {
 
 ## 相关文档
 
-- **[Bot 主类文档](bot.md)** - HTTP/HTTPS/WebSocket 服务详细说明
+- **[AgentRuntime 主类文档](agent-runtime.md)** - HTTP/HTTPS/WebSocket 服务详细说明
 - **[Server 服务器架构](server.md)** - 完整的服务器架构说明
 - **[system-Core 特性](system-core.md)** - system-Core 内置模块完整说明 ⭐
 

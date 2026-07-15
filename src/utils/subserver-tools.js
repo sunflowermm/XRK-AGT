@@ -1,5 +1,5 @@
 /**
- * pyserver 业务 API ↔ Node 主服务 HTTP 桥接（插件/工作流用 Bot.callSubserver）
+ * pyserver 业务 API ↔ Node 主服务 HTTP 桥接（插件/工作流用 AgentRuntime.callSubserver）
  *
  * 子服务运维命令请在子服务终端输入（与主服 > 分离，避免冲突）。
  */
@@ -39,7 +39,7 @@ export async function dispatchSubserverCommand(rawLine, options = {}) {
   );
 
   try {
-    const result = await Bot.callSubserver('/api/system/command', {
+    const result = await AgentRuntime.callSubserver('/api/system/command', {
       method: 'POST',
       body: { line: commandLine },
       timeout,
@@ -67,7 +67,7 @@ export async function dispatchSubserverCommand(rawLine, options = {}) {
  * @param {Record<string, unknown>} [options]
  */
 export async function callPyserver(requestPath, options = {}) {
-  return Bot.callSubserver(requestPath, { runtime: PYSERVER, ...options });
+  return AgentRuntime.callSubserver(requestPath, { runtime: PYSERVER, ...options });
 }
 
 export const PyserverApi = {

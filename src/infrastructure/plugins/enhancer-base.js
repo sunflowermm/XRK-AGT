@@ -1,10 +1,10 @@
-import plugin from './plugin.js'
+import PluginBase from './plugin-base.js'
 
 /**
  * Enhancer基类
  * 提供通用的增强逻辑，减少重复代码
  */
-export default class EnhancerBase extends plugin {
+export default class EnhancerBase extends PluginBase {
   constructor(config) {
     super({
       ...config,

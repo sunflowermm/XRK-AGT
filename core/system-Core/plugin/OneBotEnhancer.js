@@ -1,5 +1,5 @@
-import cfg from '#infrastructure/config/config.js'
-import BotUtil from '#utils/botutil.js'
+import runtimeConfig from '#infrastructure/config/config.js'
+import RuntimeUtil from '#utils/runtime-util.js'
 import EnhancerBase from '#infrastructure/plugins/enhancer-base.js'
 
 export default class OneBotEnhancer extends EnhancerBase {
@@ -80,7 +80,7 @@ export default class OneBotEnhancer extends EnhancerBase {
 
   applyAlias(e) {
     if (!e.group_id || !e.msg) return
-    const groupCfg = cfg.getGroup(e.group_id) || {}
+    const groupCfg = runtimeConfig.getGroup(e.group_id) || {}
     const aliases = this.normalizeAliasList(groupCfg.botAlias)
     if (!aliases.length) return
 
@@ -95,20 +95,20 @@ export default class OneBotEnhancer extends EnhancerBase {
 
   async applyAutoRequest(e) {
     if (e.post_type !== 'request' || typeof e.approve !== 'function') return
-    const auto = cfg.chatbot?.auto || {}
+    const auto = runtimeConfig.chatbot?.auto || {}
     try {
       if (e.request_type === 'friend' && auto.friend === 1) {
         await e.approve(true)
-        BotUtil.makeLog('info', `已自动同意加好友：${e.user_id}`, e.self_id)
+        RuntimeUtil.makeLog('info', `已自动同意加好友：${e.user_id}`, e.self_id)
       }
     } catch (err) {
-      BotUtil.makeLog('warn', `自动同意加好友失败: ${err?.message || err}`, e.self_id)
+      RuntimeUtil.makeLog('warn', `自动同意加好友失败: ${err?.message || err}`, e.self_id)
     }
   }
 
   async applyAutoQuitOnInvite(e) {
     if (e.post_type !== 'notice' || e.notice_type !== 'group' || e.sub_type !== 'invite') return
-    const quitThreshold = Number(cfg.chatbot?.auto?.quit) || 0
+    const quitThreshold = Number(runtimeConfig.chatbot?.auto?.quit) || 0
     if (quitThreshold <= 0 || !e.group_id) return
     try {
       const group = e.group || e.bot?.pickGroup?.(e.group_id)
@@ -116,10 +116,10 @@ export default class OneBotEnhancer extends EnhancerBase {
       const count = info?.member_count ?? info?.memberCount
       if (typeof count === 'number' && count < quitThreshold && group?.quit) {
         await group.quit()
-        BotUtil.makeLog('info', `群人数 ${count} < ${quitThreshold}，已自动退群 ${e.group_id}`, e.self_id)
+        RuntimeUtil.makeLog('info', `群人数 ${count} < ${quitThreshold}，已自动退群 ${e.group_id}`, e.self_id)
       }
     } catch (err) {
-      BotUtil.makeLog('warn', `自动退群失败: ${err?.message || err}`, e.self_id)
+      RuntimeUtil.makeLog('warn', `自动退群失败: ${err?.message || err}`, e.self_id)
     }
   }
 
@@ -134,7 +134,7 @@ export default class OneBotEnhancer extends EnhancerBase {
         return true
       }
 
-      const chatbotCfg = cfg.chatbot || {}
+      const chatbotCfg = runtimeConfig.chatbot || {}
       const {
         blacklist = {},
         whitelist = {},
@@ -204,7 +204,7 @@ export default class OneBotEnhancer extends EnhancerBase {
 
       return true
     } catch (error) {
-      BotUtil.makeLog('error', `OneBotEnhancer 配置策略应用失败: ${error.message}`, e.self_id)
+      RuntimeUtil.makeLog('error', `OneBotEnhancer 配置策略应用失败: ${error.message}`, e.self_id)
       return true
     }
   }
@@ -213,7 +213,7 @@ export default class OneBotEnhancer extends EnhancerBase {
     // 非群组、设备、stdin事件跳过
     if (!e.group_id || e.isDevice || e.isStdin) return true
 
-    const groupCfg = cfg.getGroup(e.group_id) || {}
+    const groupCfg = runtimeConfig.getGroup(e.group_id) || {}
     const onlyReplyAt = groupCfg.onlyReplyAt ?? 0
 
     // 未启用或未配置别名，允许回复

@@ -5,7 +5,7 @@ import { ensureMessagesImagesDataUrl } from '../../utils/llm/image-utils.js';
 import { iterateSSE } from '../../utils/llm/sse-utils.js';
 import { partitionAndExecuteToolCalls } from '../../utils/llm/tool-partition-utils.js';
 import { MCPToolAdapter } from '../../utils/llm/mcp-tool-adapter.js';
-import BotUtil from '../../utils/botutil.js';
+import RuntimeUtil from '../../utils/runtime-util.js';
 
 function isOpenAIResponsesBuiltInTool(tool) {
   const type = String(tool?.type || '').trim();
@@ -295,7 +295,7 @@ export default class OpenAIResponsesCompatibleLLMClient {
       input = execResult;
     }
 
-    BotUtil.makeLog('warn', `[OpenAIResponsesCompatibleLLMClient] 达到最大工具调用轮数: ${maxToolRounds}`, 'LLMFactory');
+    RuntimeUtil.makeLog('warn', `[OpenAIResponsesCompatibleLLMClient] 达到最大工具调用轮数: ${maxToolRounds}`, 'LLMFactory');
     return executedToolNames.length ? { content: '', executedToolNames } : '';
   }
 
@@ -319,7 +319,7 @@ export default class OpenAIResponsesCompatibleLLMClient {
           if (typeof onDelta === 'function') onDelta(evt.delta);
         }
       } catch (e) {
-        BotUtil.makeLog('warn', `[OpenAIResponsesCompatibleLLMClient] SSE JSON解析失败: ${e.message}`, 'LLMFactory');
+        RuntimeUtil.makeLog('warn', `[OpenAIResponsesCompatibleLLMClient] SSE JSON解析失败: ${e.message}`, 'LLMFactory');
       }
     }
   }

@@ -38,7 +38,7 @@ export function parseContentToSendSegments(text) {
       const chunk = work.slice(last, match.index);
       if (chunk) out.push(chunk);
     }
-    out.push(segment.at(match[1]));
+    out.push(msgSegment.at(match[1]));
     last = match.index + match[0].length;
   }
   if (last < work.length) {
@@ -126,8 +126,8 @@ export function splitProtocolParts(text) {
  */
 export function buildOutboundSegments({ replyId, imagePaths = [], segments = [] } = {}) {
   const payload = [];
-  if (replyId) payload.push(segment.reply(String(replyId)));
-  for (const img of imagePaths) payload.push(segment.image(img));
+  if (replyId) payload.push(msgSegment.reply(String(replyId)));
+  for (const img of imagePaths) payload.push(msgSegment.image(img));
   if (segments.length) payload.push(...segments);
   else if (replyId && !imagePaths.length) payload.push(' ');
   return payload;

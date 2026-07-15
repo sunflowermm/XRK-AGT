@@ -59,9 +59,9 @@ constructor(metadata = {})
 
 **filePath 格式**：
 - 字符串：相对于项目根目录的路径，如 `'data/server_bots/2533/server.yaml'`（随端口配置）
-- 函数：动态路径函数 `(cfg) => path.join('data/server_bots', String(cfg.port), 'server.yaml')`
+- 函数：动态路径函数 `(runtimeConfig) => path.join('data/server_bots', String(runtimeConfig.port), 'server.yaml')`
 
-**与运行时 `Cfg` 的关系**（`src/infrastructure/config/config.js`）：
+**与运行时 `RuntimeConfig` 的关系**（`src/infrastructure/config/config.js`）：
 - **全局配置**（`GLOBAL_CONFIGS`）：`data/server_bots/<name>.yaml`（如 `agt`、`device`、`notice`、`redis`）
 - **随端口配置**（`SERVER_CONFIGS` + 工厂 LLM）：`data/server_bots/{port}/<name>.yaml`（如 `server`、`chatbot`、`aistream`）
 - 默认模板来源：`config/default_config/<name>.yaml`；首次缺失时自动复制到上述路径
@@ -152,7 +152,7 @@ flowchart TB
 ```javascript
 {
   name: 'renderer',
-  filePath: (cfg) => `data/server_bots/${cfg.port}/renderers/{type}/config.yaml`,
+  filePath: (runtimeConfig) => `data/server_bots/${runtimeConfig.port}/renderers/{type}/config.yaml`,
   multiFile: {
     keys: ['puppeteer', 'playwright'],
     getFilePath: (key) => path.join(paths.root, `data/server_bots/${port}/renderers/${key}/config.yaml`),
@@ -212,7 +212,7 @@ export default class ServerConfig extends ConfigBase {
     super({
       name: 'server',
       displayName: '服务器配置',
-      filePath: (cfg) => `data/server_bots/${cfg.port || cfg._port}/server.yaml`,
+      filePath: (runtimeConfig) => `data/server_bots/${runtimeConfig.port || runtimeConfig._port}/server.yaml`,
       fileType: 'yaml',
       schema: {
         required: ['server'],
@@ -240,11 +240,11 @@ export default class RendererConfig extends ConfigBase {
   constructor() {
     super({
       name: 'renderer',
-      filePath: (cfg) => `data/server_bots/${cfg.port}/renderers/{type}/config.yaml`,
+      filePath: (runtimeConfig) => `data/server_bots/${runtimeConfig.port}/renderers/{type}/config.yaml`,
       multiFile: {
         keys: ['puppeteer', 'playwright'],
-        getFilePath: (key, cfg) => {
-          const port = cfg?.port ?? cfg?._port;
+        getFilePath: (key, runtimeConfig) => {
+          const port = runtimeConfig?.port ?? runtimeConfig?._port;
           return path.join(paths.root, `data/server_bots/${port}/renderers/${key}/config.yaml`);
         }
       }

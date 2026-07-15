@@ -1,4 +1,4 @@
-import BotUtil from './botutil.js';
+import RuntimeUtil from './runtime-util.js';
 import { exec } from './exec-async.js';
 import { normalizeError } from './normalize-error.js';
 
@@ -58,11 +58,11 @@ export async function detectArm64() {
  */
 export function finalizeDbConnectionFailure(label, error, options = {}) {
   const normalized = normalizeError(error);
-  BotUtil.makeLog('error', `连接失败: ${normalized.message}`, label);
-  BotUtil.makeLog('error', '请检查: 1)服务是否启动 2)配置是否正确 3)端口是否可用 4)网络是否正常', label);
+  RuntimeUtil.makeLog('error', `连接失败: ${normalized.message}`, label);
+  RuntimeUtil.makeLog('error', '请检查: 1)服务是否启动 2)配置是否正确 3)端口是否可用 4)网络是否正常', label);
 
   if (process.env.NODE_ENV !== 'production' && options.devHint) {
-    BotUtil.makeLog('error', options.devHint, label);
+    RuntimeUtil.makeLog('error', options.devHint, label);
   }
 
   process.exit(1);
@@ -94,18 +94,18 @@ export async function connectWithRetry({
 
   while (retryCount < maxRetries) {
     try {
-      BotUtil.makeLog(
+      RuntimeUtil.makeLog(
         'info',
         `连接中 [${retryCount + 1}/${maxRetries}]: ${maskConnectionUrl(connectionUrl)}`,
         label
       );
       await client.connect();
-      BotUtil.makeLog('success', '连接成功', label);
+      RuntimeUtil.makeLog('success', '连接成功', label);
       return client;
     } catch (err) {
       retryCount++;
       const error = normalizeError(err);
-      BotUtil.makeLog('warn', `连接失败 [${retryCount}/${maxRetries}]: ${error.message}`, label);
+      RuntimeUtil.makeLog('warn', `连接失败 [${retryCount}/${maxRetries}]: ${error.message}`, label);
 
       if (retryCount < maxRetries) {
         if (!fastStart && onBeforeRetry) await onBeforeRetry(retryCount);

@@ -16,9 +16,9 @@ export default {
     {
       method: 'GET',
       path: '/api/bots',
-      handler: HttpResponse.asyncHandler(async (req, res, Bot) => {
+      handler: HttpResponse.asyncHandler(async (req, res, AgentRuntime) => {
         const includeDevices = /^(1|true|yes)$/i.test(String(req.query?.includeDevices ?? ''));
-        const bots = await collectBotInventory(Bot);
+        const bots = await collectBotInventory(AgentRuntime);
         HttpResponse.success(res, { bots: includeDevices ? bots : bots.filter(b => !b.device) });
       }, 'bot.list')
     },
@@ -26,9 +26,9 @@ export default {
     {
       method: 'GET',
       path: '/api/bot/:uin/friends',
-      handler: HttpResponse.asyncHandler(async (req, res, Bot) => {
+      handler: HttpResponse.asyncHandler(async (req, res, AgentRuntime) => {
         const uin = InputValidator.validateUserId(req.params.uin);
-        const bot = Bot.bots[uin];
+        const bot = AgentRuntime.bots[uin];
         
         if (!bot) {
           return HttpResponse.notFound(res, '机器人不存在');
@@ -42,9 +42,9 @@ export default {
     {
       method: 'GET', 
       path: '/api/bot/:uin/groups',
-      handler: HttpResponse.asyncHandler(async (req, res, Bot) => {
+      handler: HttpResponse.asyncHandler(async (req, res, AgentRuntime) => {
         const uin = InputValidator.validateUserId(req.params.uin);
-        const bot = Bot.bots[uin];
+        const bot = AgentRuntime.bots[uin];
         
         if (!bot) {
           return HttpResponse.notFound(res, '机器人不存在');
@@ -58,7 +58,7 @@ export default {
     {
       method: 'POST',
       path: '/api/message/send',
-      handler: HttpResponse.asyncHandler(async (req, res, Bot) => {
+      handler: HttpResponse.asyncHandler(async (req, res, AgentRuntime) => {
         // 输入验证
         const { bot_id, type, target_id, message } = req.body;
 
@@ -86,15 +86,15 @@ export default {
         let sendResult;
         if (type === 'private' || type === 'friend') {
           if (bot_id) {
-            sendResult = await Bot.sendFriendMsg(bot_id, target_id, processedMessage);
+            sendResult = await AgentRuntime.sendFriendMsg(bot_id, target_id, processedMessage);
           } else {
-            sendResult = await Bot.pickFriend(target_id).sendMsg(processedMessage);
+            sendResult = await AgentRuntime.pickFriend(target_id).sendMsg(processedMessage);
           }
         } else if (type === 'group') {
           if (bot_id) {
-            sendResult = await Bot.sendGroupMsg(bot_id, target_id, processedMessage);
+            sendResult = await AgentRuntime.sendGroupMsg(bot_id, target_id, processedMessage);
           } else {
-            sendResult = await Bot.pickGroup(target_id).sendMsg(processedMessage);
+            sendResult = await AgentRuntime.pickGroup(target_id).sendMsg(processedMessage);
           }
         } else {
           return HttpResponse.validationError(res, '不支持的消息类型');
@@ -106,8 +106,8 @@ export default {
           raw_message: processedMessage
         };
 
-        Bot.em('message.send', {
-          bot_id: bot_id || Bot.uin?.[0],
+        AgentRuntime.em('message.send', {
+          bot_id: bot_id || AgentRuntime.uin?.[0],
           type,
           target_id,
           message: processedMessage,
@@ -126,12 +126,12 @@ export default {
     {
       method: 'POST',
       path: '/api/bot/:uin/control',
-      handler: HttpResponse.asyncHandler(async (req, res, Bot) => {
+      handler: HttpResponse.asyncHandler(async (req, res, AgentRuntime) => {
         // 输入验证
         const uin = InputValidator.validateUserId(req.params.uin);
         const { action } = req.body;
         
-        if (!Bot.bots[uin]) return HttpResponse.notFound(res, '机器人不存在');
+        if (!AgentRuntime.bots[uin]) return HttpResponse.notFound(res, '机器人不存在');
         const { getRedis } = await import('#infrastructure/database/index.js');
         const redis = getRedis();
         if (!redis) return HttpResponse.error(res, new Error('Redis未初始化'), 503, 'bot.control');

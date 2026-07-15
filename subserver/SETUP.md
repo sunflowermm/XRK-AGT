@@ -42,8 +42,8 @@ CONTAINER_HTTPS_PROXY=http://host.docker.internal:<端口>
 
 ## 常见问题
 
-- **端口占用** — 改 compose 映射并同步主服 `cfg.subserver`
+- **端口占用** — 改 compose 映射并同步主服 `runtimeConfig.subserver`
 - **Docker 拉镜像 403** — 检查 `%USERPROFILE%\.docker\daemon.json` 镜像源
 - **jserver 首次慢** — Maven 下载依赖
 
-主服调用：`Bot.callSubserver('/api/...', { runtime: 'goserver', method: 'POST', body })`
+主服调用：`AgentRuntime.callSubserver('/api/...', { runtime: 'goserver', method: 'POST', body })`

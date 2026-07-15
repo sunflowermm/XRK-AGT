@@ -1,8 +1,8 @@
 import path from 'path';
 import { spawn } from 'child_process';
-import BotUtil from '#utils/botutil.js';
+import RuntimeUtil from '#utils/runtime-util.js';
 import paths from '#utils/paths.js';
-import cfg from '#infrastructure/config/config.js';
+import runtimeConfig from '#infrastructure/config/config.js';
 import { execFile } from '#utils/exec-async.js';
 
 /**
@@ -28,7 +28,7 @@ class FrontendLauncher {
 
   static #LOCAL_URL = /(?:Local:|Network:)\s*(https?:\/\/\S+)/i;
 
-  /** Bot 代理读取实际监听端口（Vite 端口漂移时） */
+  /** AgentRuntime 代理读取实际监听端口（Vite 端口漂移时） */
   static getRuntimePort(id) {
     const app = this.#apps.get(id);
     return app?.runtimePort ?? app?.config?.port;
@@ -43,7 +43,7 @@ class FrontendLauncher {
 
     this.#discovering = this.#doDiscover()
       .catch(err => {
-        BotUtil.makeLog('error', `前端项目扫描失败: ${err.message}`, 'Frontend');
+        RuntimeUtil.makeLog('error', `前端项目扫描失败: ${err.message}`, 'Frontend');
         return this.#apps;
       })
       .finally(() => {
@@ -60,7 +60,7 @@ class FrontendLauncher {
   static async start() {
     if (process.env.XRK_SKIP_FRONTEND_START === '1') {
       await this.discover();
-      BotUtil.makeLog('info', 'XRK_SKIP_FRONTEND_START=1，跳过前端 dev server 启动', 'Frontend');
+      RuntimeUtil.makeLog('info', 'XRK_SKIP_FRONTEND_START=1，跳过前端 dev server 启动', 'Frontend');
       return this.#apps;
     }
 
@@ -70,7 +70,7 @@ class FrontendLauncher {
 
     this.#starting = this.#doStart()
       .catch(err => {
-        BotUtil.makeLog('error', `前端项目启动失败: ${err.message}`, 'Frontend');
+        RuntimeUtil.makeLog('error', `前端项目启动失败: ${err.message}`, 'Frontend');
         return this.#apps;
       })
       .finally(() => {
@@ -109,7 +109,7 @@ class FrontendLauncher {
           const p = Number(u.port) || (u.protocol === 'https:' ? 443 : 80);
           appInfo.runtimePort = p;
           appInfo.status = 'running';
-          BotUtil.makeLog('info', `[${appId}] 监听 ${u.href}`, 'Frontend');
+          RuntimeUtil.makeLog('info', `[${appId}] 监听 ${u.href}`, 'Frontend');
           return;
         } catch {}
       }
@@ -118,7 +118,7 @@ class FrontendLauncher {
       if (!verbose && !this.#OUTPUT_KEY.test(line)) return;
 
       const level = /error|failed|EADDRINUSE/i.test(line) ? 'warn' : 'info';
-      BotUtil.makeLog(verbose ? 'debug' : level, `[${appId}] ${line}`, 'Frontend');
+      RuntimeUtil.makeLog(verbose ? 'debug' : level, `[${appId}] ${line}`, 'Frontend');
     };
 
     const onChunk = (chunk) => {
@@ -136,7 +136,7 @@ class FrontendLauncher {
     this.#attachProcessOutput(child, appInfo);
     child.on('error', (err) => {
       appInfo.status = 'error';
-      BotUtil.makeLog('error', `前端项目进程错误: ${config.id} - ${err.message}`, 'Frontend');
+      RuntimeUtil.makeLog('error', `前端项目进程错误: ${config.id} - ${err.message}`, 'Frontend');
     });
   }
 
@@ -192,8 +192,8 @@ class FrontendLauncher {
       }
     }
     if (killPids.size) {
-      await BotUtil.sleep(400).catch(() => {});
-      BotUtil.makeLog('debug', `已释放端口 ${port} (PID: ${[...killPids].join(', ')})`, 'Frontend');
+      await RuntimeUtil.sleep(400).catch(() => {});
+      RuntimeUtil.makeLog('debug', `已释放端口 ${port} (PID: ${[...killPids].join(', ')})`, 'Frontend');
     }
   }
 
@@ -211,7 +211,7 @@ class FrontendLauncher {
       }
     }
 
-    await BotUtil.sleep(800).catch(() => {});
+    await RuntimeUtil.sleep(800).catch(() => {});
 
     for (const app of apps) {
       if (!app) continue;
@@ -250,7 +250,7 @@ class FrontendLauncher {
     const configs = await this.#discoverConfigs();
 
     if (configs.length === 0) {
-      BotUtil.makeLog('info', '未发现启用的 sign.json 前端项目', 'Frontend');
+      RuntimeUtil.makeLog('info', '未发现启用的 sign.json 前端项目', 'Frontend');
       return this.#apps;
     }
 
@@ -258,8 +258,8 @@ class FrontendLauncher {
       this.#registerApp(cfgApp);
     }
 
-    const used = BotUtil.getTimeDiff(startTime);
-    BotUtil.makeLog(
+    const used = RuntimeUtil.getTimeDiff(startTime);
+    RuntimeUtil.makeLog(
       'info',
       `前端项目扫描完成: ${this.#apps.size} 个, 耗时 ${used}`,
       'Frontend'
@@ -282,14 +282,14 @@ class FrontendLauncher {
       return this.#apps;
     }
 
-    BotUtil.makeLog('info', `开始启动前端项目 ${pending.length} 个...`, 'Frontend');
+    RuntimeUtil.makeLog('info', `开始启动前端项目 ${pending.length} 个...`, 'Frontend');
 
     for (const appInfo of pending) {
       this.#startApp(appInfo.config);
     }
 
-    const used = BotUtil.getTimeDiff(startTime);
-    BotUtil.makeLog(
+    const used = RuntimeUtil.getTimeDiff(startTime);
+    RuntimeUtil.makeLog(
       'info',
       `前端项目启动完成: ${this.#apps.size} 个, 耗时 ${used}`,
       'Frontend'
@@ -305,7 +305,7 @@ class FrontendLauncher {
    */
   static async #discoverConfigs() {
     const pattern = path.posix.join('core', '*-Core', 'www', '**', 'sign.json');
-    const files = await BotUtil.glob(pattern, {
+    const files = await RuntimeUtil.glob(pattern, {
       absolute: true,
       ignore: [
         '**/node_modules/**',
@@ -324,25 +324,25 @@ class FrontendLauncher {
 
     for (const file of files) {
       try {
-        const raw = await BotUtil.readFile(file, 'utf8');
+        const raw = await RuntimeUtil.readFile(file, 'utf8');
         const json = JSON.parse(raw);
 
         if (json && json.enabled === false) {
-          BotUtil.makeLog('debug', `跳过禁用的前端 sign.json: ${file}`, 'Frontend');
+          RuntimeUtil.makeLog('debug', `跳过禁用的前端 sign.json: ${file}`, 'Frontend');
           continue;
         }
 
         const mode = this.#getAppMode(json);
         const isProd = mode === 'prod' || (mode === 'auto' && json && (json.prod || json.build));
         if (json && json.devOnly === true && isProd) {
-          BotUtil.makeLog('info', `跳过 devOnly 前端工程（生产模式不启动）: ${file}`, 'Frontend');
+          RuntimeUtil.makeLog('info', `跳过 devOnly 前端工程（生产模式不启动）: ${file}`, 'Frontend');
           continue;
         }
         if (json && Array.isArray(json.modes) && json.modes.length > 0) {
           const modes = json.modes.map(m => String(m).toLowerCase());
           const required = isProd ? 'prod' : 'dev';
           if (!modes.includes(required)) {
-            BotUtil.makeLog('info', `跳过 modes 不匹配的前端工程(${required}): ${file}`, 'Frontend');
+            RuntimeUtil.makeLog('info', `跳过 modes 不匹配的前端工程(${required}): ${file}`, 'Frontend');
             continue;
           }
         }
@@ -368,7 +368,7 @@ class FrontendLauncher {
         const buildOnStart = json.buildOnStart !== false; // 默认 true（当提供 build 段时）
 
         if (!runSpec || !Number.isFinite(port) || port <= 0) {
-          BotUtil.makeLog(
+          RuntimeUtil.makeLog(
             'warn',
             `sign.json 缺少必要字段(${isProd ? 'command/port 或 prod.command/port' : 'command/port'}): ${file}`,
             'Frontend'
@@ -420,7 +420,7 @@ class FrontendLauncher {
 
         configs.push(config);
       } catch (err) {
-        BotUtil.makeLog(
+        RuntimeUtil.makeLog(
           'warn',
           `解析 sign.json 失败: ${file} - ${err.message}`,
           'Frontend'
@@ -453,8 +453,8 @@ class FrontendLauncher {
     if (!appInfo) return;
 
     // 主服务信息，用于透传给前端（通过 Vite 的 import.meta.env 访问）
-    const mainPort = cfg.port || 8086;
-    const mainOrigin = cfg.server?.server?.url || `http://127.0.0.1:${mainPort}`;
+    const mainPort = runtimeConfig.port || 8086;
+    const mainOrigin = runtimeConfig.server?.server?.url || `http://127.0.0.1:${mainPort}`;
 
     const childEnv = {
       ...process.env,
@@ -483,7 +483,7 @@ class FrontendLauncher {
     const baseInfo = `${config.id} (${runCmd} ${runArgs.join(' ')}) @ ${runCwd}`;
     const targetUrl = `http://127.0.0.1:${config.port}`;
 
-    BotUtil.makeLog(
+    RuntimeUtil.makeLog(
       'info',
       `启动前端项目: ${baseInfo} -> ${targetUrl}${config.publicPath}`,
       'Frontend'
@@ -506,20 +506,20 @@ class FrontendLauncher {
         appInfo.process = undefined;
         const reason = code !== null ? `退出码=${code}` : `信号=${signal || 'unknown'}`;
         if (appInfo.stopping) {
-          BotUtil.makeLog('debug', `前端项目已停止: ${config.id} (${reason})`, 'Frontend');
+          RuntimeUtil.makeLog('debug', `前端项目已停止: ${config.id} (${reason})`, 'Frontend');
           return;
         }
-        BotUtil.makeLog(code === 0 ? 'info' : 'warn', `前端项目已退出: ${config.id} (${reason})`, 'Frontend');
+        RuntimeUtil.makeLog(code === 0 ? 'info' : 'warn', `前端项目已退出: ${config.id} (${reason})`, 'Frontend');
 
         if (!config.autoRestart) return;
         if (appInfo.restarts >= 3) {
-          BotUtil.makeLog('warn', `前端项目重启次数已达上限，停止重启: ${config.id}`, 'Frontend');
+          RuntimeUtil.makeLog('warn', `前端项目重启次数已达上限，停止重启: ${config.id}`, 'Frontend');
           return;
         }
 
         appInfo.restarts += 1;
         const delay = 1000 * appInfo.restarts;
-        BotUtil.makeLog('info', `准备重启前端项目(${appInfo.restarts}): ${config.id}, ${delay}ms 后`, 'Frontend');
+        RuntimeUtil.makeLog('info', `准备重启前端项目(${appInfo.restarts}): ${config.id}, ${delay}ms 后`, 'Frontend');
         if (appInfo.restartTimer) clearTimeout(appInfo.restartTimer);
         appInfo.restartTimer = setTimeout(() => { void startRuntime(); }, delay);
         appInfo.restartTimer.unref?.();
@@ -528,7 +528,7 @@ class FrontendLauncher {
 
     if (shouldBuild) {
       appInfo.status = 'building';
-      BotUtil.makeLog('info', `生产环境后台构建前端: ${config.id} (${buildCmd} ${buildArgs.join(' ')})`, 'Frontend');
+      RuntimeUtil.makeLog('info', `生产环境后台构建前端: ${config.id} (${buildCmd} ${buildArgs.join(' ')})`, 'Frontend');
       const buildChild = spawnChild(buildCmd, buildArgs, buildCwd, buildEnv);
       appInfo.buildProcess = buildChild;
       this.#wireChild(buildChild, appInfo, config);
@@ -536,10 +536,10 @@ class FrontendLauncher {
         appInfo.buildProcess = undefined;
         if (code !== 0) {
           appInfo.status = 'error';
-          BotUtil.makeLog('error', `前端构建失败，跳过启动: ${config.id} (退出码=${code})`, 'Frontend');
+          RuntimeUtil.makeLog('error', `前端构建失败，跳过启动: ${config.id} (退出码=${code})`, 'Frontend');
           return;
         }
-        BotUtil.makeLog('info', `前端构建完成，准备启动: ${config.id}`, 'Frontend');
+        RuntimeUtil.makeLog('info', `前端构建完成，准备启动: ${config.id}`, 'Frontend');
         void startRuntime();
       });
       return;

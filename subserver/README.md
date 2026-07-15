@@ -1,6 +1,6 @@
 # XRK-AGT 多语言子服务
 
-主服 **Node.js** 负责 LLM / AIStream / **全部配置管理（CommonConfig）**；子服务用其它语言做可插拔业务，**只读** `data/` 下运行时配置。
+主服 **Node.js** 负责 LLM / AiWorkflow / **全部配置管理（CommonConfig）**；子服务用其它语言做可插拔业务，**只读** `data/` 下运行时配置。
 
 > 配置分工：[docs/subserver-commonconfig.md](../docs/subserver-commonconfig.md) · 插件开发：[docs/subserver-plugin-development.md](../docs/subserver-plugin-development.md)
 
@@ -80,11 +80,11 @@ cd subserver/pyserver && uv run xrk          # 本机 Python 8000
 **代码调用**
 
 ```javascript
-await Bot.callSubserver('/api/json-tools/format', {
+await AgentRuntime.callSubserver('/api/json-tools/format', {
   runtime: 'jserver',
   method: 'POST',
   body: { text: '{"a":1}' }
 })
 ```
 
-配置：**CommonConfig → AIStream → 子服务端**（`subserver.runtimes`）
+配置：**CommonConfig → AiWorkflow → 子服务端**（`subserver.runtimes`）

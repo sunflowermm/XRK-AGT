@@ -286,11 +286,11 @@ class ServerManager extends BaseManager {
     }
     
     try {
-      const { default: BotClass } = await import('./src/bot.js');
+      const { default: AgentRuntime } = await import('./src/agent-runtime.js');
       const { setRuntimeGlobal } = await import('./src/utils/runtime-globals.js');
-      const bot = new BotClass();
-      setRuntimeGlobal('Bot', bot);
-      await bot.run({ port });
+      const runtime = new AgentRuntime();
+      setRuntimeGlobal('AgentRuntime', runtime);
+      await runtime.run({ port });
     } catch (error) {
       await this.logger.error(`服务器模式启动失败: ${error.message}\n${error.stack}`);
       throw error;

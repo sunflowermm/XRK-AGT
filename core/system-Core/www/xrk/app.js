@@ -3227,7 +3227,7 @@ class App {
     this.clearChatStreamState();
   }
   
-  cancelAIStream() {
+  cancelAiWorkflow() {
     if (!this._chatStreamState.running) return;
     this.stopActiveStream();
     const streamingMsg = document.querySelector('.chat-message.assistant.streaming');

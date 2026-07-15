@@ -6,7 +6,7 @@ export default class DeviceEvent extends EventListenerBase {
   }
 
   async init() {
-    const bot = this.bot || Bot
+    const bot = this.bot || AgentRuntime
     for (const t of ['message', 'notice', 'request']) {
       bot.on(`device.${t}`, (e) => this.handleEvent(e))
     }

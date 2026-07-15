@@ -1,6 +1,6 @@
 import { MCPToolAdapter } from './mcp-tool-adapter.js';
 import { getAistreamConfigOptional } from '../aistream-config.js';
-import BotUtil from '../botutil.js';
+import RuntimeUtil from '../runtime-util.js';
 import { pickFirstKey } from '#utils/coerce-pick.js';
 
 /**
@@ -176,7 +176,7 @@ export function applyOpenAITools(body, config = {}, overrides = {}) {
   if (hasRequestToolsField) {
     const requestToolsArray = Array.isArray(requestTools) ? requestTools : [];
 
-    BotUtil.makeLog(
+    RuntimeUtil.makeLog(
       'debug',
       `[工具合并] hasRequestToolsField=true, requestToolsArray.length=${requestToolsArray.length}, mcpTools.length=${mcpTools.length}`,
       'openai-chat-utils'
@@ -218,7 +218,7 @@ export function applyOpenAITools(body, config = {}, overrides = {}) {
   // 这样在工具执行时可以正确识别哪些工具应该透传给下游
   if (downstreamToolNames.length > 0) {
     overrides.downstreamToolNames = downstreamToolNames;
-    BotUtil.makeLog(
+    RuntimeUtil.makeLog(
       'debug',
       `[工具合并] 保存下游工具名称: ${downstreamToolNames.slice(0, 10).join(', ')}${downstreamToolNames.length > 10 ? ` ...共${downstreamToolNames.length}个` : ''}`,
       'openai-chat-utils'

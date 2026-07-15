@@ -6,7 +6,7 @@
 ## 架构一句话
 
 - **子服**：`apis/<group>/service.*` 执行业务，**只读** `data/<group>/config.yaml`
-- **主服**：扫描 `apis/<group>/core/commonconfig/`、`core/plugin/`；控制台改配置；`cfg.subserver` 连子服
+- **主服**：扫描 `apis/<group>/core/commonconfig/`、`core/plugin/`；控制台改配置；`runtimeConfig.subserver` 连子服
 
 ```
 subserver/<runtime>/apis/<group>/
@@ -75,11 +75,11 @@ export default class MygroupConfig extends ConfigBase {
 ## 调用子服
 
 ```javascript
-await Bot.callSubserver('/api/mygroup/action', {
+await AgentRuntime.callSubserver('/api/mygroup/action', {
   method: 'POST',
   runtime: 'pyserver',
   body: {}
 });
 ```
 
-子服地址在 **CommonConfig → 系统配置 → AIStream → 子服务端**（`cfg.subserver`）。
+子服地址在 **CommonConfig → 系统配置 → AiWorkflow → 子服务端**（`runtimeConfig.subserver`）。

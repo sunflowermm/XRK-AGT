@@ -1,6 +1,6 @@
 import fs from 'node:fs'
 import path from 'node:path'
-import BotUtil from '#utils/botutil.js'
+import RuntimeUtil from '#utils/runtime-util.js'
 
 /** 推荐的高 DPI 截图设备像素比 */
 export const DEFAULT_DEVICE_SCALE_FACTOR = 2
@@ -36,7 +36,7 @@ const LABEL_COLON_NUM_CLASS = 'pss-label-num'
  * @property {string[]} [hideSelectors] 截图前 display:none 的选择器
  * @property {string} [extraCss] 追加样式（业务排版放调用方）
  * @property {LabelColonHalfTweak[]} [domTweaks] 截图前 DOM 微调（如全角冒号改半角）
- * @property {string} [logContext] BotUtil.makeLog 上下文
+ * @property {string} [logContext] RuntimeUtil.makeLog 上下文
  * @property {number} [fontWaitMs=8000] 等待字体加载超时
  */
 
@@ -88,7 +88,7 @@ export function createLocalFontScreenshotHelper(options) {
   const routedPages = new WeakSet()
   const colonTweaks = domTweaks.filter((t) => t.kind === DOM_TWEAK_LABEL_COLON_HALF)
 
-  const log = (level, msg) => BotUtil.makeLog(level, msg, logContext)
+  const log = (level, msg) => RuntimeUtil.makeLog(level, msg, logContext)
 
   const loadSpecs = fonts.map((f) => ({
     family: f.family,

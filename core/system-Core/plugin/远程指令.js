@@ -13,8 +13,8 @@ import vm from 'vm'
 import util from 'util'
 import { EventEmitter } from 'events'
 import common from '#utils/common.js'
-import cfg from '#infrastructure/config/config.js'
-import { 制作聊天记录 } from '#utils/botutil.js'
+import runtimeConfig from '#infrastructure/config/config.js'
+import { 制作聊天记录 } from '#utils/runtime-util.js'
 
 const ROOT_PATH = process.cwd();
 
@@ -471,7 +471,7 @@ class ObjectInspector {
     if (obj.group && obj.user_id && obj.message) return 'MessageEvent';
     if (obj.user_id && obj.nickname && !obj.message) return 'User';
     if (obj.group_id && obj.group_name) return 'Group';
-    if (obj.sendMsg && obj.pickUser && obj.pickGroup) return 'Bot';
+    if (obj.sendMsg && obj.pickUser && obj.pickGroup) return 'AgentRuntime';
 
     if (Array.isArray(obj)) return 'Array';
     if (obj instanceof Date) return 'Date';
@@ -1123,7 +1123,7 @@ class JavaScriptExecutor {
       RegExp,
       // 只提供必要的全局对象
       e: globalContext.e,
-      Bot: globalContext.Bot,
+      AgentRuntime: globalContext.AgentRuntime,
       segment: globalContext.segment
     };
     
@@ -1240,9 +1240,9 @@ const jsExecutor = new JavaScriptExecutor();
 
 /** rj / roj / roi 共享的 JS 沙箱静态绑定（不含 e、plugin、运行时全局） */
 const JS_SANDBOX_STATIC = {
-  Bot,
+  AgentRuntime,
   common,
-  cfg,
+  runtimeConfig,
   process,
   os,
   fs,
@@ -1276,7 +1276,7 @@ const JS_SANDBOX_STATIC = {
 /**
  * 增强型终端工具插件
  */
-export class EnhancedTools extends plugin {
+export class EnhancedTools extends PluginBase {
   constructor() {
     const permission = config.get('permission', 'master');
     super({
@@ -1488,7 +1488,7 @@ roj const arr = [1,2,3];
 用法：roi <对象或表达式>
 示例：
 roi e                    // 检查事件对象
-roi Bot                  // 检查Bot对象
+roi AgentRuntime                  // 检查AgentRuntime对象
 roi process.versions     // 检查版本信息
 roi new Date()          // 检查日期对象`, true);
       return true;
@@ -1546,7 +1546,7 @@ roi new Date()          // 检查日期对象`, true);
 示例：
 rj 1 + 2 * 3                   // 数学计算
 rj Math.random()                // 调用方法
-rj Bot.uin                      // 获取属性
+rj AgentRuntime.uin                      // 获取属性
 rj [1,2,3].map(x => x*2)       // 数组操作
 rj e.reply("Hello!")           // 发送消息`, true);
       return true;

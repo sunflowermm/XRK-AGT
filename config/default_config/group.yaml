@@ -13,7 +13,7 @@ default:
   singleCD: 500       # 单人指令冷却（毫秒）
   # 是否只处理 @ 机器人的消息：0-否 1-是 2-非主人仅 @/前缀，主人免前缀
   onlyReplyAt: 0
-  # Bot 别名，用于匹配 @ 或前缀
+  # AgentRuntime 别名，用于匹配 @ 或前缀
   botAlias:
     - 葵子
     - 葵葵

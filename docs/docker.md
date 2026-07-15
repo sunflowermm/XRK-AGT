@@ -8,7 +8,7 @@
 
 | 服务 | 端口 | 说明 |
 |------|------|------|
-| `xrk-agt` | 8080 | 主 Bot（HTTP/WS/控制台） |
+| `xrk-agt` | 8080 | 主 AgentRuntime（HTTP/WS/控制台） |
 | `xrk-subserver` | 8000 | Python 子服（同镜像，`command: subserver`） |
 | `xrk-subserver-go/php/java/net/rust` | 8001–8005 | 各语言子服 |
 | `redis` | 6379（内部） | 框架内置数据库 |

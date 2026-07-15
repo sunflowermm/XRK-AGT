@@ -13,10 +13,10 @@ async function ensureBotFlGl(bot) {
   } catch {}
 }
 
-export async function collectBotInventory(Bot, { includeDevices: _includeDevices = true } = {}) {
-  if (!Bot?.bots) return [];
+export async function collectBotInventory(AgentRuntime, { includeDevices: _includeDevices = true } = {}) {
+  if (!AgentRuntime?.bots) return [];
   const list = [];
-  const entries = Object.entries(Bot.bots);
+  const entries = Object.entries(AgentRuntime.bots);
   for (const [uin, bot] of entries) {
     if (!bot || typeof bot !== 'object' || EXCLUDE_KEYS.has(uin)) continue;
 

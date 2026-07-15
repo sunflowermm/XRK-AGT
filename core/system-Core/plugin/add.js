@@ -1,4 +1,4 @@
-import cfg from '#infrastructure/config/config.js'
+import runtimeConfig from '#infrastructure/config/config.js'
 import fs from "node:fs/promises"
 import path from "node:path"
 import lodash from "lodash"
@@ -68,7 +68,7 @@ let bannedWordsPath = "data/bannedWords/"
 let bannedImagesPath = "data/bannedWords/images/"
 let configPath = "data/bannedWords/config/"
 
-export class add extends plugin {
+export class add extends PluginBase {
   _bannedWordsHotReload = null
   constructor() {
     super({
@@ -115,7 +115,7 @@ export class add extends plugin {
   }
 
   async init() {
-    const agtCfg = cfg.agt || {}
+    const agtCfg = runtimeConfig.agt || {}
     const filesCfg = agtCfg.files || {}
     messageDataPath = filesCfg.messageDataPath || "data/messageJson/"
     bannedWordsPath = filesCfg.bannedWordsPath || "data/bannedWords/"
@@ -123,10 +123,10 @@ export class add extends plugin {
     configPath = filesCfg.bannedConfigPath || "data/bannedWords/config/"
     
     await Promise.all([
-      Bot.mkdir(messageDataPath),
-      Bot.mkdir(bannedWordsPath),
-      Bot.mkdir(bannedImagesPath),
-      Bot.mkdir(configPath)
+      AgentRuntime.mkdir(messageDataPath),
+      AgentRuntime.mkdir(bannedWordsPath),
+      AgentRuntime.mkdir(bannedImagesPath),
+      AgentRuntime.mkdir(configPath)
     ])
     await this.initAllBannedWords()
 
@@ -187,8 +187,8 @@ export class add extends plugin {
   async initBannedWords(groupId) {
     if (!groupId || bannedWordsMap[groupId]) return
     
-    // 从cfg读取默认配置
-    const groupCfg = cfg.getGroup(groupId) || {}
+    // 从runtimeConfig读取默认配置
+    const groupCfg = runtimeConfig.getGroup(groupId) || {}
     bannedWordsMap[groupId] = {
       exact: new Set(),
       fuzzy: new Set(),
@@ -202,7 +202,7 @@ export class add extends plugin {
     }
 
     const filePath = `${bannedWordsPath}${groupId}.json`
-    if (!await Bot.fsStat(filePath)) return
+    if (!await AgentRuntime.fsStat(filePath)) return
 
     try {
       const data = JSON.parse(await fs.readFile(filePath, "utf8"))
@@ -388,12 +388,12 @@ export class add extends plugin {
       for (const img of this.e.img) {
         const result = await this.addImageBannedWord(img, this.group_id)
         msg.push(result.success 
-          ? [`✅ 成功添加图片违禁词`, segment.image(result.path)]
+          ? [`✅ 成功添加图片违禁词`, msgSegment.image(result.path)]
           : `❌ 图片处理失败：${result.error}`
         )
       }
       await this.saveBannedWords(this.group_id)
-      await this.reply(await Bot.makeForwardArray(msg.flat()))
+      await this.reply(await AgentRuntime.makeForwardArray(msg.flat()))
       return this.listBannedWords()
     }
     
@@ -409,7 +409,7 @@ export class add extends plugin {
 
       const hash = crypto.createHash('md5').update(buffer).digest('hex')
       const groupImgPath = `${bannedImagesPath}${groupId}/`
-      await Bot.mkdir(groupImgPath)
+      await AgentRuntime.mkdir(groupImgPath)
 
       const ext = String(refs.url || refs.file || '').match(/\.(jpg|jpeg|png|gif|webp)/i)?.[1] || 'jpg'
       const filePath = `${groupImgPath}${hash}.${ext}`
@@ -465,13 +465,13 @@ export class add extends plugin {
         msg.push(`【${groupType}图片违禁词】添加了 ${ctx.images.length} 个：`)
         ctx.images.forEach(img => {
           bannedWordsMap[this.group_id].images.set(img.hash, img.info)
-          msg.push(segment.image(img.info.path))
+          msg.push(msgSegment.image(img.info.path))
         })
       }
       
       await this.saveBannedWords(this.group_id)
       msg.unshift(`✅ 成功添加 ${ctx.words.length + ctx.images.length} 个${groupType}违禁词`)
-      await this.reply(await Bot.makeForwardArray(msg))
+      await this.reply(await AgentRuntime.makeForwardArray(msg))
       return this.listBannedWords()
     }
 
@@ -624,7 +624,7 @@ export class add extends plugin {
         msg.push(`【群组图片违禁词】共${banned.images.size}个：`)
         for (const [, info] of banned.images) {
           msg.push(`${++totalNum}. ${info.desc}`)
-          await Bot.fsStat(info.path) && msg.push(segment.image(info.path))
+          await AgentRuntime.fsStat(info.path) && msg.push(msgSegment.image(info.path))
         }
       }
       
@@ -647,7 +647,7 @@ export class add extends plugin {
         msg.push(`【全局图片违禁词】共${globalBanned.images.size}个：`)
         for (const [, info] of globalBanned.images) {
           msg.push(`G${++globalNum - totalNum}. ${info.desc}`)
-          await Bot.fsStat(info.path) && msg.push(segment.image(info.path))
+          await AgentRuntime.fsStat(info.path) && msg.push(msgSegment.image(info.path))
         }
       }
       
@@ -671,7 +671,7 @@ export class add extends plugin {
         msg.push(`【全局图片违禁词】共${globalBanned.images.size}个：`)
         for (const [, info] of globalBanned.images) {
           msg.push(`${++totalNum}. ${info.desc}`)
-          await Bot.fsStat(info.path) && msg.push(segment.image(info.path))
+          await AgentRuntime.fsStat(info.path) && msg.push(msgSegment.image(info.path))
         }
       }
       
@@ -698,7 +698,7 @@ export class add extends plugin {
       'G前缀表示全局违禁词，GF前缀表示全局模糊违禁词'
     )
 
-    return this.reply(await Bot.makeForwardArray(msg))
+    return this.reply(await AgentRuntime.makeForwardArray(msg))
   }
 
   /** 检查违禁词 */
@@ -802,13 +802,13 @@ export class add extends plugin {
     if (!warnOnly && botRole.isAdmin && !userRole.isAdmin) {
       try {
         await this.e.group.muteMember(userId, config.muteTime * 60)
-        await this.reply([segment.at(userId), ` ${responses.mute}`])
+        await this.reply([msgSegment.at(userId), ` ${responses.mute}`])
       } catch (err) {
         logger.error(`执行禁言失败: ${err}`)
-        await this.reply([segment.at(userId), ` ${responses.failMute}`])
+        await this.reply([msgSegment.at(userId), ` ${responses.failMute}`])
       }
     } else {
-      await this.reply([segment.at(userId), ` ${responses.warn}`])
+      await this.reply([msgSegment.at(userId), ` ${responses.warn}`])
     }
     
     return true
@@ -843,10 +843,10 @@ export class add extends plugin {
         `禁言时长：${muteTime}分钟\n`,
         `触发时间：${new Date().toLocaleString()}\n`,
         `━━━━━━━━━━━━━━━\n`,
-        segment.image(avatar)
+        msgSegment.image(avatar)
       ]
       
-      await Bot.sendMasterMsg(notifyMsg)
+      await AgentRuntime.sendMasterMsg(notifyMsg)
     } catch (err) {
       logger.error(`通知主人失败: ${err.message}`, err)
     }
@@ -973,7 +973,7 @@ export class add extends plugin {
       return false
     }
 
-    const groupCfg = cfg.getGroup(this.group_id) || {}
+    const groupCfg = runtimeConfig.getGroup(this.group_id) || {}
     
     // addLimit: 2 = 仅主人, 1 = 管理员, 0 = 所有人
     if (groupCfg.addLimit === 2) {
@@ -1005,7 +1005,7 @@ export class add extends plugin {
   trimAlias(msg) {
     if (!msg) return msg
     
-    const groupCfg = cfg.getGroup(this.group_id) || {}
+    const groupCfg = runtimeConfig.getGroup(this.group_id) || {}
     const alias = groupCfg.botAlias
     if (!alias) return msg
     
@@ -1072,7 +1072,7 @@ export class add extends plugin {
     }
 
     if (!currentMessage.length) {
-      return this.reply('未能解析消息内容，请重新发送（聊天记录请直接转发给 Bot）')
+      return this.reply('未能解析消息内容，请重新发送（聊天记录请直接转发给 AgentRuntime）')
     }
 
     contextData.messages.push(currentMessage)
@@ -1112,7 +1112,7 @@ export class add extends plugin {
   async isEntryMediaPersisted(item) {
     const fileRef = String(item?.file ?? '').trim()
     if (!isEntryMediaRelPath(fileRef)) return false
-    return Bot.fsStat(`${messageDataPath}${fileRef}`)
+    return AgentRuntime.fsStat(`${messageDataPath}${fileRef}`)
   }
 
   /** 词条媒体是否仍需本地化（未写入 messageDataPath 的 HTTP / NapCat 临时引用） */
@@ -1253,12 +1253,12 @@ export class add extends plugin {
     if (!ref || isHttpRef(ref) || ref.startsWith('base64://') || inlineBinaryFromRef(ref)) return null
     if (isEntryMediaRelPath(ref)) {
       const localPath = `${messageDataPath}${ref}`
-      if (await Bot.fsStat(localPath)) return localPath
+      if (await AgentRuntime.fsStat(localPath)) return localPath
     }
     if (isPathLike(ref)) {
-      if (await Bot.fsStat(ref)) return ref
+      if (await AgentRuntime.fsStat(ref)) return ref
       const nested = `${messageDataPath}${ref}`
-      if (await Bot.fsStat(nested)) return nested
+      if (await AgentRuntime.fsStat(nested)) return nested
     }
     if (!ref.includes('/')) return ref
     return null
@@ -1335,7 +1335,7 @@ export class add extends plugin {
     }
 
     logger.mark(`[发送消息]${this.e.logText}[${this.keyWord}]`)
-    const groupCfg = cfg.getGroup(this.group_id)
+    const groupCfg = runtimeConfig.getGroup(this.group_id)
     return this.reply(msgToSend, Boolean(groupCfg.addReply), {
       at: Boolean(groupCfg.addAt),
       recallMsg: groupCfg.addRecall
@@ -1348,7 +1348,7 @@ export class add extends plugin {
     messageMap[this.group_id] = new Map()
 
     const filePath = `${messageDataPath}${this.group_id}.json`
-    if (!await Bot.fsStat(filePath)) return
+    if (!await AgentRuntime.fsStat(filePath)) return
 
     try {
       const message = JSON.parse(await fs.readFile(filePath, "utf8"))
@@ -1366,7 +1366,7 @@ export class add extends plugin {
     messageMap.global = new Map()
 
     const globalPath = `${messageDataPath}global.json`
-    if (!await Bot.fsStat(globalPath)) return
+    if (!await AgentRuntime.fsStat(globalPath)) return
 
     try {
       const message = JSON.parse(await fs.readFile(globalPath, "utf8"))
@@ -1490,9 +1490,9 @@ export class add extends plugin {
         case 'record': {
           const filePath = await this.resolveEntryMediaPath(item)
           if (filePath) {
-            if (item.type === 'image') parts.push(segment.image(filePath))
-            else if (item.type === 'video') parts.push(segment.video(filePath))
-            else parts.push(segment.record(filePath))
+            if (item.type === 'image') parts.push(msgSegment.image(filePath))
+            else if (item.type === 'video') parts.push(msgSegment.video(filePath))
+            else parts.push(msgSegment.record(filePath))
           } else {
             const labels = { image: '[图片]', video: '[视频]', record: '[语音]' }
             parts.push(labels[item.type] || `[${item.type}]`)
@@ -1612,7 +1612,7 @@ export class add extends plugin {
       page > 1 && msg.push(`查看上一页：#词条列表${page - 1}`)
     }
 
-    return this.reply(await Bot.makeForwardArray(msg))
+    return this.reply(await AgentRuntime.makeForwardArray(msg))
   }
 
   /** 分页 */
