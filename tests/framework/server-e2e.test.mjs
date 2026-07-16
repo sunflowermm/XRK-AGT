@@ -96,4 +96,33 @@ describe('HTTP 端到端（真实启动 AgentRuntime）', () => {
     assert.equal(body.success, true);
     assert.ok(Array.isArray(body.tasks));
   });
+
+  it('GET /health 存活 200', async () => {
+    const res = await fetch(`http://127.0.0.1:${port}/health`);
+    assert.equal(res.status, 200);
+    const body = await res.json();
+    assert.ok(body.status);
+    assert.ok(typeof body.uptime === 'number');
+  });
+
+  it('GET /metrics JSON 与 Prometheus', async () => {
+    const jsonRes = await fetch(`http://127.0.0.1:${port}/metrics`);
+    assert.equal(jsonRes.status, 200);
+    const metrics = await jsonRes.json();
+    assert.ok(metrics.memory?.heapUsed >= 0);
+
+    const promRes = await fetch(`http://127.0.0.1:${port}/metrics?format=prometheus`);
+    assert.equal(promRes.status, 200);
+    const text = await promRes.text();
+    assert.match(text, /xrk_nodejs_heap_used_bytes/);
+  });
+
+  it('GET /api/health 就绪面（200 或 503）', async () => {
+    const res = await fetch(`http://127.0.0.1:${port}/api/health`);
+    assert.ok(res.status === 200 || res.status === 503);
+    const body = await res.json();
+    assert.equal(body.success, true);
+    assert.ok(body.services);
+    assert.ok(body.services.redis || body.services.api);
+  });
 });

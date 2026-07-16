@@ -11,6 +11,8 @@ import { createProxyMiddleware } from 'http-proxy-middleware';
 import RuntimeUtil from '#utils/runtime-util.js';
 import runtimeConfig from '#infrastructure/config/config.js';
 import { errorHandler, ErrorCodes } from '#utils/error-handler.js';
+import { loadSSLCertificate } from '#infrastructure/http/runtime-listen.js';
+import { getProxyConfig, getServerHost } from '#infrastructure/http/runtime-net.js';
 
 /**
  * @param {import('../../agent-runtime.js').default} runtime
@@ -38,7 +40,7 @@ export function extractClientIP(runtime, req) {
  * @param {import('../../agent-runtime.js').default} runtime
  */
 export async function initProxyApp(runtime) {
-  const proxyConfig = runtime._getProxyConfig();
+  const proxyConfig = getProxyConfig();
   if (!proxyConfig?.enabled) return;
 
   runtime.proxyApp = express();
@@ -131,7 +133,7 @@ export async function initProxyApp(runtime) {
  * @param {import('../../agent-runtime.js').default} runtime
  */
 export async function loadDomainCertificates(runtime) {
-  const proxyConfig = runtime._getProxyConfig();
+  const proxyConfig = getProxyConfig();
   if (!proxyConfig?.domains) return;
 
   for (const domainConfig of proxyConfig.domains) {
@@ -140,7 +142,7 @@ export async function loadDomainCertificates(runtime) {
     const cert = domainConfig.ssl.certificate;
 
     try {
-      const httpsOptions = await runtime._loadSSLCertificate(cert, `代理域名 ${domainConfig.domain}`);
+      const httpsOptions = await loadSSLCertificate(cert, `代理域名 ${domainConfig.domain}`);
 
       const httpsConfig = runtimeConfig.server.https || {};
       const tlsConfig = httpsConfig.tls || {};
@@ -184,7 +186,7 @@ export async function createHttpsProxyServer(runtime) {
 
   let httpsOptions;
   try {
-    httpsOptions = await runtime._loadSSLCertificate(cert, `HTTPS代理服务器（默认证书）`);
+    httpsOptions = await loadSSLCertificate(cert, `HTTPS代理服务器（默认证书）`);
   } catch (error) {
     RuntimeUtil.makeLog("error", `加载默认SSL证书失败：${error.message}`, '代理');
     return;
@@ -460,11 +462,11 @@ export function findWildcardContext(runtime, servername) {
  * @param {import('../../agent-runtime.js').default} runtime
  */
 export async function startProxyServers(runtime) {
-  const proxyConfig = runtime._getProxyConfig();
+  const proxyConfig = getProxyConfig();
   if (!proxyConfig?.enabled) return;
 
   const httpPort = proxyConfig.httpPort || 80;
-  const host = runtime._getServerHost();
+  const host = getServerHost();
 
   runtime.proxyServer.listen(httpPort, host);
   await RuntimeUtil.promiseEvent(runtime.proxyServer, "listening").catch(() => { });
@@ -492,7 +494,7 @@ export async function displayProxyInfo(runtime) {
 
   console.log(chalk.cyan('▶ 代理域名：'));
 
-  const proxyConfig = runtime._getProxyConfig();
+  const proxyConfig = getProxyConfig();
   const domains = proxyConfig?.domains || [];
 
   for (const domainConfig of domains) {

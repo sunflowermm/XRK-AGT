@@ -103,7 +103,14 @@
     "docker:fresh": "node src/utils/docker-stack.mjs fresh",
     "test:fast": "node tests/run.mjs fast",
     "test:integration": "node tests/run.mjs integration",
-    "test:e2e": "node tests/run.mjs e2e"
+    "test:e2e": "node tests/run.mjs e2e",
+    "test:perf": "node tests/perf/run-perf.mjs",
+    "test:perf:smoke": "node tests/perf/run-perf.mjs smoke",
+    "test:load": "node tests/perf/run-perf.mjs load",
+    "test:stress": "node tests/perf/run-perf.mjs stress",
+    "test:soak": "node tests/perf/run-perf.mjs soak",
+    "test:bench": "node tests/perf/run-perf.mjs bench",
+    "test:chaos": "node tests/perf/run-perf.mjs chaos"
   },
   "pnpm": {
     "onlyBuiltDependencies": [

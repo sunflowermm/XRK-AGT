@@ -40,6 +40,7 @@
   - 薄包装：`src/agent-runtime.js` 的 `checkApiAuthorization(req, options?)`
   - 实际比对：`src/infrastructure/http/runtime-auth.js`
   - loopback / tools 强制策略：`src/infrastructure/http/auth.js`（`isLoopback127Connection`、`shouldForceAuthOnLoopbackWhenToolsRun`）
+  - 全局限流 skip：同文件 `isPrivateOrLoopbackAddress`（RFC1918/ULA/回环；**刻意宽于**鉴权的 127-only）
   - HTTP 路由包装：`ensureSystemCoreAuth`（由 `HttpApi.wrapHandler` 自动调用）
 - **密钥来源**：`server.auth.apiKey.file`（如 `config/server_config/api_key.json`）中的 `key`；未配置则启动时自动生成并写入该文件。
 - **请求中如何携带**（任选其一即可）：

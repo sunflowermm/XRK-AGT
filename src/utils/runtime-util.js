@@ -349,7 +349,8 @@ export default class RuntimeUtil {
 
   /** 短随机 id（事件去重、requestId 等） */
   static shortId() {
-    return crypto.randomBytes(6).toHex();
+    const buf = crypto.randomBytes(6);
+    return typeof buf.toHex === 'function' ? buf.toHex() : buf.toString('hex');
   }
 
   /**

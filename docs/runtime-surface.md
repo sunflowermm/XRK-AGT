@@ -114,7 +114,6 @@ sequenceDiagram
 | 方法 | 说明 |
 |------|------|
 | `AgentRuntime.em(name, data, asJson?, options?)` | 触发事件总线；Tasker / 监听器 / 插件链路入口 |
-| `AgentRuntime.e(...)` | `em` 别名 |
 | `AgentRuntime.callStdin(command, options?)` | 经 stdin Tasker 执行命令 |
 | `AgentRuntime.getServerUrl()` | 当前 HTTP 基址（含 127.0.0.1 回落） |
 | `AgentRuntime.getPublicServerUrl(override?)` | 对外直链基址（代理/`server.url`/override；无公网配置时返回 `''`） |

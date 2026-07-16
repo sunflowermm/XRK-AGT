@@ -9,6 +9,12 @@ import RuntimeUtil from '#utils/runtime-util.js';
 import runtimeConfig from '#infrastructure/config/config.js';
 import { stopAllLoaderWatchers } from '#utils/loader-shutdown.js';
 import FrontendLauncher from '#infrastructure/frontend/launcher.js';
+import {
+  getConfiguredServerUrl,
+  getProxyConfig,
+  getServerHost,
+  isHttpsEnabled
+} from '#infrastructure/http/runtime-net.js';
 
 /**
  * @param {Object} certConfig
@@ -84,7 +90,7 @@ export async function serverEADDRINUSE(runtime, err, isHttps) {
   await RuntimeUtil.sleep(runtime[retryKey] * 1000);
 
   const server = isHttps ? runtime.httpsServer : runtime.server;
-  const host = runtime._getServerHost();
+  const host = getServerHost();
 
   if (server) {
     server.listen(port, host);
@@ -98,7 +104,7 @@ export async function serverEADDRINUSE(runtime, err, isHttps) {
 export async function serverLoad(runtime, isHttps) {
   const server = isHttps ? runtime.httpsServer : runtime.server;
   const port = isHttps ? runtime.httpsPort : runtime.httpPort;
-  const host = runtime._getServerHost();
+  const host = getServerHost();
 
   if (!server) return;
 
@@ -262,22 +268,22 @@ export async function closeServer(runtime, options = {}) {
  * @param {import('../../agent-runtime.js').default} runtime
  */
 export function getServerUrl(runtime) {
-  const proxyConfig = runtime._getProxyConfig();
+  const proxyConfig = getProxyConfig();
   if (runtime.proxyEnabled && Array.isArray(proxyConfig.domains) && proxyConfig.domains[0]) {
     const domain = proxyConfig.domains[0];
     const protocol = domain.ssl?.enabled ? 'https' : 'http';
     return `${protocol}://${domain.domain}`;
   }
 
-  const configuredUrl = runtime._getConfiguredServerUrl();
+  const configuredUrl = getConfiguredServerUrl();
   if (configuredUrl) {
     const withScheme = /^https?:\/\//i.test(configuredUrl)
       ? configuredUrl
-      : `${runtime._isHttpsEnabled() ? 'https' : 'http'}://${configuredUrl.replace(/^\/+/, '')}`;
+      : `${isHttpsEnabled() ? 'https' : 'http'}://${configuredUrl.replace(/^\/+/, '')}`;
     return new URL(withScheme).toString().replace(/\/+$/, '');
   }
 
-  const protocol = runtime._isHttpsEnabled() ? 'https' : 'http';
+  const protocol = isHttpsEnabled() ? 'https' : 'http';
   const port = protocol === 'https' ? runtime.actualHttpsPort : runtime.actualPort;
   const needPort = (protocol === 'http' && port !== 80)
     || (protocol === 'https' && port !== 443);

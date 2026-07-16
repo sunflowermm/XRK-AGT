@@ -1,6 +1,7 @@
 /**
- * 轻量可观测性：请求关联 ID + ALS 上下文 + 计时 span。
+ * 轻量可观测性：请求关联 ID + ALS 上下文 + 计时 span + 就绪聚合。
  * 不引入 OpenTelemetry SDK；与现有 RuntimeUtil.makeLog / HTTP 头对齐。
+ * Prometheus 文本可由 formatPrometheusMetrics 导出。
  */
 import { AsyncLocalStorage } from 'node:async_hooks';
 import RuntimeUtil from '#utils/runtime-util.js';
@@ -29,7 +30,6 @@ export function getRequestContext() {
 }
 
 /**
- * 绑定当前请求上下文（Express 中间件请用此方法，勿用 run+next，否则 ALS 会在 next 返回后失效）
  * @param {{ requestId: string, path?: string, method?: string }} ctx
  */
 export function enterRequestContext(ctx) {
@@ -49,7 +49,6 @@ export function runWithRequestContext(ctx, fn) {
 /**
  * @param {string} name
  * @param {Record<string, unknown>} [attrs]
- * @returns {{ name: string, end: (extra?: Record<string, unknown>) => number, fail: (err: unknown, extra?: Record<string, unknown>) => number }}
  */
 export function createSpan(name, attrs = {}) {
   const start = Date.now();
@@ -72,17 +71,92 @@ export function createSpan(name, attrs = {}) {
     fail: (err, extra = {}) =>
       finish('warn', {
         ...extra,
-        error: Error.isError(err) ? err.message : String(err ?? 'unknown'),
+        error: (typeof Error.isError === 'function' ? Error.isError(err) : err instanceof Error)
+          ? err.message
+          : String(err ?? 'unknown'),
       }),
   };
 }
 
 /**
- * 就绪探活聚合（供 /api/health 使用）
- * @param {{ agentRuntime?: object, includeLoaders?: boolean, includeMcp?: boolean }} [opts]
+ * 探测已配置子服 /health（短超时；失败仅 degraded，不拖垮 Redis 就绪）
+ * @param {{ timeoutMs?: number, fetchImpl?: typeof fetch }} [opts]
+ */
+export async function probeSubserverHealth(opts = {}) {
+  const timeoutMs = opts.timeoutMs ?? 800;
+  const fetchImpl = opts.fetchImpl || globalThis.fetch;
+  const out = {};
+
+  try {
+    const { SUBSERVER_RUNTIME_CATALOG } = await import('#utils/subserver-runtimes.js');
+    const { getSubserverConfig } = await import('#utils/subserver-client.js');
+    const runtimeConfig = (await import('#infrastructure/config/config.js')).default;
+    const root = runtimeConfig.subserver ?? {};
+    const runtimes = root.runtimes && typeof root.runtimes === 'object' ? root.runtimes : {};
+
+    const ids = Object.keys(SUBSERVER_RUNTIME_CATALOG).filter((id) => {
+      const entry = runtimes[id];
+      if (entry && entry.enabled === false) return false;
+      // 未显式配置时仍探默认端口（本机未启动 → unavailable，不 unhealthy）
+      return true;
+    });
+
+    await Promise.all(
+      ids.map(async (id) => {
+        try {
+          const { baseUrl } = getSubserverConfig(id);
+          const ctrl = new AbortController();
+          const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+          try {
+            const res = await fetchImpl(`${baseUrl}/health`, {
+              method: 'GET',
+              signal: ctrl.signal,
+            });
+            out[id] = {
+              status: res.ok ? 'operational' : 'degraded',
+              httpStatus: res.status,
+            };
+          } finally {
+            clearTimeout(timer);
+          }
+        } catch (err) {
+          out[id] = {
+            status: 'unavailable',
+            error: (typeof Error.isError === 'function' ? Error.isError(err) : err instanceof Error)
+              ? err.message
+              : String(err ?? 'unreachable'),
+          };
+        }
+      })
+    );
+  } catch (err) {
+    return {
+      status: 'unavailable',
+      error: (typeof Error.isError === 'function' ? Error.isError(err) : err instanceof Error)
+        ? err.message
+        : String(err),
+    };
+  }
+
+  const values = Object.values(out);
+  const anyUp = values.some((v) => v?.status === 'operational');
+  const allMissing = values.length === 0 || values.every((v) => v?.status === 'unavailable');
+  return {
+    status: anyUp ? 'operational' : allMissing ? 'unavailable' : 'degraded',
+    runtimes: out,
+  };
+}
+
+/**
+ * @param {{ agentRuntime?: object, includeLoaders?: boolean, includeMcp?: boolean, includeSubservers?: boolean, subserverFetch?: typeof fetch }} [opts]
  */
 export async function buildReadinessSnapshot(opts = {}) {
-  const { agentRuntime = null, includeLoaders = true, includeMcp = true } = opts;
+  const {
+    agentRuntime = null,
+    includeLoaders = true,
+    includeMcp = true,
+    includeSubservers = true,
+  } = opts;
   const services = {};
   let overall = 'healthy';
 
@@ -134,12 +208,95 @@ export async function buildReadinessSnapshot(opts = {}) {
     }
   }
 
+  if (includeSubservers) {
+    const sub = await probeSubserverHealth({
+      fetchImpl: opts.subserverFetch,
+      timeoutMs: 600,
+    });
+    services.subservers = sub;
+    if (sub.status === 'degraded' && overall === 'healthy') overall = 'degraded';
+  }
+
   return {
     status: overall,
     timestamp: Date.now(),
     uptime: process.uptime(),
     requestId: getRequestContext()?.requestId ?? null,
     services,
+  };
+}
+
+/**
+ * 将进程指标转为 Prometheus exposition（text/plain）
+ * @param {object} metrics buildProcessMetrics() 结果
+ * @returns {string}
+ */
+export function formatPrometheusMetrics(metrics) {
+  const lines = [];
+  const mem = metrics.memory || {};
+  const cpu = metrics.cpu || {};
+  const wf = metrics.workflow?.traces || {};
+
+  const num = (name, value, help, type = 'gauge') => {
+    if (!Number.isFinite(Number(value))) return;
+    lines.push(`# HELP ${name} ${help}`);
+    lines.push(`# TYPE ${name} ${type}`);
+    lines.push(`${name} ${Number(value)}`);
+  };
+
+  num('xrk_process_uptime_seconds', metrics.uptime, 'Process uptime in seconds');
+  num('xrk_nodejs_heap_used_bytes', mem.heapUsed, 'Node.js heap used bytes');
+  num('xrk_nodejs_heap_total_bytes', mem.heapTotal, 'Node.js heap total bytes');
+  num('xrk_nodejs_rss_bytes', mem.rss, 'Node.js resident set size bytes');
+  num('xrk_process_cpu_user_microseconds', cpu.user, 'CPU user time microseconds', 'counter');
+  num('xrk_process_cpu_system_microseconds', cpu.system, 'CPU system time microseconds', 'counter');
+  num('xrk_workflow_traces_total', wf.total, 'Workflow execution traces total');
+  num('xrk_workflow_traces_failed', wf.failed, 'Workflow execution traces failed');
+  num('xrk_workflow_avg_duration_ms', metrics.workflow?.avgDurationMs, 'Workflow avg duration ms');
+
+  return `${lines.join('\n')}\n`;
+}
+
+/**
+ * @param {{ getWebSocketStats?: () => object, getTraceSummary?: () => object, httpPort?: number, httpsPort?: number, actualPort?: number, actualHttpsPort?: number, proxyEnabled?: boolean, workflow?: object }} [runtime]
+ */
+export function buildProcessMetrics(runtime = {}) {
+  const memUsage = process.memoryUsage();
+  const cpuUsage = process.cpuUsage();
+  const workflow =
+    typeof runtime.getTraceSummary === 'function'
+      ? runtime.getTraceSummary()
+      : runtime.workflow ?? null;
+
+  return {
+    timestamp: Date.now(),
+    uptime: process.uptime(),
+    requestId: getRequestContext()?.requestId ?? null,
+    memory: {
+      rss: memUsage.rss,
+      heapTotal: memUsage.heapTotal,
+      heapUsed: memUsage.heapUsed,
+      external: memUsage.external,
+      arrayBuffers: memUsage.arrayBuffers,
+    },
+    cpu: {
+      user: cpuUsage.user,
+      system: cpuUsage.system,
+    },
+    websocket: typeof runtime.getWebSocketStats === 'function' ? runtime.getWebSocketStats() : null,
+    workflow,
+    server: {
+      httpPort: runtime.httpPort,
+      httpsPort: runtime.httpsPort,
+      actualPort: runtime.actualPort,
+      actualHttpsPort: runtime.actualHttpsPort,
+      proxyEnabled: runtime.proxyEnabled,
+    },
+    platform: {
+      node: process.version,
+      platform: process.platform,
+      arch: process.arch,
+    },
   };
 }
 
@@ -150,4 +307,7 @@ export default {
   runWithRequestContext,
   createSpan,
   buildReadinessSnapshot,
+  probeSubserverHealth,
+  formatPrometheusMetrics,
+  buildProcessMetrics,
 };

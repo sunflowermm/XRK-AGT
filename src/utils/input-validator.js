@@ -16,9 +16,22 @@ export class InputValidator {
       throw new RuntimeError('路径必须是字符串', ErrorCodes.INVALID_INPUT);
     }
 
-    // 规范化路径
-    const normalized = path.normalize(filePath);
-    
+    // 解码 %2e/%2f 等编码穿越，再规范化
+    let candidate = filePath;
+    try {
+      candidate = decodeURIComponent(filePath);
+    } catch {
+      candidate = filePath;
+    }
+    if (/[\0]/.test(candidate)) {
+      throw new RuntimeError(
+        `无效的路径: ${filePath} (检测到非法字符)`,
+        ErrorCodes.PATH_TRAVERSAL
+      );
+    }
+
+    const normalized = path.normalize(candidate);
+
     // 防止路径遍历攻击
     if (normalized.includes('..') || path.isAbsolute(normalized)) {
       throw new RuntimeError(
@@ -27,11 +40,14 @@ export class InputValidator {
       );
     }
 
-    // 检查是否在基础目录内
+    // 检查是否在基础目录内（含尾部分隔，避免 prefix 误判）
     const resolved = path.resolve(baseDir, normalized);
     const baseResolved = path.resolve(baseDir);
-    
-    if (!resolved.startsWith(baseResolved)) {
+    const basePrefix = baseResolved.endsWith(path.sep)
+      ? baseResolved
+      : `${baseResolved}${path.sep}`;
+
+    if (resolved !== baseResolved && !resolved.startsWith(basePrefix)) {
       throw new RuntimeError(
         `路径超出允许范围: ${filePath}`,
         ErrorCodes.INVALID_PATH

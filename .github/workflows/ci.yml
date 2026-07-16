@@ -28,5 +28,11 @@ jobs:
           node --check src/infrastructure/http/runtime-listen.js
           node --check src/infrastructure/http/runtime-ws.js
           node --check src/infrastructure/http/runtime-proxy.js
+          node --check src/infrastructure/http/runtime-middleware.js
+          node --check src/infrastructure/http/runtime-static.js
+          node --check src/infrastructure/http/runtime-observability.js
+          node --check src/infrastructure/http/runtime-chaos.js
+          node --check src/infrastructure/http/runtime-boot.js
+          node --check src/infrastructure/http/runtime-net.js
           node --check src/infrastructure/plugins/loader.js
           node --check src/infrastructure/ai-workflow/loader.js

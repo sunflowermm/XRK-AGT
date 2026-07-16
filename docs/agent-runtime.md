@@ -1,7 +1,7 @@
 # AgentRuntime 主类文档
 
 > **源码**：`src/agent-runtime.js`（类 `AgentRuntime`，构造后 `_createProxy()` 返回 Proxy）  
-> **拆出实现**：`src/infrastructure/http/runtime-auth.js` · `runtime-listen.js` · `runtime-ws.js` · `runtime-proxy.js`（类方法薄包装委托）  
+> **拆出实现**：`src/infrastructure/http/runtime-auth.js` · `runtime-listen.js` · `runtime-ws.js` · `runtime-proxy.js` · `runtime-middleware.js` · `runtime-static.js` · `runtime-observability.js` · `runtime-chaos.js` · `runtime-boot.js` · `runtime-net.js`（类方法薄包装委托；`run()` 启动 DAG 在 `runtime-boot`；本机 IP/对外 URL 在 `runtime-net`）  
 > **启动**：默认 fail-fast（Loader/CommonConfig 失败拒绝 listen）；排障可设 `XRK_SOFT_FAIL_STARTUP=1`  
 > **读者**：需理解 HTTP/WS、生命周期、关闭流程的开发者  
 > **挂载面速查**：[runtime-surface.md](runtime-surface.md)（全局、`AgentRuntime.em`、`req.agentRuntime`、HTTP 业务层挂载）
@@ -184,9 +184,9 @@ const result = await bot.callRoute('/api/status', {
 
 ### stdin 命令
 
-#### `callStdin(command, options)` / `runCommand(command, options)`
+#### `callStdin(command, options)`
 
-通过 stdin 执行命令，`runCommand` 是 `callStdin` 的别名。
+通过 stdin 执行命令。
 
 ---
 
@@ -809,7 +809,7 @@ A: 检查：
 
 ### Q: 如何获取所有已注册的路由？
 
-A: 使用 `bot.getRouteList()` 或 `bot.getRoutes()`。
+A: 使用 `bot.getRouteList()`。
 
 ### Q: 如何内部调用 API 而不发起 HTTP 请求？
 
