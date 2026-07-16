@@ -11,9 +11,8 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
+      # 版本以 package.json#packageManager 为准，勿再写 version（会与 action-setup 冲突）
       - uses: pnpm/action-setup@v4
-        with:
-          version: 10
       - uses: actions/setup-node@v4
         with:
           node-version: '26'
