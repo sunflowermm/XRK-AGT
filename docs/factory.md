@@ -47,7 +47,7 @@ sequenceDiagram
     
     Note over App,Provider: 🔄 工厂调用流程
     
-    App->>Config: 📖 读取配置<br/>选择提供商<br/>aistream.llm.Provider
+    App->>Config: 📖 读取配置<br/>选择提供商<br/>ai-workflow.llm.Provider
     Config-->>App: ✅ 返回配置对象<br/>provider配置
     App->>Factory: 🏭 createClient(config)<br/>创建客户端
     Factory->>Factory: 🔍 根据 provider 选择工厂函数<br/>LLMFactory.hasProvider()
@@ -294,14 +294,14 @@ class TTSClient {
 
 ### 工厂配置位置
 
-与工厂相关的 YAML 均在**当前 AgentRuntime 端口目录** `data/server_bots/{port}/` 下（端口由运行时 `runtimeConfig` 绑定，见 `src/infrastructure/config/config.js` 中 `getServerConfig` 与 `runtimeConfig.aistream`）：
+与工厂相关的 YAML 均在**当前 AgentRuntime 端口目录** `data/server_bots/{port}/` 下（端口由运行时 `runtimeConfig` 绑定，见 `src/infrastructure/config/config.js` 中 `getServerConfig` 与 `runtimeConfig.aiWorkflow`）：
 
-1. **`aistream.yaml`**：`llm.Provider` / `asr.Provider` / `tts.Provider` 等选择默认工厂提供商；另含工作流、MCP、子服务端等段（详见 `docs/aistream.md`）。
+1. **`ai-workflow.yaml`**：`llm.Provider` / `asr.Provider` / `tts.Provider` 等选择默认工厂提供商；另含工作流、MCP、子服务端等段（详见 `docs/ai-workflow.md`）。
 2. **各提供商配置文件**（如 `volcengine_llm.yaml`）：API Key、模型名等具体参数。
 
 ### 配置示例
 
-#### aistream.yaml（端口目录内，非 `server_bots` 根目录）
+#### ai-workflow.yaml（端口目录内，非 `server_bots` 根目录）
 
 ```yaml
 # LLM 工厂运营商选择
@@ -340,7 +340,7 @@ maxTokens: 4096
 
 ```javascript
 // 读取 LLM 配置
-const llmConfig = AgentRuntime.runtimeConfig.aistream.llm;
+const llmConfig = AgentRuntime.runtimeConfig.aiWorkflow.llm;
 const providerConfig = AgentRuntime.runtimeConfig[`${llmConfig.Provider}_llm`];
 
 // 创建客户端
@@ -420,7 +420,7 @@ export default class MyCustomLLMClient {
 
 ### 在配置中启用新提供商
 
-1. 在对应端口目录的 `data/server_bots/{port}/aistream.yaml` 中将 `llm.Provider`（或 asr/tts）设为新提供商 key
+1. 在对应端口目录的 `data/server_bots/{port}/ai-workflow.yaml` 中将 `llm.Provider`（或 asr/tts）设为新提供商 key
 2. 在同一端口目录创建提供商配置文件（如 `myprovider_llm.yaml`）
 3. 在配置管理界面中配置 API Key 等参数
 
@@ -693,7 +693,7 @@ try {
 
 ### Q: 如何切换 LLM 提供商？
 
-A: 修改**当前端口**下 `data/server_bots/{port}/aistream.yaml` 中的 `llm.Provider` 字段，然后重启服务或重新加载配置。
+A: 修改**当前端口**下 `data/server_bots/{port}/ai-workflow.yaml` 中的 `llm.Provider` 字段，然后重启服务或重新加载配置。
 
 ### Q: 如何添加新的 LLM 提供商？
 
@@ -701,7 +701,7 @@ A:
 1. 实现新的 LLM 客户端类（继承接口规范）
 2. 使用 `LLMFactory.registerProvider()` 注册提供商
 3. 创建对应的配置文件（如 `myprovider_llm.yaml`）
-4. 在该端口目录的 `aistream.yaml` 中将对应 `*.Provider` 设为新提供商
+4. 在该端口目录的 `ai-workflow.yaml` 中将对应 `*.Provider` 设为新提供商
 
 ### Q: 如何查看当前支持的所有提供商？
 
@@ -936,7 +936,7 @@ Host: localhost:8080
 ## 相关文档
 
 - **[system-Core 特性](system-core.md)** - system-Core 内置模块完整说明，包含AI服务API和所有工作流的实际实现 ⭐
-- **[AiWorkflow 文档](aistream.md)** - AiWorkflow 基类技术文档，了解如何在 AiWorkflow 中使用 LLM 工厂
+- **[AiWorkflow 文档](ai-workflow.md)** - AiWorkflow 基类技术文档，了解如何在 AiWorkflow 中使用 LLM 工厂
 - **[配置基类文档](config-base.md)** - 了解配置系统的使用
 - **[MCP 完整指南](mcp-guide.md)** - MCP 工具注册与连接
 - **[HTTP API 文档](http-api.md)** - 了解 HTTP API 基类

@@ -1,5 +1,5 @@
 import RuntimeUtil from '#utils/runtime-util.js';
-import { getAistreamConfigOptional } from '#utils/aistream-config.js';
+import { getAiWorkflowConfigOptional } from '#utils/ai-workflow-config.js';
 import LLMFactory from '#factory/llm/LLMFactory.js';
 import { pickFirstDefined, pickTrimmed, pickNonEmptyUrl, shallowMergePlain } from '#utils/coerce-pick.js';
 
@@ -7,7 +7,7 @@ import { pickFirstDefined, pickTrimmed, pickNonEmptyUrl, shallowMergePlain } fro
  * 工作流运行时 LLM 配置分层合并（非 request body 组装）。
  *
  * 职责边界：
- * - 此处只做 apiConfig → stream.config → providers[] → aistream.llm 的字段合并
+ * - 此处只做 apiConfig → stream.config → providers[] → ai-workflow.llm 的字段合并
  * - 各厂商官方/兼容协议的 body、SSE、鉴权由 factory/*LLMClient 按官方文档实现
  * - 业务工作流通过 AiWorkflow.patchLLMConfig() 追加场景字段，勿在此写厂商 body 逻辑
  */
@@ -27,7 +27,7 @@ function assignDefined(target, fields) {
  * @param {object} [apiConfig={}]
  */
 export function resolveStreamLLMConfig(stream, apiConfig = {}) {
-  const ai = getAistreamConfigOptional();
+  const ai = getAiWorkflowConfigOptional();
   const llm = ai.llm || {};
   const pick = pickFirstDefined;
 

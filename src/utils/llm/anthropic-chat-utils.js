@@ -97,12 +97,12 @@ export function applyAnthropicTools(body, config = {}, overrides = {}, toolNameM
   }
 
   const hasMcpTools = MCPToolAdapter.hasTools();
-  const streams = Array.isArray(overrides.streams) ? overrides.streams : null;
-  const enableMcp = Boolean(streams?.length) && config.enableTools !== false && hasMcpTools;
+  const workflows = Array.isArray(overrides.workflows) ? overrides.workflows : null;
+  const enableMcp = Boolean(workflows?.length) && config.enableTools !== false && hasMcpTools;
   if (!enableMcp) return body;
 
   const workflow = overrides.workflow || config.workflow || config.streamName || null;
-  const mcpTools = MCPToolAdapter.convertMCPToolsToAnthropic({ workflow, streams });
+  const mcpTools = MCPToolAdapter.convertMCPToolsToAnthropic({ workflow, workflows });
 
   if (mcpTools.length) {
     body.tools = toolNameMapper
@@ -112,7 +112,7 @@ export function applyAnthropicTools(body, config = {}, overrides = {}, toolNameM
     body.tool_choice = mapToolChoice(choice, toolNameMapper);
     RuntimeUtil.makeLog(
       'debug',
-      `[anthropic-chat-utils] 注入 MCP tools=${mcpTools.length}, streams=${JSON.stringify(streams)}`,
+      `[anthropic-chat-utils] 注入 MCP tools=${mcpTools.length}, streams=${JSON.stringify(workflows)}`,
       'LLMFactory'
     );
   }

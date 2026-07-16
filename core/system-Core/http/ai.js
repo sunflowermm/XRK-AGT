@@ -1,6 +1,6 @@
-import AiStreamLoader from '#infrastructure/ai-workflow/loader.js';
+import AiWorkflowLoader from '#infrastructure/ai-workflow/loader.js';
 import runtimeConfig from '#infrastructure/config/config.js';
-import { getAistreamConfigOptional } from '#utils/aistream-config.js';
+import { getAiWorkflowConfigOptional } from '#utils/ai-workflow-config.js';
 import LLMFactory from '#factory/llm/LLMFactory.js';
 import RuntimeUtil from '#utils/runtime-util.js';
 import { errorHandler, ErrorCodes } from '#utils/error-handler.js';
@@ -15,17 +15,17 @@ import { bannedWordsService } from '../lib/content-safety/banned-words-service.j
 import { mergeAgentWorkspaceIntoMessages } from '#utils/agent-workspace.js';
 import {
   parseRequestWorkspace,
-  buildAistreamCfgForAgentRoot,
+  buildAiWorkflowCfgForAgentRoot,
   applyRequestWorkspaceToStreams
 } from '../lib/ai-workspace-runtime.js';
 import { runWithAiConsoleContext, installMcpAuditHook } from '../lib/ai-workspace-context.js';
-import { resolveDefaultMcpWorkflow } from '../lib/builtin-mcp.js';
+import { resolveDefaultMcpWorkflow } from '#utils/ai-workflow-config.js';
 import { initOpenAIChatSSE, pipeOpenAIChatCompletionsStream, writeOpenAiWorkflowError } from '#utils/sse-openai.js';
 import { pickPromptCacheOverrides } from '#utils/llm/prompt-cache-policy.js';
-import { expandChatToolStreamWhitelist } from '#infrastructure/ai-workflow/chat-tool-streams.js';
+import { expandChatToolWorkflowWhitelist } from '#infrastructure/ai-workflow/chat-tool-streams.js';
 import { transformOpenAIStyleVisionMessages } from '#utils/llm/message-transform.js';
 import { assembleChatLlmMessages } from '#infrastructure/ai-workflow/chat-pipeline.js';
-import { runWithStreamRequestContext } from '#infrastructure/ai-workflow/stream-request-context.js';
+import { runWithWorkflowRequestContext } from '#infrastructure/ai-workflow/workflow-request-context.js';
 import {
   pickFirst,
   parseOptionalJson,
@@ -89,7 +89,7 @@ function summarizeV3Request(req, body, { contentType, messages, uploadedImagesCo
     ? {
         workflow: safePreview(rawWorkflow.workflow, { maxLen: 120 }),
         workflowsCount: Array.isArray(rawWorkflow.workflows) ? rawWorkflow.workflows.length : 0,
-        streamsCount: Array.isArray(rawWorkflow.streams) ? rawWorkflow.streams.length : 0
+        streamsCount: Array.isArray(rawWorkflow.workflows) ? rawWorkflow.workflows.length : 0
       }
     : safePreview(rawWorkflow, { maxLen: 200 });
 
@@ -127,8 +127,8 @@ function summarizeV3Request(req, body, { contentType, messages, uploadedImagesCo
   };
 }
 
-function resolveDefaultStreams() {
-  const mcpCfg = getAistreamConfigOptional().mcp || {};
+function resolveDefaultWorkflows() {
+  const mcpCfg = getAiWorkflowConfigOptional().mcp || {};
   return resolveDefaultMcpWorkflow(mcpCfg);
 }
 
@@ -307,11 +307,11 @@ async function handleChatCompletionsV3(req, res) {
   }
 
   const workspaceCtx = parseRequestWorkspace(body);
-  const aistreamCfgForRequest = buildAistreamCfgForAgentRoot(
-    getAistreamConfigOptional(),
+  const aiWorkflowCfgForRequest = buildAiWorkflowCfgForAgentRoot(
+    getAiWorkflowConfigOptional(),
     workspaceCtx.agentRootAbs
   );
-  await mergeAgentWorkspaceIntoMessages(messages, aistreamCfgForRequest, 'v3');
+  await mergeAgentWorkspaceIntoMessages(messages, aiWorkflowCfgForRequest, 'v3');
 
   const streamFlag = Boolean(pickFirst(body, ['stream']));
   const provider = resolveProviderFromRequest(body);
@@ -319,7 +319,7 @@ async function handleChatCompletionsV3(req, res) {
   if (!provider) {
     return HttpResponse.error(
       res,
-      new Error('未指定有效的LLM提供商：请检查 aistream.yaml 的 llm.Provider 是否已配置，或在请求中传入 model/provider。'),
+      new Error('未指定有效的LLM提供商：请检查 ai-workflow.yaml 的 llm.Provider 是否已配置，或在请求中传入 model/provider。'),
       400,
       'ai.v3.chat.completions'
     );
@@ -329,7 +329,7 @@ async function handleChatCompletionsV3(req, res) {
   const llmConfig = {
     provider,
     ...base,
-    promptCache: aistreamCfgForRequest.llm?.promptCache
+    promptCache: aiWorkflowCfgForRequest.llm?.promptCache
   };
 
   if (streamFlag && base.enableStream === false) {
@@ -342,8 +342,8 @@ async function handleChatCompletionsV3(req, res) {
   }
 
   const workflowStreams = resolveWorkflowStreams(body);
-  const defaultStreams = resolveDefaultStreams();
-  const effectiveStreams = workflowStreams?.length ? workflowStreams : defaultStreams;
+  const defaultWorkflows = resolveDefaultWorkflows();
+  const effectiveStreams = workflowStreams?.length ? workflowStreams : defaultWorkflows;
 
   const client = LLMFactory.createClient(llmConfig);
   const overrides = buildOverridesFromBody(body);
@@ -354,7 +354,7 @@ async function handleChatCompletionsV3(req, res) {
   overrides.mcpToolMode = hasRequestTools ? 'hybrid' : (effectiveStreams?.length ? 'execute' : 'passthrough');
   
   if (effectiveStreams?.length) {
-    overrides.streams = expandChatToolStreamWhitelist(effectiveStreams);
+    overrides.workflows = expandChatToolWorkflowWhitelist(effectiveStreams);
   }
 
   Object.assign(
@@ -365,7 +365,7 @@ async function handleChatCompletionsV3(req, res) {
   const llmMessages = await transformOpenAIStyleVisionMessages(messages, llmConfig);
 
   const fileWorkspaceAbs = workspaceCtx.fileRootAbs || workspaceCtx.agentRootAbs;
-  const restoreStreamWorkspace = applyRequestWorkspaceToStreams(AiStreamLoader, fileWorkspaceAbs);
+  const restoreStreamWorkspace = applyRequestWorkspaceToStreams(AiWorkflowLoader, fileWorkspaceAbs);
   const auditWorkspaceId = workspaceCtx.presetId || null;
 
   if (!streamFlag) {
@@ -443,7 +443,7 @@ async function handleChatCompletionsV3(req, res) {
 }
 
 async function handleModels(req, res) {
-  const llm = getAistreamConfigOptional().llm || {};
+  const llm = getAiWorkflowConfigOptional().llm || {};
   const defaultProvider = getDefaultProvider();
   const format = (req.query.format || '').toLowerCase();
   const profiles = LLMFactory.listModelProfiles();
@@ -464,7 +464,7 @@ async function handleModels(req, res) {
 
   const vendors = LLMFactory.listVendors(profiles);
 
-  const workflows = AiStreamLoader.getStreamsByPriority()
+  const workflows = AiWorkflowLoader.getWorkflowsByPriority()
     .filter(s => !s.primaryStream && !s.secondaryStreams && (s.mcpTools?.size || 0) > 0)
     .map(s => ({
       key: s.name,
@@ -476,7 +476,7 @@ async function handleModels(req, res) {
     }));
 
   // 远程 MCP 服务器也视为“工作流选项”，但默认不勾选，由用户显式选择。
-  const remoteServers = AiStreamLoader.listRemoteMCPServers?.() || [];
+  const remoteServers = AiWorkflowLoader.listRemoteMCPServers?.() || [];
   const remoteWorkflows = remoteServers.map((name) => ({
     key: `remote-mcp.${name}`,
     label: `远程 MCP：${name}`,
@@ -498,8 +498,8 @@ async function handleModels(req, res) {
 }
 
 export default {
-  name: 'ai-stream',
-  dsc: 'AI 流式输出（SSE）',
+  name: 'ai-workflow',
+  dsc: 'AI 工作流（含 SSE 流式输出）',
   priority: 80,
   routes: [
     {
@@ -541,7 +541,7 @@ export default {
           const contextObj = parseOptionalJson(req.query.context);
           const metadata = parseOptionalJson(req.query.meta);
 
-          const stream = AiStreamLoader.getStream(workflowName) || AiStreamLoader.getStream('chat');
+          const stream = AiWorkflowLoader.getWorkflow(workflowName) || AiWorkflowLoader.getWorkflow('chat');
           if (!stream) {
             return HttpResponse.error(res, new Error('工作流未加载'), 500, 'ai.stream');
           }
@@ -586,7 +586,7 @@ export default {
           };
 
           let acc = '';
-          const finalText = await runWithStreamRequestContext(
+          const finalText = await runWithWorkflowRequestContext(
             { e: null, turnState: null },
             () => stream.callAiWorkflow(
               messages,

@@ -74,7 +74,7 @@ export default class AIConfig extends ConfigBase {
           default: 0.1,
           component: 'InputNumber',
         },
-        mergeStreams: {
+        mergeWorkflows: {
           type: 'array',
           label: '合并工作流',
           description:

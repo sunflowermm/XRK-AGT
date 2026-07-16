@@ -98,7 +98,7 @@
 - **[底层架构设计](底层架构设计.md)** - AI 主链路、AiWorkflow 链路、子服务端职责边界（权威）
 - **[MCP 完整指南](mcp-guide.md)** - MCP 工具注册与连接
 - **[MCP 配置指南](mcp-config-guide.md)** - Cursor、Claude Desktop 等外部平台连接配置
-- **[AiWorkflow 工作流基类文档](aistream.md)** - `AiWorkflow` 基类技术文档，涵盖 Embedding、多提供商支持、Function Calling 与上下文增强（MCP 工具 vs Call Function 见该文档）
+- **[AiWorkflow 工作流基类文档](ai-workflow.md)** - `AiWorkflow` 基类技术文档，涵盖 Embedding、多提供商支持、Function Calling 与上下文增强（MCP 工具 vs Call Function 见该文档）
 - **[工厂系统文档](factory.md)** - LLM（含多模态）/ASR/TTS 工厂系统，统一管理多厂商 AI 服务提供商
 - **[子服务端 API 文档](subserver-api.md)** - Python 子服务端底层系统接口与扩展装载说明
 
@@ -128,7 +128,7 @@
 
 | 角色 | 首读 | 扩展 |
 |------|------|------|
-| 插件开发者 | **[runtime-surface.md](runtime-surface.md)** · [base-classes.md](base-classes.md) · [框架可扩展性指南](框架可扩展性指南.md) · [plugin-base.md](plugin-base.md) | [plugins-loader.md](plugins-loader.md) · [aistream.md](aistream.md) |
+| 插件开发者 | **[runtime-surface.md](runtime-surface.md)** · [base-classes.md](base-classes.md) · [框架可扩展性指南](框架可扩展性指南.md) · [plugin-base.md](plugin-base.md) | [plugins-loader.md](plugins-loader.md) · [ai-workflow.md](ai-workflow.md) |
 | Tasker 开发者 | [tasker-loader.md](tasker-loader.md) · [tasker-base-spec.md](tasker-base-spec.md) | [tasker-onebotv11.md](tasker-onebotv11.md) · [agent-runtime.md](agent-runtime.md) |
 | 后端 / API | [http-api.md](http-api.md) · [base-classes.md](base-classes.md) · [agent-runtime.md](agent-runtime.md) · [AUTH.md](AUTH.md) | [api-loader.md](api-loader.md) · [infrastructure-shared.md](infrastructure-shared.md) |
 | 运维 / 配置 | [config-base.md](config-base.md) · [database.md](database.md) · [docker.md](docker.md) | [factory.md](factory.md) · [server.md](server.md) |
@@ -164,7 +164,7 @@
 
 ### 创建新的 AI 工作流
 
-1. 阅读 **[AiWorkflow 工作流基类文档](aistream.md)** 了解基类设计
+1. 阅读 **[AiWorkflow 工作流基类文档](ai-workflow.md)** 了解基类设计
 2. 阅读 **[工厂系统文档](factory.md)** 了解如何选择和使用 LLM 提供商
 3. 在任意 core 目录的 `stream/` 子目录中创建新的工作流文件
 4. 基于 `AiWorkflow` 实现自定义工作流逻辑

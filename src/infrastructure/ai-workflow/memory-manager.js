@@ -1,18 +1,18 @@
 /**
- * Memory Manager - 进程内短期/长期记忆（关键词 contains，非向量 RAG）
+ * Memory Manager — 进程内短期 / 长期记忆（关键词 contains，非向量 RAG）。
+ * - 短期：AiWorkflow.storeMessageMemory / retrieveRelevantContexts
+ * - 长期：system-Core `workflow/memory.js` 的 MCP 工具写入与检索
+ * 主对话历史仍以 ChatStream.messageHistory 为准。
  */
-import EventEmitter from 'events';
-
-export class MemoryManager extends EventEmitter {
+export class MemoryManager {
   shortTermMemories = new Map();
   longTermMemories = new Map();
   maxShortTermSize = 50;
   maxLongTermSize = 1000;
 
   /**
-   * 添加短期记忆（对话上下文）
-   * @param {string} userId - 用户ID
-   * @param {Object} memory - 记忆内容
+   * @param {string} userId
+   * @param {Object} memory
    */
   addShortTermMemory(userId, memory) {
     if (!this.shortTermMemories.has(userId)) {
@@ -29,23 +29,38 @@ export class MemoryManager extends EventEmitter {
     if (memories.length > this.maxShortTermSize) {
       memories.shift();
     }
-
-    this.emit('memory:short_term:added', { userId, memory });
   }
 
+  /**
+   * @param {string} userId
+   * @param {number} [limit=10]
+   * @returns {Array<Object>}
+   */
   getShortTermMemories(userId, limit = 10) {
     const memories = this.shortTermMemories.get(userId) || [];
     return memories.slice(-limit);
   }
 
-  clearShortTermMemory(userId) {
-    this.shortTermMemories.delete(userId);
-    this.emit('memory:short_term:cleared', { userId });
+  /**
+   * 短期记忆关键词召回（空 query 返回最近若干条）。
+   * @param {string} userId
+   * @param {string} query
+   * @param {number} [limit=5]
+   * @returns {Promise<Array<Object>>}
+   */
+  async searchShortTermMemories(userId, query, limit = 5) {
+    const memories = this.shortTermMemories.get(userId) || [];
+    const q = String(query || '');
+    const filtered = q
+      ? memories.filter((m) => String(m.content || '').includes(q))
+      : memories;
+    return filtered.slice(-limit).reverse();
   }
 
   /**
-   * 添加长期记忆
-   * @returns {string} 记忆ID
+   * @param {string} userId
+   * @param {Object} memory
+   * @returns {Promise<string>} 记忆 ID
    */
   async addLongTermMemory(userId, memory) {
     if (!this.longTermMemories.has(userId)) {
@@ -73,20 +88,24 @@ export class MemoryManager extends EventEmitter {
       memories.shift();
     }
 
-    this.emit('memory:long_term:added', { userId, memory: longTermMemory });
     return memoryId;
   }
 
   /**
-   * 检索长期记忆（简单 includes，非 embedding）
+   * 长期记忆关键词检索（空 query 返回全部，按重要度排序）。
+   * @param {string} userId
+   * @param {string} query
+   * @param {number} [limit=5]
+   * @returns {Promise<Array<Object>>}
    */
   async searchLongTermMemories(userId, query, limit = 5) {
     const memories = this.longTermMemories.get(userId) || [];
+    const q = String(query || '');
     const results = memories
-      .filter(m => m.content.includes(query))
+      .filter((m) => !q || String(m.content || '').includes(q))
       .sort((a, b) => {
-        const scoreA = a.importance + (a.accessCount * 0.1);
-        const scoreB = b.importance + (b.accessCount * 0.1);
+        const scoreA = a.importance + a.accessCount * 0.1;
+        const scoreB = b.importance + b.accessCount * 0.1;
         return scoreB - scoreA;
       })
       .slice(0, limit);
@@ -99,21 +118,20 @@ export class MemoryManager extends EventEmitter {
     return results;
   }
 
+  /**
+   * @param {string} userId
+   * @param {string} memoryId
+   * @returns {boolean}
+   */
   deleteLongTermMemory(userId, memoryId) {
     const memories = this.longTermMemories.get(userId);
     if (!memories) return false;
 
-    const index = memories.findIndex(m => m.id === memoryId);
+    const index = memories.findIndex((m) => m.id === memoryId);
     if (index === -1) return false;
 
     memories.splice(index, 1);
-    this.emit('memory:long_term:deleted', { userId, memoryId });
     return true;
-  }
-
-  clearLongTermMemories(userId) {
-    this.longTermMemories.delete(userId);
-    this.emit('memory:long_term:cleared', { userId });
   }
 }
 

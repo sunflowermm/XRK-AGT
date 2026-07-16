@@ -67,6 +67,38 @@ class RuntimeConfig {
     return path.join(this.PATHS.SERVER_BOTS, String(this._port));
   }
 
+  /** 一次性：旧键 streams / defaultStreams → workflows / defaultWorkflows */
+  normalizeAiWorkflowConfigShape(config) {
+    if (!config || typeof config !== 'object') return config;
+    const aw = config.agentWorkspace;
+    if (aw && typeof aw === 'object' && aw.workflows == null && Array.isArray(aw.streams)) {
+      aw.workflows = aw.streams;
+      delete aw.streams;
+    }
+    const mcp = config.mcp;
+    if (mcp && typeof mcp === 'object' && mcp.defaultWorkflows == null && Array.isArray(mcp.defaultStreams)) {
+      mcp.defaultWorkflows = mcp.defaultStreams;
+      delete mcp.defaultStreams;
+    }
+    return config;
+  }
+
+  /** 一次性：server_bots 下 aistream.yaml → ai-workflow.yaml */
+  migrateAistreamYamlOnce(configDir) {
+    if (!configDir) return;
+    const legacy = path.join(configDir, 'aistream.yaml');
+    const next = path.join(configDir, 'ai-workflow.yaml');
+    try {
+      if (fileExistsSync(legacy) && !fileExistsSync(next)) {
+        fs.renameSync(legacy, next);
+        RuntimeUtil.makeLog('warn', `[配置迁移] aistream.yaml → ai-workflow.yaml (${configDir})`, LOG_TAG);
+      }
+    } catch (err) {
+      RuntimeUtil.makeLog('warn', `[配置迁移] aistream→ai-workflow 失败: ${err?.message || err}`, LOG_TAG);
+    }
+  }
+
+
   getGlobalConfig(name) {
     const key = `global.${name}`;
     if (this.config[key]) return this.config[key];
@@ -96,6 +128,7 @@ class RuntimeConfig {
     if (this.config[key]) return this.config[key];
     
     const configDir = this.getConfigDir();
+    this.migrateAistreamYamlOnce(configDir);
     if (!configDir) {
       const defaultFile = path.join(this.PATHS.DEFAULT_CONFIG, `${name}.yaml`);
       try {
@@ -114,7 +147,8 @@ class RuntimeConfig {
     }
 
     try {
-      const { config, watchFile } = loadYamlFromCandidates([file], name);
+      let { config, watchFile } = loadYamlFromCandidates([file], name);
+      if (name === 'ai-workflow') config = this.normalizeAiWorkflowConfigShape(config);
       this.config[key] = config;
       if (watchFile) this.watch(watchFile, name, key);
       return this.config[key];
@@ -135,10 +169,10 @@ class RuntimeConfig {
   get monitor() { return this.getGlobalConfig('monitor'); }
   get notice() { return this.getGlobalConfig('notice'); }
   get redis() { return this.getGlobalConfig('redis'); }
-  // aistream 为随端口配置（server_bots/{port}/aistream.yaml）
-  get aistream() { return this.getServerConfig('aistream'); }
+  // ai-workflow 为随端口配置（server_bots/{port}/ai-workflow.yaml）
+  get aiWorkflow() { return this.getServerConfig('ai-workflow'); }
   /** 子服务端连接（host/port/timeout/runtimes）；AgentRuntime.callSubserver 读取 */
-  get subserver() { return this.aistream?.subserver ?? {}; }
+  get subserver() { return this.aiWorkflow?.subserver ?? {}; }
 
   get server() { return this.getServerConfig('server'); }
   get chatbot() { return this.getServerConfig('chatbot'); }

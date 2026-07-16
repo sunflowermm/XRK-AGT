@@ -1,7 +1,7 @@
-import EventListenerBase from '#infrastructure/listener/base.js'
+import ListenerBase from '#infrastructure/listener/base.js'
 import { errorHandler, ErrorCodes } from '#utils/error-handler.js'
 
-export default class OneBotEvent extends EventListenerBase {
+export default class OneBotEvent extends ListenerBase {
   constructor() {
     super('onebot')
   }

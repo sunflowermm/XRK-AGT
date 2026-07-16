@@ -1,14 +1,14 @@
 /**
  * 主服务端 → 多语言子服务端 HTTP 客户端
  *
- * 配置：aistream.yaml → subserver（default、timeout、runtimes）
+ * 配置：ai-workflow.yaml → subserver（default、timeout、runtimes）
  */
 import { createWriteStream } from 'node:fs';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { pipeline } from 'node:stream/promises';
 import { Readable } from 'node:stream';
-import { getAistreamConfigOptional } from '#utils/aistream-config.js';
+import { getAiWorkflowConfigOptional } from '#utils/ai-workflow-config.js';
 import runtimeConfig from '#infrastructure/config/config.js';
 import { normalizeError } from '#utils/normalize-error.js';
 import { SUBSERVER_RUNTIME_CATALOG } from '#utils/subserver-runtimes.js';
@@ -29,7 +29,7 @@ function applyDockerHostOverride(id, host, port) {
 }
 
 /**
- * @param {Record<string, unknown>} subserverRoot aistream.yaml → subserver
+ * @param {Record<string, unknown>} subserverRoot ai-workflow.yaml → subserver
  * @param {string} id
  */
 function resolveRuntimeEntry(subserverRoot, id) {
@@ -40,7 +40,7 @@ function resolveRuntimeEntry(subserverRoot, id) {
 
 /** @returns {string} */
 export function getSubserverDefaultRuntime() {
-  const root = runtimeConfig.subserver ?? getAistreamConfigOptional().subserver ?? {};
+  const root = runtimeConfig.subserver ?? getAiWorkflowConfigOptional().subserver ?? {};
   const id = root.default;
   if (id && SUBSERVER_RUNTIME_CATALOG[id]) return id;
   return 'pyserver';

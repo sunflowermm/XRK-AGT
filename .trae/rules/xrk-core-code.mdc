@@ -14,7 +14,7 @@ alwaysApply: false
 
 ## 放码位置
 
-- 插件：`core/*/plugin/*.js`；HTTP API：`core/*/http/*.js`；工作流：`core/*/stream/*.js`。各自继承对应基类，行为符合 `docs/` 中对应文档。
+- 插件：`core/*/plugin/*.js`；HTTP API：`core/*/http/*.js`；工作流：`core/*/workflow/*.js`。各自继承对应基类，行为符合 `docs/` 中对应文档。
 - 基类路径（无 package.json 时用 `#`）：插件 `#infrastructure/plugins/plugin-base.js`，HTTP `#infrastructure/http/http.js`，工作流 `#infrastructure/ai-workflow/ai-workflow.js`。有 package.json 时改为相对路径至 `src/`（如 `../../../src/infrastructure/...`）。
 
 ## 导入约定

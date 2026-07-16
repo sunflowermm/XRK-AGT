@@ -1,7 +1,7 @@
 import path from 'node:path';
 import HttpApi from './http.js';
 import RuntimeUtil from '#utils/runtime-util.js';
-import { getAistreamConfigOptional } from '#utils/aistream-config.js';
+import { getAiWorkflowConfigOptional } from '#utils/ai-workflow-config.js';
 import paths from '#utils/paths.js';
 import { validateApiInstance, getApiPriority } from './utils/helpers.js';
 import { FileLoader } from '#utils/file-loader.js';
@@ -169,7 +169,7 @@ class HttpApiLoader {
         await this._initApi(api);
 
         if (routeCount > 0 || wsCount > 0) {
-          if (getAistreamConfigOptional().global?.debug) {
+          if (getAiWorkflowConfigOptional().global?.debug) {
             RuntimeUtil.makeLog('debug', `注册API: ${api.name} (路由: ${routeCount}, WS: ${wsCount})`, 'HttpApiLoader');
           }
           return { routeCount, wsCount, enabled: true };

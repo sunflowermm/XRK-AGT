@@ -63,8 +63,8 @@ classDiagram
         +Array eventSubscribe
         +EventObject e
         +reply(msg, quote, data)
-        +getStream(name)
-        +getAllStreams()
+        +getWorkflow(name)
+        +getAllWorkflows()
         +pushResult(payload)
         +getResults()
         +accept(e)
@@ -74,7 +74,7 @@ classDiagram
         +awaitContext(...)
         +resolveContext(context)
         +markNeedReparse()
-        +getDescriptor()
+        +getInfo()
     }
 
     class EventObject {
@@ -93,7 +93,7 @@ classDiagram
     }
 
     plugin --> EventObject : 运行时注入 e
-    plugin --> AiWorkflow : getStream
+    plugin --> AiWorkflow : getWorkflow
 
     note for plugin "⚠️ 勿在 constructor 内定义可变状态<br/>用类字段、模块变量或 init()"
     note for EventObject "由 PluginLoader.initPlugins 注入"
@@ -120,7 +120,7 @@ classDiagram
 |------|------|
 | `this.e` | 当前事件；方法执行时由加载器注入 |
 | `this.reply()` | 优先 `e.reply`，否则 `bot.sendMsg` / tasker |
-| `this.getStream()` | 访问已加载的 `AiWorkflow` 工作流 |
+| `this.getWorkflow()` | 访问已加载的 `AiWorkflow` 工作流 |
 
 工作流 `process()` 内部通常已发送回复，插件侧**一般无需再 `reply()`**。
 
@@ -226,7 +226,7 @@ async onMessage(e) {
 
 ```javascript
 async chat(e) {
-  const stream = this.getStream('chat');
+  const stream = this.getWorkflow('chat');
   if (!stream) {
     await this.reply('工作流未加载');
     return;
@@ -245,12 +245,12 @@ async chat(e) {
 
 | 方法 | 说明 |
 |------|------|
-| `getStream(name)` | 单个工作流实例或 `null` |
-| `getAllStreams()` | 全部已加载工作流 |
+| `getWorkflow(name)` | 单个工作流实例或 `null` |
+| `getAllWorkflows()` | 全部已加载工作流 |
 | `pushResult(payload)` | 向 `e._pluginResults` 追加结构化结果 |
 | `getResults()` | 读取当前事件上的插件结果列表 |
 
-合并多工作流、MCP 工具等见 [aistream.md](aistream.md)。
+合并多工作流、MCP 工具等见 [ai-workflow.md](ai-workflow.md)。
 
 ---
 
@@ -290,7 +290,7 @@ export default class OneBotEnhancer extends PluginBase {
 
 | 方法 | 说明 |
 |------|------|
-| `getInfo()` | 结构化描述（名称、规则、任务等），供加载器统计；`getDescriptor()` 为兼容别名 |
+| `getInfo()` | 结构化描述（名称、规则、任务等），供加载器统计 |
 | `markNeedReparse()` | 设置 `e._needReparse`，触发消息重解析 |
 
 ---
@@ -348,7 +348,7 @@ export default class MyPlugin extends PluginBase {
 
 - [plugins-loader.md](plugins-loader.md) — 加载、分发、冷却与热重载
 - [事件系统标准化文档](事件系统标准化文档.md) — 事件命名与字段
-- [aistream.md](aistream.md) — 工作流与 MCP
+- [ai-workflow.md](ai-workflow.md) — 工作流与 MCP
 - [框架可扩展性指南](框架可扩展性指南.md) — 七大扩展点
 - [database.md](database.md) — Redis 配置与访问
 

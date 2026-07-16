@@ -9,7 +9,7 @@
 
 | 类型 | 谁编辑 | 谁读取 | 文件 / 入口 |
 |------|--------|--------|-------------|
-| **子服连接** | 主服控制台 | 主服 `AgentRuntime.callSubserver` | `aistream.yaml` → **`runtimeConfig.subserver`**（系统配置 → AiWorkflow → 子服务端） |
+| **子服连接** | 主服控制台 | 主服 `AgentRuntime.callSubserver` | `ai-workflow.yaml` → **`runtimeConfig.subserver`**（系统配置 → AiWorkflow → 子服务端） |
 | **业务插件** | 主服控制台 | 子服 `load_plugin_config` / 主服 QQ 插件 | `data/<group>/config.yaml` |
 | **子服进程**（可选） | 部署 / 子服本地 | pyserver 启动 | `data/subserver/config.yaml`（监听地址等，与主服「连哪个端口」无关） |
 

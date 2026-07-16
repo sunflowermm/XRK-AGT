@@ -8,7 +8,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import paths from '#utils/paths.js';
-import { getAistreamConfigOptional } from '#utils/aistream-config.js';
+import { getAiWorkflowConfigOptional } from '#utils/ai-workflow-config.js';
 import { isPathInside, realpathSyncOrResolve } from '#utils/path-guards.js';
 
 export const AGENTS_MD = 'AGENTS.md';
@@ -28,7 +28,7 @@ export const LONG_TERM_MEMORY_REL = 'memory/MEMORY.md';
 /** 仓库内首次引导用的模板目录（只读，运行时不从此处注入） */
 export const WORKSPACE_BUNDLE_DIR_REL = 'agents/workspace';
 
-/** 办公技能包（复制到工作区 skills/，与 aistream customSkillRoots 对齐） */
+/** 办公技能包（复制到工作区 skills/，与 ai-workflow customSkillRoots 对齐） */
 export const PROJECT_SKILLS_STANDARD_REL = 'skills/standard';
 
 /** 工作区内技能目录名（相对 data/ai-workspace/{id}） */
@@ -64,7 +64,7 @@ export function normalizeWorkspaceId(raw) {
 }
 
 export function getConfiguredDefaultWorkspaceId() {
-  const runtimeConfig = getAistreamConfigOptional();
+  const runtimeConfig = getAiWorkflowConfigOptional();
   const raw = runtimeConfig?.workspace?.defaultId;
   if (raw != null && String(raw).trim() !== '') {
     return normalizeWorkspaceId(raw);

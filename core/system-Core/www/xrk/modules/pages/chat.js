@@ -279,7 +279,7 @@ export function bindChatEvents(app) {
     });
     const remoteMCPBtn = document.getElementById('remoteMCPConfigBtn');
     if (remoteMCPBtn) safeBind(remoteMCPBtn, 'click', () => {
-      app.openConfigSelection('system', 'aistream');
+      app.openConfigSelection('system', 'ai-workflow');
     });
   }
   if (sendBtn) safeBind(sendBtn, 'click', () => app.sendChatMessage());

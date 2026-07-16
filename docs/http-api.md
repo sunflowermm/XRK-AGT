@@ -279,7 +279,7 @@ export default class AdvancedAPI extends HttpApi {
 
 ```javascript
 // core/my-core/http/ai-chat-api.js
-import AiStreamLoader from '#infrastructure/ai-workflow/loader.js';
+import AiWorkflowLoader from '#infrastructure/ai-workflow/loader.js';
 import { HttpResponse } from '#utils/http-utils.js';
 
 export default {
@@ -290,7 +290,7 @@ export default {
       path: '/api/ai/chat', // 自定义 Core 示例；内置 AI 见 system-Core/http/ai.js
       handler: HttpResponse.asyncHandler(async (req, res, bot) => {
         const { message, streamName = 'chat' } = req.body;
-        const stream = AiStreamLoader.getStream(streamName);
+        const stream = AiWorkflowLoader.getWorkflow(streamName);
         if (!stream) return HttpResponse.notFound(res, '工作流未找到');
         
         const e = {
@@ -325,11 +325,11 @@ export default {
 
 **调用工作流系统（推荐配合 HttpResponse）**：
 ```javascript
-import AiStreamLoader from '#infrastructure/ai-workflow/loader.js';
+import AiWorkflowLoader from '#infrastructure/ai-workflow/loader.js';
 import { HttpResponse } from '#utils/http-utils.js';
 
 handler: HttpResponse.asyncHandler(async (req, res, bot) => {
-  const stream = AiStreamLoader.getStream('chat');
+  const stream = AiWorkflowLoader.getWorkflow('chat');
   if (!stream) return HttpResponse.notFound(res, '工作流未找到');
 
   const e = {
@@ -438,7 +438,7 @@ routes: [
 
 - 每个 API 模块导出 **`name`、`dsc`、`priority`、`routes`**；需要时加 `init`、`ws`、`middleware`。
 - **路由数组**保持扁平，单文件内路由不宜过多；若路由很多，可拆成多个 `core/*/http/*.js` 文件，用 `priority` 和 path 前缀区分。
-- 与配置、插件、工作流等交互时，优先使用框架提供的 **CommonConfigRegistry、PluginLoader、AiStreamLoader** 等入口，避免直接读文件或维护多份状态。
+- 与配置、插件、工作流等交互时，优先使用框架提供的 **CommonConfigRegistry、PluginLoader、AiWorkflowLoader** 等入口，避免直接读文件或维护多份状态。
 
 ### 8. 参考实现
 

@@ -23,7 +23,7 @@ description: 当你需要理解或修改 Python 子服务端（FastAPI 扩展框
 ```javascript
 import { callSubserver, fetchSubserverToPath } from '#utils/subserver-client.js';
 
-// 或运行时：AgentRuntime.callSubserver（配置来自 aistream.yaml → subserver）
+// 或运行时：AgentRuntime.callSubserver（配置来自 ai-workflow.yaml → subserver）
 await AgentRuntime.callSubserver('/health', { method: 'GET' });
 await fetchSubserverToPath('/api/mygroup/file', { query: { id: '1' }, dest: '/path/local.bin' });
 ```

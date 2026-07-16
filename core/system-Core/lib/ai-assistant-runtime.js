@@ -1,8 +1,8 @@
 /**
- * AI 助手运行时 — 底层走 AGT stream.process / AiStreamLoader.mergeStreams
+ * AI 助手运行时 — 底层走 AGT workflow.process / AiWorkflowLoader.mergeWorkflows
  */
-import AiStreamLoader from '#infrastructure/ai-workflow/loader.js';
-import ChatStream from '../stream/chat.js';
+import AiWorkflowLoader from '#infrastructure/ai-workflow/loader.js';
+import ChatStream from '../workflow/chat.js';
 
 export const AI_FULL_PROMPT_DUMP_REGEX = /#?XRK完整AI上下文/;
 
@@ -51,10 +51,10 @@ export function rawMessageTextForAiTrigger(e) {
 }
 
 /**
- * 解析 chat 主流。组合副流由 runChatAgent → process({ mergeStreams }) 唯一完成。
+ * 解析 chat 主流。组合副流由 runChatAgent → process({ mergeWorkflows }) 唯一完成。
  */
 export function resolveChatStream(plugin, _config) {
-  return plugin.getStream?.('chat') || AiStreamLoader.getStream?.('chat') || null;
+  return plugin.getWorkflow?.('chat') || AiWorkflowLoader.getWorkflow?.('chat') || null;
 }
 
 export function isInAiWhitelist(e, config) {
@@ -122,7 +122,7 @@ export async function processMessageContent(e, config) {
   }
 }
 
-/** 走 AGT AiWorkflow.process：唯一热路径 mergeStreams */
+/** 走 AGT AiWorkflow.process：唯一热路径 mergeWorkflows */
 export async function runChatAgent(_plugin, e, {
   text,
   persona = '',
@@ -136,7 +136,7 @@ export async function runChatAgent(_plugin, e, {
     return false;
   }
 
-  const ms = Array.isArray(config?.mergeStreams) ? config.mergeStreams : [];
+  const ms = Array.isArray(config?.mergeWorkflows) ? config.mergeWorkflows : [];
   await stream.process(
     e,
     {
@@ -147,7 +147,7 @@ export async function runChatAgent(_plugin, e, {
       debugDumpFullPrompt: !!debugDumpFullPrompt,
     },
     {
-      mergeStreams: ms,
+      mergeWorkflows: ms,
     },
   );
   return true;
@@ -167,5 +167,5 @@ export async function handleClearConversation(e) {
 }
 
 export function logAiInit(config) {
-  logger.mark(`[XRK-AI] 就绪 · 群白名单 ${config.groups?.length || 0} · 用户 ${config.users?.length || 0} · merge=[${(config.mergeStreams || []).join(',')}]`);
+  logger.mark(`[XRK-AI] 就绪 · 群白名单 ${config.groups?.length || 0} · 用户 ${config.users?.length || 0} · merge=[${(config.mergeWorkflows || []).join(',')}]`);
 }

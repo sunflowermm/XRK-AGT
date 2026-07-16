@@ -85,7 +85,7 @@
 | `http-api-pipeline.png` | HttpApi / HttpApiLoader |
 | `seven-extensions.png` | 七大扩展点 |
 | `plugin-event-pipeline.png` | 插件事件链 |
-| `aistream-mcp-flow.png` | AiWorkflow + MCP |
+| `ai-workflow-mcp-flow.png` | AiWorkflow + MCP |
 | `mcp-ecosystem.png` | MCP 生态 |
 | `llm-factory.png` | LLM/ASR/TTS 工厂 |
 | `docker-compose-stack.png` | Docker 编排 |

@@ -242,7 +242,7 @@ auth:
   # NapCat 反向 WS（/OneBotv11）：true 时 127.* 也须 Bearer/access_token
   onebot:
     requireLoopbackAuth: true
-  # aistream.tools.file.runEnabled=true 时，loopback 也强制 API Key（默认开启该强制）
+  # ai-workflow.tools.file.runEnabled=true 时，loopback 也强制 API Key（默认开启该强制）
   requireLoopbackAuthWhenToolsRun: true
   # API 鉴权白名单路径（支持前缀、正则字面量字符串）
   # 示例：

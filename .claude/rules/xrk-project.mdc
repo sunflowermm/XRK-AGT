@@ -12,7 +12,7 @@ alwaysApply: true
 ## 架构与放码位置
 
 - **业务逻辑**：一律放在 `core/<core名>/` 下，按类型分目录：
-  - `plugin/` 插件；`http/` HTTP API；`stream/` AI 工作流；`tasker/` 协议适配；`events/` 事件监听；`commonconfig/` 配置 Schema；`www/<应用名>/` 静态前端（必须建子目录）。
+  - `plugin/` 插件；`http/` HTTP API；`workflow/` AI 工作流；`tasker/` 协议适配；`events/` 事件监听；`commonconfig/` 配置 Schema；`www/<应用名>/` 静态前端（必须建子目录）。
 - **基础设施**：基类、加载器、工具在 `src/infrastructure/`、`src/utils/`、`src/factory/`；入口为 `src/agent-runtime.js`，应用启动为 `app.js` / `start.js`。
 - **禁止（Core 开发者）**：业务代码不得写在 `src/`；Core 内**不得修改** `src/infrastructure/`、`src/utils/`、`src/factory/` 等 Runtime 代码。
 - **框架开发者**：维护 Runtime、Loader、工厂与共享工具时**可以且应当**改 `src/`，并通过文档与 commonconfig 向 Core 暴露能力。
@@ -35,7 +35,7 @@ alwaysApply: true
 
 ## 配置模板归属
 
-- **`config/default_config/`**：仅 **AGT 运行时 / LLM·ASR·TTS 工厂 / system-Core 体系** 的配置模板（如 `agt`、`server`、`aistream`、`*_llm`）。**禁止**放入独立产品 Core 的业务配置。
+- **`config/default_config/`**：仅 **AGT 运行时 / LLM·ASR·TTS 工厂 / system-Core 体系** 的配置模板（如 `agt`、`server`、`ai-workflow`、`*_llm`）。**禁止**放入独立产品 Core 的业务配置。
 - **独立产品 Core**（如 `lsy-Core`）：模板在 **`core/<core名>/default/<name>.yaml`**，运行时数据在 **`data/<产品>/`**，schema 在 **`core/<core名>/commonconfig/`**；`read()` 须从 Core 内 `default/` 引导复制，**不得**在 `config/default_config/` 添加同名 yaml。
 - **system-Core** 改配置：`config/default_config/` + `core/system-Core/commonconfig/` + 消费代码。
 - **独立 Core** 改配置：`core/<core名>/default/` + `core/<core名>/commonconfig/` + 消费代码；**不**改 `config/default_config/`、`src/infrastructure/`。
@@ -54,7 +54,7 @@ alwaysApply: true
 ## 开发与扩展
 
 - **编码与全局对象**：见 `xrk-dev-requirements.mdc`、**`docs/coding-style.md`**、skill **`xrk-coding-style`** / **`xrk-node-runtime`**（Node 26 API，禁止旧写法）。**扩展点与基类**：见 `docs/框架可扩展性指南.md` 与 skill `xrk-infrastructure`。
-- **加载流程**：`node app` → `start.js` → `src/agent-runtime.js`；各 Loader 扫描 `core/*/` 对应子目录自动加载（plugin/http/stream/tasker/events/commonconfig）；`www/` 由前端或静态服务按需挂载。
+- **加载流程**：`node app` → `start.js` → `src/agent-runtime.js`；各 Loader 扫描 `core/*/` 对应子目录自动加载（plugin/http/workflow/tasker/events/commonconfig）；`www/` 由前端或静态服务按需挂载。
 
 ## 语言与风格
 

@@ -27,6 +27,7 @@ const SUITES = {
     'lsy-user-store-mongo.test.mjs',
     'safe-os-network.test.mjs',
     'monitor-safety.test.mjs',
+    'observability.test.mjs',
     'input-validator.test.mjs',
     'www-xrk.test.mjs',
     'http-api-structure.test.mjs',

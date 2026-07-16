@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import paths from '#utils/paths.js';
-import { getAistreamConfigOptional } from '#utils/aistream-config.js';
+import { getAiWorkflowConfigOptional } from '#utils/ai-workflow-config.js';
 import { isPathInside, realpathSyncOrResolve } from '#utils/path-guards.js';
 import { readTextFileUnderWorkspaceRoot } from '#utils/safe-workspace-read.js';
 import { BaseTools } from '#utils/base-tools.js';
@@ -104,7 +104,7 @@ export function normalizePresetId(presetId) {
 }
 
 /**
- * 解析 aistream.tools.file.workspace 为绝对路径。
+ * 解析 ai-workflow.tools.file.workspace 为绝对路径。
  * 空 → data/ai-workspace/{defaultId}；agent:xxx → 对应 preset；project → 项目根
  */
 export function resolveConfiguredWorkspace(raw) {
@@ -213,8 +213,8 @@ export function parseRequestWorkspace(body = {}) {
 }
 
 /** 请求级工作区：prompt 注入与文件 cwd 使用同一 data/ai-workspace 目录 */
-export function buildAistreamCfgForAgentRoot(aistreamCfg = {}, agentRootAbs) {
-  if (!agentRootAbs) return aistreamCfg || {};
+export function buildAiWorkflowCfgForAgentRoot(aiWorkflowCfg = {}, agentRootAbs) {
+  if (!agentRootAbs) return aiWorkflowCfg || {};
   const projectRoot = getProjectRoot();
   let rel = '';
   try {
@@ -224,20 +224,20 @@ export function buildAistreamCfgForAgentRoot(aistreamCfg = {}, agentRootAbs) {
     rel = agentRootAbs;
   }
   return {
-    ...aistreamCfg,
+    ...aiWorkflowCfg,
     agentWorkspace: {
-      ...(aistreamCfg?.agentWorkspace || {}),
+      ...(aiWorkflowCfg?.agentWorkspace || {}),
       root: rel
     }
   };
 }
 
-export function applyRequestWorkspaceToStreams(AiStreamLoader, fileWorkspaceAbs) {
-  if (!fileWorkspaceAbs || !AiStreamLoader?.getStream) return () => {};
+export function applyRequestWorkspaceToStreams(AiWorkflowLoader, fileWorkspaceAbs) {
+  if (!fileWorkspaceAbs || !AiWorkflowLoader?.getWorkflow) return () => {};
 
   const snapshots = [];
   for (const name of ['tools', 'desktop']) {
-    const stream = AiStreamLoader.getStream(name);
+    const stream = AiWorkflowLoader.getWorkflow(name);
     if (!stream) continue;
     snapshots.push({
       stream,

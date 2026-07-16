@@ -20,4 +20,4 @@ description: 当你需要配置/新增/排查 LLM 提供商（OpenAI/Azure/Gemin
 1. provider 是否在 `LLMFactory.listProviders()` / `GET /api/v3/models`
 2. `model` 是否为 provider key
 3. `baseUrl` + `path` 拼接与 `authMode`
-4. `enableStream`、`enableTools` 与 `workflow.streams` 白名单
+4. `enableStream`、`enableTools` 与 `workflow.workflows` 白名单

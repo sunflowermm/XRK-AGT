@@ -101,8 +101,8 @@ XRK-AGT 提供以下工作流，每个工作流包含一组相关工具：
 | `database` | 知识库 | `query_knowledge`, `save_knowledge`, `list_knowledge`, `delete_knowledge` |
 
 **工作流使用说明**：
-- **主工作流**：通过 `mergeStreams` 参数合并，用于完整功能场景
-- **工具工作流**：写入 `mergeStreams: ['memory','database','tools']`（或兼容别名 `enableMemory` 等，最终仍走 `AiStreamLoader.mergeStreams`）
+- **主工作流**：通过 `mergeWorkflows` 参数合并，用于完整功能场景
+- **工具工作流**：写入 `mergeWorkflows: ['memory','database','tools']`（或兼容别名 `enableMemory` 等，最终仍走 `AiWorkflowLoader.mergeWorkflows`）
 
 > 详细工具列表和参数说明请参考 [MCP 完整指南](mcp-guide.md)。
 
@@ -208,7 +208,7 @@ XRK-AGT 提供以下工作流，每个工作流包含一组相关工具：
 查询所有可用工作流和工具：
 
 ```bash
-GET http://localhost:8080/api/mcp/tools/streams
+GET http://localhost:8080/api/mcp/tools/workflows
 ```
 
 ### JSON-RPC
@@ -323,7 +323,7 @@ Content-Type: application/json
 
 ### Q: 如何知道当前可用的工作流？
 
-**A**: 使用 RESTful API 或 JSON-RPC 查询 `/api/mcp/tools/streams` 接口，返回所有可用工作流列表。
+**A**: 使用 RESTful API 或 JSON-RPC 查询 `/api/mcp/tools/workflows` 接口，返回所有可用工作流列表。
 
 ### Q: 配置后无法连接怎么办？
 
@@ -343,7 +343,7 @@ Content-Type: application/json
 
 ### Q: 如何查看某个工作流的具体工具？
 
-**A**: 使用 `/api/mcp/tools/streams` 接口，返回的 `groups` 字段包含每个工作流的工具列表。
+**A**: 使用 `/api/mcp/tools/workflows` 接口，返回的 `groups` 字段包含每个工作流的工具列表。
 
 ### Q: 支持 WebSocket 连接吗？
 
@@ -354,7 +354,7 @@ Content-Type: application/json
 ## 相关文档
 
 - **[MCP 完整指南](mcp-guide.md)** - MCP 协议详情、工具注册机制和完整工具列表
-- **[AI Stream 文档](aistream.md)** - 工作流基类设计和使用说明
+- **[AI Stream 文档](ai-workflow.md)** - 工作流基类设计和使用说明
 - **[system-Core 特性](system-core.md)** - system-Core 内置工作流和工具说明
 - **[框架可扩展性指南](框架可扩展性指南.md)** - 如何创建自定义工作流和工具
 

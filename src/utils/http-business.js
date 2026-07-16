@@ -388,7 +388,6 @@ export class CDNManager {
 export class ProxyManager {
   config = {};
   upstreams = new Map();
-  healthChecks = new Map();
   _roundRobinIndex = new Map();
   _connectionCounts = new Map();
   _responseTimes = new Map();

@@ -1,5 +1,6 @@
 *
 !.gitignore
+!README.md
 
 !plugin
 plugin/**
@@ -46,12 +47,8 @@ http/**
 
 !lib
 lib/**
-!lib/runtime/**
-!lib/runtime/disposables.js
 !lib/content-safety/
 !lib/content-safety/banned-words-service.js
-!lib/net/
-!lib/net/fetcher.js
 !lib/notice/
 !lib/notice/notice-service.js
 
@@ -61,15 +58,16 @@ events/**
 !events/onebot.js
 !events/stdin.js
 
-!stream
-stream/**
-!stream/chat.js
-!stream/desktop.js
-!stream/memory.js
-!stream/tools.js
-!stream/database.js
-!stream/web.js
-!stream/browser.js
+!workflow
+workflow/**
+!workflow/chat.js
+!workflow/desktop.js
+!workflow/memory.js
+!workflow/tools.js
+!workflow/database.js
+!workflow/web.js
+!workflow/browser.js
+!workflow/merchant.js
 
 !commonconfig
 commonconfig/**
@@ -111,6 +109,4 @@ commonconfig/**
 *.map
 
 !www/
-!lib/crawl/
-!lib/crawl/*
-!lib/builtin-mcp.js
+

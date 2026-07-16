@@ -2,7 +2,7 @@ import os from 'os';
 import si from 'systeminformation';
 import { exec } from '#utils/exec-async.js';
 import runtimeConfig from '#infrastructure/config/config.js';
-import AiStreamLoader from '#infrastructure/ai-workflow/loader.js';
+import AiWorkflowLoader from '#infrastructure/ai-workflow/loader.js';
 import { collectBotInventory, summarizeBots } from '#infrastructure/http/utils/botInventory.js';
 import { HttpResponse } from '#utils/http-utils.js';
 
@@ -554,8 +554,8 @@ async function buildSystemSnapshot(AgentRuntime, { includeHistory = false } = {}
   }
 
   const bots = await collectBotInventory(AgentRuntime, { includeDevices: true });
-  const workflowStats = AiStreamLoader.getStats();
-  const workflowList = AiStreamLoader.getStreamsByPriority().map(stream => ({
+  const workflowStats = AiWorkflowLoader.getStats();
+  const workflowList = AiWorkflowLoader.getWorkflowsByPriority().map(stream => ({
     name: stream.name,
     description: stream.description,
     priority: stream.priority,
@@ -748,26 +748,10 @@ export default {
       method: 'GET',
       path: '/api/health',
       handler: HttpResponse.asyncHandler(async (req, res, AgentRuntime) => {
-        let redisOk = false;
-        try {
-          const { getRedis } = await import('#infrastructure/database/index.js');
-          const redis = getRedis();
-          if (redis && typeof redis.ping === 'function') {
-            redisOk = await redis.ping().then(() => true).catch(() => false);
-          }
-        } catch {
-          // redis 不可用，忽略
-        }
-
-        HttpResponse.success(res, {
-          status: 'healthy',
-          timestamp: Date.now(),
-          services: {
-            bot: AgentRuntime.uin && AgentRuntime.uin.length > 0 ? 'operational' : 'degraded',
-            redis: redisOk ? 'operational' : 'down',
-            api: 'operational'
-          }
-        });
+        const { buildReadinessSnapshot } = await import('#utils/observability.js');
+        const snapshot = await buildReadinessSnapshot({ agentRuntime: AgentRuntime });
+        const httpStatus = snapshot.status === 'unhealthy' ? 503 : 200;
+        return HttpResponse.json(res, { success: true, ...snapshot }, httpStatus);
       }, 'health')
     }
   ]

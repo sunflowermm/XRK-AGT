@@ -1,5 +1,5 @@
 import ConfigBase from '#infrastructure/commonconfig/commonconfig.js';
-import AiStreamLoader from '#infrastructure/ai-workflow/loader.js';
+import AiWorkflowLoader from '#infrastructure/ai-workflow/loader.js';
 import LLMFactory from '#factory/llm/LLMFactory.js';
 import RuntimeUtil from '#utils/runtime-util.js';
 import runtimeConfig from '#infrastructure/config/config.js';
@@ -12,7 +12,7 @@ import { deviceConfig } from './system/system-device.js';
 import { groupConfig } from './system/system-group.js';
 import { noticeConfig } from './system/system-notice.js';
 import { redisConfig } from './system/system-redis.js';
-import { aistreamConfig } from './system/system-aistream.js';
+import { aiWorkflowConfig } from './system/system-ai-workflow.js';
 import { monitorConfig } from './system/system-monitor.js';
 import { rendererConfig } from './system/system-renderer.js';
 
@@ -45,7 +45,7 @@ export default class SystemConfig extends ConfigBase {
       group: groupConfig,
       notice: noticeConfig,
       redis: redisConfig,
-      aistream: aistreamConfig,
+      'ai-workflow': aiWorkflowConfig,
       monitor: monitorConfig,
       renderer: rendererConfig
     };
@@ -66,7 +66,7 @@ export default class SystemConfig extends ConfigBase {
     }
 
     const instance = new ConfigBase(configMeta);
-    if (name === 'aistream') {
+    if (name === 'ai-workflow') {
       instance.prepareValidate = (data) => this._refreshDynamicSchema(data);
     }
     return instance;
@@ -170,28 +170,28 @@ export default class SystemConfig extends ConfigBase {
   }
 
   /**
-   * 动态刷新 aistream 相关 schema（工作流、远程 MCP、LLM Provider）
+   * 动态刷新 ai-workflow 相关 schema（工作流、远程 MCP、LLM Provider）
    * @param {object} [validateSnapshot] - 待校验/写入的配置快照；用于把已持久化的值并入 enum，避免改 MCP 等无关字段时误伤校验
    */
   _refreshDynamicSchema(validateSnapshot = null) {
     try {
-      const aistreamSchema = this.configFiles?.aistream?.schema?.fields;
-      if (!aistreamSchema) return;
+      const aiWorkflowSchema = this.configFiles?.['ai-workflow']?.schema?.fields;
+      if (!aiWorkflowSchema) return;
 
-      const snap = validateSnapshot || runtimeConfig?.aistream || {};
-      this._refreshAistreamMcpEnums(aistreamSchema.mcp?.fields, snap);
-      this._refreshAistreamLlmProviderEnum(aistreamSchema.llm?.fields, snap);
+      const snap = validateSnapshot || runtimeConfig?.aiWorkflow || {};
+      this._refreshAiWorkflowMcpEnums(aiWorkflowSchema.mcp?.fields, snap);
+      this._refreshAiWorkflowLlmProviderEnum(aiWorkflowSchema.llm?.fields, snap);
     } catch (e) {
       RuntimeUtil.makeLog('error', `[SystemConfig] 刷新动态 schema 失败: ${e.message}`, 'SystemConfig');
     }
   }
 
-  _refreshAistreamMcpEnums(mcpFields, snap) {
+  _refreshAiWorkflowMcpEnums(mcpFields, snap) {
     if (!mcpFields) return;
 
     let workflowKeys = [];
     try {
-      const streams = AiStreamLoader.getStreamsByPriority?.() || [];
+      const streams = AiWorkflowLoader.getWorkflowsByPriority?.() || [];
       workflowKeys = streams
         .filter((s) => !s.primaryStream && !s.secondaryStreams)
         .map((s) => s.name)
@@ -202,20 +202,20 @@ export default class SystemConfig extends ConfigBase {
 
     let remoteServers = [];
     try {
-      remoteServers = AiStreamLoader.listRemoteMCPServers?.() || [];
+      remoteServers = AiWorkflowLoader.listRemoteMCPServers?.() || [];
     } catch (e) {
       RuntimeUtil.makeLog('warn', `[SystemConfig] 获取远程 MCP 列表失败: ${e.message}`, 'SystemConfig');
     }
 
-    if (mcpFields.defaultStreams) {
-      mcpFields.defaultStreams.enum = mergeUniqueStrings(workflowKeys, snap?.mcp?.defaultStreams);
+    if (mcpFields.defaultWorkflows) {
+      mcpFields.defaultWorkflows.enum = mergeUniqueStrings(workflowKeys, snap?.mcp?.defaultWorkflows);
     }
     if (mcpFields.defaultRemoteMcp) {
       mcpFields.defaultRemoteMcp.enum = mergeUniqueStrings(remoteServers, snap?.mcp?.defaultRemoteMcp);
     }
   }
 
-  _refreshAistreamLlmProviderEnum(llmFields, snap) {
+  _refreshAiWorkflowLlmProviderEnum(llmFields, snap) {
     if (!llmFields?.Provider) return;
 
     let providers = [];

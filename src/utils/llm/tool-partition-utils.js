@@ -21,7 +21,7 @@ function getDownstreamToolNames(overrides) {
  * - 中游工具（MCP 工具）：由 XRK 执行
  *
  * @param {Array} toolCalls - LLM 返回的工具调用列表
- * @param {Object} overrides - 配置对象，包含 streams 和 downstreamToolNames
+ * @param {Object} overrides - 配置对象，包含 workflows 和 downstreamToolNames
  * @param {Function} [buildMcpPayload] - 构建 MCP 工具结果的函数
  * @param {Function} [onDelta] - 流式输出回调函数
  * @returns {Promise<Array|null>} 工具执行结果，如果有下游工具则返回 null（表示透传）
@@ -30,7 +30,7 @@ export async function partitionAndExecuteToolCalls(toolCalls, overrides, { build
   if (!Array.isArray(toolCalls) || !toolCalls.length) return [];
 
   const downstreamNames = getDownstreamToolNames(overrides);
-  const streams = Array.isArray(overrides.streams) ? overrides.streams : null;
+  const workflows = Array.isArray(overrides.workflows) ? overrides.workflows : null;
   const getToolName = (tc) => tc.function?.name || '';
 
   // 分区：根据工具名称判断是中游还是下游
@@ -55,7 +55,7 @@ export async function partitionAndExecuteToolCalls(toolCalls, overrides, { build
   // 情况2：有中游工具，执行中游工具
   const midstreamResults = midstreamCalls.length > 0
     ? await MCPToolAdapter.handleToolCalls(midstreamCalls, {
-      streams,
+      workflows,
       parallel_tool_calls: overrides?.parallel_tool_calls ?? overrides?.parallelToolCalls,
       sequentialToolCalls: overrides?.sequentialToolCalls,
       allowedTools: overrides?.allowedTools

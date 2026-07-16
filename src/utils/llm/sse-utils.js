@@ -17,7 +17,7 @@ import RuntimeUtil from '../runtime-util.js';
  *
  * 本工具被以下组件复用：
  * - 所有 OpenAI-like LLM 工厂的 chatStream（OpenAI/Azure/Volcengine/XiaomiMiMo 等）
- * - aistream 子服务器调用（src/infrastructure/ai-workflow/ai-workflow.js）
+ * - ai-workflow 子服务器调用（src/infrastructure/ai-workflow/ai-workflow.js）
  * - 其他需要稳健解析 SSE 的场景
  */
 export async function* iterateSSE(resp, options = {}) {

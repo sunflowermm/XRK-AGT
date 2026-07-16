@@ -20,7 +20,7 @@
 
 import WebSocket from 'ws';
 import RuntimeUtil from '#utils/runtime-util.js';
-import AiStreamLoader from '#infrastructure/ai-workflow/loader.js';
+import AiWorkflowLoader from '#infrastructure/ai-workflow/loader.js';
 import fs from 'fs';
 import path from 'path';
 import paths from '#utils/paths.js';
@@ -29,12 +29,12 @@ import TTSFactory from '#factory/tts/TTSFactory.js';
 import { HttpResponse } from '#utils/http-utils.js';
 import { InputValidator } from '#utils/input-validator.js';
 import {
-    getAistreamConfig,
+    getAiWorkflowConfig,
     getLLMSettings,
     getTtsConfig,
     getAsrConfig,
     getSystemConfig
-} from '#utils/aistream-config.js';
+} from '#utils/ai-workflow-config.js';
 import {
     SUPPORTED_EMOTIONS,
     normalizeEmotionToDevice,
@@ -47,7 +47,7 @@ import {
     hasCapability,
     getAudioFileList
 } from '#utils/deviceutil.js';
-import { Disposables } from '../lib/runtime/disposables.js';
+import { Disposables } from '#utils/disposables.js';
 
 const DEVICE_FILE_ROOTS = [paths.data, paths.trash, paths.resources];
 
@@ -730,11 +730,11 @@ class DeviceManager {
             const workflowName = options.workflow || 'device';
 
             const streamName = workflowName || 'device';
-            // 仓库无默认 device 流：回退 chat（设备场景可配 mergeStreams）
+            // 仓库无默认 device 流：回退 chat（设备场景可配 mergeWorkflows）
             const deviceStream =
-              AiStreamLoader.getStream(streamName) ||
-              AiStreamLoader.getStream('device') ||
-              AiStreamLoader.getStream('chat');
+              AiWorkflowLoader.getWorkflow(streamName) ||
+              AiWorkflowLoader.getWorkflow('device') ||
+              AiWorkflowLoader.getWorkflow('chat');
             if (!deviceStream) {
                 RuntimeUtil.makeLog('error', `[AI] 工作流未加载: ${streamName}（且无 chat 回退）`, deviceId);
                 await this._sendAIError(deviceId);
@@ -762,16 +762,16 @@ class DeviceManager {
 
             // 若工具调用/慢响应导致长时间无声：延迟播一句提示音（可配置化前先给默认行为）
             const ttsConfig = getTtsConfig();
-            const aistreamTtsConfig = getAistreamConfig().tts || {};
-            const ttsOnlyForASR = aistreamTtsConfig.onlyForASR !== false; // 默认只有ASR触发才有TTS
+            const aiWorkflowTtsConfig = getAiWorkflowConfig().tts || {};
+            const ttsOnlyForASR = aiWorkflowTtsConfig.onlyForASR !== false; // 默认只有ASR触发才有TTS
             const shouldPlayTTS = Boolean(ttsConfig.enabled && (fromASR || !ttsOnlyForASR));
 
             // 默认：1.2s 后仍未出结果则先播一句，避免用户误以为卡住
-            const progressText = String(aistreamTtsConfig.progressSpeechText || '我查一下，请稍等。');
-            const progressDelayMs = Number.isFinite(Number(aistreamTtsConfig.progressSpeechDelayMs))
-                ? Math.max(0, Number(aistreamTtsConfig.progressSpeechDelayMs))
+            const progressText = String(aiWorkflowTtsConfig.progressSpeechText || '我查一下，请稍等。');
+            const progressDelayMs = Number.isFinite(Number(aiWorkflowTtsConfig.progressSpeechDelayMs))
+                ? Math.max(0, Number(aiWorkflowTtsConfig.progressSpeechDelayMs))
                 : 1200;
-            const progressEnabled = aistreamTtsConfig.progressSpeechEnabled !== false;
+            const progressEnabled = aiWorkflowTtsConfig.progressSpeechEnabled !== false;
 
             // 调用工作流（工作流内部会自动选择LLM工厂）
             let aiResult;

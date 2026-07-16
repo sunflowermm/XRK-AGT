@@ -1,5 +1,5 @@
 /**
- * 多语言子服务 runtime 唯一目录（端口默认值；实际地址以 aistream.yaml → subserver.runtimes 为准）
+ * 多语言子服务 runtime 唯一目录（端口默认值；实际地址以 ai-workflow.yaml → subserver.runtimes 为准）
  */
 
 /** @type {Record<string, { label: string, port: number, language: string, path: string, start: string, data: string, aliases?: string[], framework?: string, examplePlugins?: string[] }>} */

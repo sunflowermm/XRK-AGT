@@ -1,23 +1,23 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  runWithStreamRequestContext,
-  getStreamRequestContext
-} from '../../src/infrastructure/ai-workflow/stream-request-context.js';
+  runWithWorkflowRequestContext,
+  getWorkflowRequestContext
+} from '../../src/infrastructure/ai-workflow/workflow-request-context.js';
 import { createUserVisibleTurnState } from '../../src/utils/chat-user-visible-ack.js';
 
-describe('stream request context', () => {
+describe('workflow request context', () => {
   it('isolates turnState between concurrent async chains', async () => {
     const results = await Promise.all([
-      runWithStreamRequestContext({ e: { id: 'a' }, turnState: createUserVisibleTurnState() }, async () => {
-        const turn = getStreamRequestContext().turnState;
+      runWithWorkflowRequestContext({ e: { id: 'a' }, turnState: createUserVisibleTurnState() }, async () => {
+        const turn = getWorkflowRequestContext().turnState;
         turn.queuedReplyContent = 'reply-a';
         await new Promise((r) => setTimeout(r, 20));
         return turn.queuedReplyContent;
       }),
-      runWithStreamRequestContext({ e: { id: 'b' }, turnState: createUserVisibleTurnState() }, async () => {
+      runWithWorkflowRequestContext({ e: { id: 'b' }, turnState: createUserVisibleTurnState() }, async () => {
         await new Promise((r) => setTimeout(r, 5));
-        const turn = getStreamRequestContext().turnState;
+        const turn = getWorkflowRequestContext().turnState;
         return turn.queuedReplyContent || 'empty';
       })
     ]);

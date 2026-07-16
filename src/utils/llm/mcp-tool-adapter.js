@@ -1,13 +1,13 @@
-import AiStreamLoader from '#infrastructure/ai-workflow/loader.js';
+import AiWorkflowLoader from '#infrastructure/ai-workflow/loader.js';
 import RuntimeUtil from '#utils/runtime-util.js';
 
 /**
  * MCP 工具适配器
  *
  * 职责边界：
- * - 将 AiStreamLoader 暴露的 MCP 工具转换为 OpenAI tools 数组格式，供各 LLM 工厂在构造请求体时注入
+ * - 将 AiWorkflowLoader 暴露的 MCP 工具转换为 OpenAI tools 数组格式，供各 LLM 工厂在构造请求体时注入
  * - 在收到 OpenAI style tool_calls 时，实际调用 MCP 工具，并返回 role=tool 的消息列表
- * - 基于 streams/allowedTools 做工具白名单过滤：保证"未通过接口声明的工具"不会被调用
+ * - 基于 workflows/allowedTools 做工具白名单过滤：保证"未通过接口声明的工具"不会被调用
  */
 export class MCPToolAdapter {
   /**
@@ -15,31 +15,31 @@ export class MCPToolAdapter {
    * @returns {*}
    */
   static getMCPServer() {
-    return AiStreamLoader.mcpServer;
+    return AiWorkflowLoader.mcpServer;
   }
 
   /**
    * 将 MCP 工具转换为 OpenAI 格式的 tools 数组
    *
    * 说明：
-   * - streams 白名单优先：只有在 streams 中声明的工作流，其下工具才会被注入
-   * - workflow 为单工作流名，仅在未显式提供 streams 时使用
-   * - 未指定 workflow 且未指定 streams 时不注入任何 MCP 工具（不选则不传）
+   * - workflows 白名单优先：只有在 workflows 中声明的工作流，其下工具才会被注入
+   * - workflow 为单工作流名，仅在未显式提供 workflows 时使用
+   * - 未指定 workflow 且未指定 workflows 时不注入任何 MCP 工具（不选则不传）
    *
    * @param {Object} options
    * @param {string|null} options.workflow - 单个工作流名称；若提供则仅注入该工作流下的工具
-   * @param {Array<string>} [options.streams] - 白名单工作流列表；优先级高于 workflow
+   * @param {Array<string>} [options.workflows] - 白名单工作流列表；优先级高于 workflow
    * @returns {Array} OpenAI tools
    */
   static listMcpTools(options = {}) {
-    const { workflow = null, streams = null } = options || {};
+    const { workflow = null, workflows = null } = options || {};
 
     const mcpServer = this.getMCPServer();
     if (!mcpServer) return [];
 
-    if (Array.isArray(streams) && streams.length > 0) {
+    if (Array.isArray(workflows) && workflows.length > 0) {
       const uniq = new Map();
-      for (const s of streams.filter(Boolean)) {
+      for (const s of workflows.filter(Boolean)) {
         for (const tool of mcpServer.listTools(s)) {
           if (!uniq.has(tool.name)) uniq.set(tool.name, tool);
         }
@@ -117,13 +117,13 @@ export class MCPToolAdapter {
    *
    * 权限控制策略：
    * - 若传入 options.allowedTools，则仅允许显式列出的工具被调用
-   * - 否则，若传入 options.streams，则基于 streams 计算允许的 MCP 工具白名单
+   * - 否则，若传入 options.workflows，则基于 streams 计算允许的 MCP 工具白名单
    * - 调用方传入 body.tools 时由 v3 设置为 mcpToolMode=passthrough，tool_calls 透传客户端执行，不进入本方法
    *
    * @param {Array} toolCalls - OpenAI tool_calls
    * @param {Object} options - 选项
    * @param {Array<string>} options.allowedTools - 允许的工具名称列表
-   * @param {Array<string>} options.streams - 允许的工作流列表（用于计算 MCP 白名单）
+   * @param {Array<string>} options.workflows - 允许的工作流列表（用于计算 MCP 白名单）
    * @returns {Promise<Array>} tool role messages
    */
   static async handleToolCalls(toolCalls, options = {}) {
@@ -145,8 +145,8 @@ export class MCPToolAdapter {
     let allowedToolNames = null;
     if (options.allowedTools && Array.isArray(options.allowedTools)) {
       allowedToolNames = new Set(options.allowedTools);
-    } else if (options.streams && Array.isArray(options.streams)) {
-      const allowedTools = this.convertMCPToolsToOpenAI({ streams: options.streams });
+    } else if (options.workflows && Array.isArray(options.workflows)) {
+      const allowedTools = this.convertMCPToolsToOpenAI({ workflows: options.workflows });
       allowedToolNames = new Set(allowedTools.map(t => t.function.name));
     }
 

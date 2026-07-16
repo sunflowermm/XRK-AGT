@@ -1,5 +1,5 @@
 import runtimeConfig from '#infrastructure/config/config.js';
-import { fetchWithPolicy } from '../net/fetcher.js';
+import { fetchWithPolicy } from '#utils/fetch-with-retry.js';
 
 function getNoticeConfig() {
   const n = runtimeConfig?.notice;

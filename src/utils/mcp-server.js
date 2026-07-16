@@ -42,12 +42,14 @@ export class MCPServer {
    * @param {Function} tool.handler - 工具处理函数
    */
   registerTool(name, tool) {
-    // 静默覆盖已存在的工具（避免热重载时的重复警告）
-    // 工具注册前应该先清空旧工具，这里只记录调试信息
-    if (this.tools.has(name) && process.env.DEBUG_MCP_TOOLS) {
-      RuntimeUtil.makeLog('debug', `MCP工具已存在，将被覆盖: ${name}`, 'MCPServer');
+    if (this.tools.has(name)) {
+      // 热重载覆盖：默认 warn，便于发现同名冲突；DEBUG_MCP_TOOLS=1 时附带 debug
+      RuntimeUtil.makeLog('warn', `MCP 工具覆盖: ${name}`, 'MCPServer');
+      if (process.env.DEBUG_MCP_TOOLS) {
+        RuntimeUtil.makeLog('debug', `MCP工具覆盖详情: ${name}`, 'MCPServer');
+      }
     }
-    
+
     this.tools.set(name, {
       name,
       description: tool.description || '',
@@ -265,19 +267,19 @@ export class MCPServer {
 
   /**
    * 获取所有工作流分组
-   * @returns {Object} 工作流分组，格式：{ streamName: [tools...] }
+   * @returns {Object} 工作流分组，格式：{ workflowName: [tools...] }
    */
-  listToolsByStream() {
+  listToolsByWorkflow() {
     const groups = {};
     
     for (const tool of this.tools.values()) {
       const parts = tool.name.split('.');
       if (parts.length >= 2) {
-        const streamName = parts[0];
-        if (!groups[streamName]) {
-          groups[streamName] = [];
+        const workflowName = parts[0];
+        if (!groups[workflowName]) {
+          groups[workflowName] = [];
         }
-        groups[streamName].push({
+        groups[workflowName].push({
           name: tool.name,
           description: tool.description,
           inputSchema: tool.inputSchema || {
@@ -296,17 +298,17 @@ export class MCPServer {
    * 获取工作流列表
    * @returns {Array} 工作流名称列表
    */
-  listStreams() {
-    const streams = new Set();
+  listWorkflows() {
+    const workflows = new Set();
     
     for (const tool of this.tools.values()) {
       const parts = tool.name.split('.');
       if (parts.length >= 2) {
-        streams.add(parts[0]);
+        workflows.add(parts[0]);
       }
     }
     
-    return Array.from(streams);
+    return Array.from(workflows);
   }
 
   /**

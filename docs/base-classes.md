@@ -15,7 +15,7 @@
 |----|------|
 | 放置 | `core/<名>/plugin/*.js` 或 `subserver/*/apis/<group>/core/plugin/*.js` |
 | 继承 | `import PluginBase from '#infrastructure/plugins/plugin-base.js'` |
-| 实例 API | `getStream`、`reply`、`setContext` / `getContext` / `finish`、`getInfo()`（见 [plugin-base.md](plugin-base.md)） |
+| 实例 API | `getWorkflow`、`reply`、`setContext` / `getContext` / `finish`、`getInfo()`（见 [plugin-base.md](plugin-base.md)） |
 
 ```javascript
 export default class MyPlugin extends PluginBase {
@@ -28,7 +28,7 @@ export default class MyPlugin extends PluginBase {
       handler: 'run',
     });
   }
-  async run(e) { /* AgentRuntime / msgSegment / this.getStream 见 runtime-surface */ }
+  async run(e) { /* AgentRuntime / msgSegment / this.getWorkflow 见 runtime-surface */ }
 }
 ```
 
@@ -66,13 +66,13 @@ export default {
 
 | 项 | 说明 |
 |----|------|
-| 放置 | `core/<名>/stream/*.js` |
-| 加载 | AiStreamLoader 单例 → `getStream(name)` |
+| 放置 | `core/<名>/workflow/*.js` |
+| 加载 | AiWorkflowLoader 单例 → `getWorkflow(name)` |
 | 业务扩展 | 重写 `patchLLMConfig(merged, apiConfig)` 追加场景字段；request body 由各 `*LLMClient.buildBody` 按官方文档组装 |
 | 厂商协议 | `openai_llm` / `deepseek_llm` 等 **builtin** 独立客户端；`openai_compat_llm` 仅用于第三方 OpenAI 形态网关 |
-| 组合进 Agent | AI 助手或调用方 `process({ mergeStreams: ['my-stream'] })`；工具名 `my-stream.tool` |
+| 组合进 Agent | AI 助手或调用方 `process({ mergeWorkflows: ['my-stream'] })`；工具名 `my-stream.tool` |
 | 框架工具面 | 构造可选 `frameworkToolSurface: true` → 自动进 chat MCP 白名单（无需 merge）；可选 `capabilities: ['tools','prompt']` |
-| 联动插件 | stream MCP 可代发指令走 `PluginLoader.deal`；会话 `e` 优先 ALS（`runWithStreamRequestContext`） |
+| 联动插件 | stream MCP 可代发指令走 `PluginLoader.deal`；会话 `e` 优先 ALS（`runWithWorkflowRequestContext`） |
 
 ```javascript
 import AiWorkflow from '#infrastructure/ai-workflow/ai-workflow.js';
@@ -108,7 +108,7 @@ export default class MyStream extends AiWorkflow {
 | 主仓 Core | `core/<名>/commonconfig/*.js` |
 | 子服业务插件 | `subserver/*/apis/<group>/core/commonconfig/*.js` |
 | 运行时数据 | `data/<group>/config.yaml`（主服 write，子服只读） |
-| 子服连接 | `aistream.yaml` → `runtimeConfig.subserver`（非业务 yaml） |
+| 子服连接 | `ai-workflow.yaml` → `runtimeConfig.subserver`（非业务 yaml） |
 
 ```javascript
 export default class MyConfig extends ConfigBase {
@@ -126,7 +126,7 @@ export default class MyConfig extends ConfigBase {
 
 ---
 
-## EventListenerBase（`listener/base.js`）
+## ListenerBase（`listener/base.js`）
 
 | 项 | 说明 |
 |----|------|
@@ -134,7 +134,7 @@ export default class MyConfig extends ConfigBase {
 | 生命周期 | Loader `new` 后调用 `async init()`；注入 `this.bot` |
 
 ```javascript
-export default class MyEvent extends EventListenerBase {
+export default class MyEvent extends ListenerBase {
   constructor() { super('MyAdapter'); }
   async init() { /* bot.on(...); markProcessed(e) */ }
 }

@@ -63,7 +63,7 @@ function normalizeProviderKey(name) {
 }
 
 function resolveDefaultProvider() {
-  return normalizeProviderKey(runtimeConfig?.aistream?.llm?.Provider || runtimeConfig?.aistream?.llm?.provider);
+  return normalizeProviderKey(runtimeConfig?.aiWorkflow?.llm?.Provider || runtimeConfig?.aiWorkflow?.llm?.provider);
 }
 
 function normalizeProtocol(value) {
@@ -258,7 +258,7 @@ export default class LLMFactory {
     });
     if (!provider) {
       const hint = useAistreamDefault
-        ? '请在各工厂 providers[] 中添加端点，并在 aistream.yaml 配置 llm.Provider'
+        ? '请在各工厂 providers[] 中添加端点，并在 ai-workflow.yaml 配置 llm.Provider'
         : '请在各工厂 providers[] 中添加端点，并在请求中指定 provider';
       throw new Error(`未指定 LLM 提供商：${hint}`);
     }

@@ -1,10 +1,10 @@
-import { getAiStreamHost } from '../ai-workflow/stream-host.js'
+import { getAiWorkflowHost } from '../ai-workflow/workflow-host.js'
 
 const SymbolTimeout = Symbol('Timeout')
 const SymbolResolve = Symbol('Resolve')
 
-function resolveStreamHost() {
-  return getAiStreamHost()
+function resolveWorkflowHost() {
+  return getAiWorkflowHost()
 }
 
 const ensureArray = (value) => {
@@ -155,12 +155,8 @@ export default class PluginBase {
     }
   }
 
-  getStream(name) {
-    return resolveStreamHost()?.getStream?.(name) ?? null
-  }
-
-  getAllStreams() {
-    return resolveStreamHost()?.getAllStreams?.() ?? []
+  getWorkflow(name) {
+    return resolveWorkflowHost()?.getWorkflow?.(name) ?? null
   }
 
   /**
@@ -319,10 +315,5 @@ export default class PluginBase {
       handlers: normalizeHandlers(this.handler),
       eventSubscribe: normalizeEventSubscribe(this.eventSubscribe)
     };
-  }
-
-  /** @deprecated 使用 getInfo() */
-  getDescriptor() {
-    return this.getInfo();
   }
 }

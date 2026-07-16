@@ -3,7 +3,7 @@
 > **文件位置**：`src/utils/mcp-server.js`、`core/system-Core/http/mcp.js`  
 > **说明**：Model Context Protocol (MCP) 是一个开放协议，使LLM应用能够无缝集成外部数据源和工具。XRK-AGT实现了MCP服务器，允许外部AI平台（如Cursor、Claude、小智AI）通过HTTP/WebSocket连接并调用系统工具。  
 > **协议版本**：2025-11-25（最新规范）  
-> **相关文档**：关于工作流扩展的详细说明，请参考 **[AiWorkflow文档](aistream.md)** 📖  
+> **相关文档**：关于工作流扩展的详细说明，请参考 **[AiWorkflow文档](ai-workflow.md)** 📖  
 > **配置指南**：关于外部平台连接配置，请参考 **[MCP配置指南](mcp-config-guide.md)** ⚙️
 
 ## 📚 目录
@@ -309,7 +309,7 @@ Content-Type: application/json
 
 #### 4. 获取工作流分组
 ```http
-GET /api/mcp/tools/streams
+GET /api/mcp/tools/workflows
 ```
 
 **响应**：
@@ -355,7 +355,7 @@ GET /api/mcp/health
 - 后端将其解析为 `streams` 白名单，传给 LLM 工厂和 `MCPToolAdapter`；
 - LLM 客户端在收到 `tool_calls` 时，会通过 `MCPToolAdapter.handleToolCalls(tool_calls, options)` 执行工具；
 - `options` 可含 `streams`（白名单）、`parallel_tool_calls`（为 `false` 时**顺序**执行同轮 tool_calls，避免 reply 与其它 MCP 抢状态）；
-- MCP handler 的 `context.e` / `context.turnState` 优先从 `runWithStreamRequestContext`（AsyncLocalStorage）读取，并发消息互不串线；无 ALS 时回退 `AiStreamLoader.currentEvent`（**遗留兼容，计划移除**，新代码务必建 ALS）；
+- MCP handler 的 `context.e` / `context.turnState` 从 `runWithWorkflowRequestContext`（AsyncLocalStorage）读取，并发消息互不串线；调用工作流前须建立 ALS；
 - 远程 MCP **stdio** 子进程默认 `shell: false`（防命令注入）；确需 shell 语法时在该服务器配置里显式 `"shell": true`；
 - `MCPToolAdapter` 会基于 `streams` 计算出**允许的工具集合**，只有这些工具可以被真正调用，其它工具调用会被拒绝并返回错误结果。
 
@@ -514,7 +514,7 @@ export default class MyStream extends AiWorkflow {
 MCP服务在系统启动时自动初始化，可通过配置文件控制：
 
 ```yaml
-aistream:
+ai-workflow:
   mcp:
     enabled: true  # 是否启用MCP服务
 ```
@@ -540,7 +540,7 @@ A: 支持string、number、boolean、array、object等JSON Schema支持的所有
 ## 相关文档
 
 - **[MCP配置指南](mcp-config-guide.md)** - Cursor、Claude Desktop 等外部平台连接配置
-- **[工作流开发指南](aistream.md)** - AiWorkflow 基类技术文档
+- **[工作流开发指南](ai-workflow.md)** - AiWorkflow 基类技术文档
 - **[API文档](http-api.md)** - HTTP API 基类文档
 
 ---

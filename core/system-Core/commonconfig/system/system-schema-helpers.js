@@ -1,7 +1,7 @@
 import { GLOBAL_CONFIGS } from '#infrastructure/config/config-constants.js';
 import { SUBSERVER_RUNTIME_CATALOG } from '#utils/subserver-runtimes.js';
 
-/** 子服务单个 runtime 端点（commonconfig ↔ aistream.yaml subserver.runtimes） */
+/** 子服务单个 runtime 端点（commonconfig ↔ ai-workflow.yaml subserver.runtimes） */
 export function subserverRuntimeEndpointFields(defaultPort) {
   return {
     enabled: {
@@ -43,7 +43,7 @@ export function subserverRuntimeSubFormFields() {
   );
 }
 
-/** crawl.webSearch 提供商凭据 SubForm 字段（commonconfig 与 aistream.yaml 对齐） */
+/** crawl.webSearch 提供商凭据 SubForm 字段（commonconfig 与 ai-workflow.yaml 对齐） */
 export function crawlProviderApiFields(extraFields = {}) {
   return {
     apiKey: {

@@ -5,7 +5,7 @@ groups: []
 users: []
 cooldown: 300
 chance: 0.1
-mergeStreams:
+mergeWorkflows:
   - memory
   - database
   - tools

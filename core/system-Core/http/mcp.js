@@ -1,8 +1,8 @@
 import RuntimeUtil from '#utils/runtime-util.js';
-import AiStreamLoader from '#infrastructure/ai-workflow/loader.js';
+import AiWorkflowLoader from '#infrastructure/ai-workflow/loader.js';
 import { HttpResponse } from '#utils/http-utils.js';
 
-const getMCPServer = () => AiStreamLoader.mcpServer;
+const getMCPServer = () => AiWorkflowLoader.mcpServer;
 
 const requireMCP = (res) => {
         const mcpServer = getMCPServer();
@@ -91,36 +91,36 @@ export default {
     },
     {
       method: 'GET',
-      path: '/api/mcp/tools/streams',
+      path: '/api/mcp/tools/workflows',
       handler: HttpResponse.asyncHandler(async (req, res) => {
         const mcpServer = requireMCP(res);
         if (!mcpServer) return;
 
-        const streams = mcpServer.listStreams();
-        const groups = mcpServer.listToolsByStream();
+        const streams = mcpServer.listWorkflows();
+        const groups = mcpServer.listToolsByWorkflow();
         
         HttpResponse.success(res, { 
-          streams,
+          workflows: streams,
           groups,
           count: streams.length
         });
-      }, 'mcp.tools.streams')
+      }, 'mcp.tools.workflows')
     },
     {
       method: 'GET',
-      path: '/api/mcp/tools/stream/:streamName',
+      path: '/api/mcp/tools/workflow/:workflowName',
       handler: HttpResponse.asyncHandler(async (req, res) => {
-        const { streamName } = req.params;
+        const { workflowName } = req.params;
         const mcpServer = requireMCP(res);
         if (!mcpServer) return;
 
-        const tools = mcpServer.listTools(streamName);
+        const tools = mcpServer.listTools(workflowName);
         HttpResponse.success(res, { 
-          stream: streamName,
+          workflow: workflowName,
           tools, 
           count: tools.length 
         });
-      }, 'mcp.tools.stream')
+      }, 'mcp.tools.workflow')
     },
     {
       method: 'POST',

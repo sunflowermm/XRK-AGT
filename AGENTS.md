@@ -6,7 +6,7 @@
 
 **开发首读**：[`docs/runtime-surface.md`](docs/runtime-surface.md) · [`docs/coding-style.md`](docs/coding-style.md) · [`docs/base-classes.md`](docs/base-classes.md)
 
-**运行时对话 AgentRuntime** 的规则在 `data/ai-workspace/{id}/`（`AGENTS.md`、`SOUL.md`、`memory/` 等），由 `aistream.agentWorkspace` 注入；仓库内 `agents/workspace/` 仅为首次引导模板。
+**运行时对话 AgentRuntime** 的规则在 `data/ai-workspace/{id}/`（`AGENTS.md`、`SOUL.md`、`memory/` 等），由 `ai-workflow.agentWorkspace` 注入；仓库内 `agents/workspace/` 仅为首次引导模板。
 
 ## 必读（优先 `.cursor/rules/`）
 

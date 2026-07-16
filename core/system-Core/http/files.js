@@ -10,7 +10,7 @@ import { InputValidator } from '#utils/input-validator.js';
 import { HttpResponse } from '#utils/http-utils.js';
 import runtimeConfig from '#infrastructure/config/config.js';
 import { bannedWordsService } from '../lib/content-safety/banned-words-service.js';
-import { Disposables } from '../lib/runtime/disposables.js';
+import { Disposables } from '#utils/disposables.js';
 
 
 const uploadDir = path.join(paths.data, 'uploads');

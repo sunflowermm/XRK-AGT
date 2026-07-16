@@ -691,31 +691,6 @@ export default function setLog() {
     },
 
     /**
-     * 获取 trace 日志内容
-     * @param {number} lines - 行数
-     * @returns {Promise<Array|null>} 日志行数组
-     */
-    getTraceLogs: async function (lines = 100) {
-      try {
-        const logDir = paths.logs || path.join(process.cwd(), 'logs')
-        const currentDate = new Date().toISOString().split('T')[0]
-        const traceFile = path.join(logDir, `${LOGGER_CONFIG.TRACE_LOG_PREFIX}.${currentDate}.log`)
-
-        if (!fs.existsSync(traceFile)) {
-          return null
-        }
-
-        const content = await fsPromises.readFile(traceFile, 'utf8')
-        const logLines = content.split('\n').filter((line) => line.trim())
-
-        return logLines.slice(-lines)
-      } catch (err) {
-        this.error('Failed to read trace logs:', err.message)
-        return null
-      }
-    },
-
-    /**
      * 关闭日志系统
      * @returns {Promise<void>}
      */

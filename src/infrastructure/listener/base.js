@@ -13,7 +13,7 @@ import RuntimeUtil from '#utils/runtime-util.js'
  * - e.message_id / e.event_id : 消息或事件唯一标识，用于历史去重
  * - e.isGroup / e.isPrivate : 由 EventNormalizer 或适配器设置，设备会话为 isGroup=false, isPrivate=true
  */
-export default class EventListenerBase {
+export default class ListenerBase {
   plugins = PluginLoader
   processedEvents = new Set()
   MAX_PROCESSED_EVENTS = 1000

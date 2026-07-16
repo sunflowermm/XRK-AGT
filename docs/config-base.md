@@ -63,7 +63,7 @@ constructor(metadata = {})
 
 **与运行时 `RuntimeConfig` 的关系**（`src/infrastructure/config/config.js`）：
 - **全局配置**（`GLOBAL_CONFIGS`）：`data/server_bots/<name>.yaml`（如 `agt`、`device`、`notice`、`redis`）
-- **随端口配置**（`SERVER_CONFIGS` + 工厂 LLM）：`data/server_bots/{port}/<name>.yaml`（如 `server`、`chatbot`、`aistream`）
+- **随端口配置**（`SERVER_CONFIGS` + 工厂 LLM）：`data/server_bots/{port}/<name>.yaml`（如 `server`、`chatbot`、`ai-workflow`）
 - 默认模板来源：`config/default_config/<name>.yaml`；首次缺失时自动复制到上述路径
 
 ---

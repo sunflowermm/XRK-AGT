@@ -60,11 +60,10 @@ export const estimateTokens = estimateTokensRough;
 export function resolveWorkflowStreams(body = {}) {
   const workflowConfig = pickFirst(body, ['workflow']);
   if (!workflowConfig || typeof workflowConfig !== 'object') return null;
-  const streams = [];
-  if (Array.isArray(workflowConfig.workflows)) streams.push(...workflowConfig.workflows);
-  if (Array.isArray(workflowConfig.streams)) streams.push(...workflowConfig.streams);
-  if (typeof workflowConfig.workflow === 'string') streams.push(workflowConfig.workflow);
-  const normalized = normalizeStringArray(streams);
+  const names = [];
+  if (Array.isArray(workflowConfig.workflows)) names.push(...workflowConfig.workflows);
+  if (typeof workflowConfig.workflow === 'string') names.push(workflowConfig.workflow);
+  const normalized = normalizeStringArray(names);
   return normalized.length > 0 ? normalized : null;
 }
 

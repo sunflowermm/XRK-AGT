@@ -880,7 +880,7 @@
         {
           "id": "mcp-tools-streams",
           "method": "GET",
-          "path": "/api/mcp/tools/streams",
+          "path": "/api/mcp/tools/workflows",
           "title": "工具分组",
           "description": "按工作流分组获取工具列表"
         },

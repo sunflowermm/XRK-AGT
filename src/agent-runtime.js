@@ -20,7 +20,7 @@ import ListenerLoader from "#infrastructure/listener/loader.js";
 import HttpApiLoader from "#infrastructure/http/loader.js";
 import bootstrapRuntimePackages from "#infrastructure/config/loader.js";
 import CommonConfigRegistry from "#infrastructure/commonconfig/loader.js";
-import AiStreamLoader from "#infrastructure/ai-workflow/loader.js";
+import AiWorkflowLoader from "#infrastructure/ai-workflow/loader.js";
 import RuntimeUtil from '#utils/runtime-util.js';
 import { setRuntimeGlobal, getRuntimeGlobal } from '#utils/runtime-globals.js';
 import runtimeConfig from '#infrastructure/config/config.js';
@@ -38,6 +38,11 @@ import HTTPBusinessLayer from '#utils/http-business.js';
 import FrontendLauncher from '#infrastructure/frontend/launcher.js';
 import { HttpResponse } from '#utils/http-utils.js';
 import { InputValidator } from '#utils/input-validator.js';
+import {
+  resolveRequestId,
+  enterRequestContext,
+} from '#utils/observability.js';
+import MonitorService from '#infrastructure/ai-workflow/monitor-service.js';
 import { pipeline } from 'node:stream/promises';
 import { Readable } from 'node:stream';
 import * as runtimeAuth from '#infrastructure/http/runtime-auth.js';
@@ -371,10 +376,10 @@ export default class AgentRuntime extends EventEmitter {
     }
 
     // ========== 第一阶段：全局中间件（所有请求） ==========
-    // 1. 请求追踪和基础信息
+    // 1. 请求关联 ID（尊重入站 X-Request-Id / X-Trace-Id）
     this.express.use((req, res, next) => {
-      req.startTime = Date.now();
-      req.requestId = `${Date.now()}-${RuntimeUtil.shortId()}`;
+      req.requestId = resolveRequestId(req);
+      enterRequestContext({ requestId: req.requestId, path: req.path, method: req.method });
       next();
     });
     
@@ -538,11 +543,6 @@ export default class AgentRuntime extends EventEmitter {
     
     this.express.use((req, res, next) => {
       const start = Date.now();
-      
-      // 设置请求ID（用于追踪）
-      if (!req.requestId) {
-        req.requestId = `${Date.now()}-${RuntimeUtil.shortId()}`;
-      }
       
       // 在响应发送前设置头部
       if (!res.headersSent) {
@@ -1353,7 +1353,7 @@ export default class AgentRuntime extends EventEmitter {
   }
 
   /**
-   * 健康检查处理器
+   * 健康检查处理器（liveness：进程存活，不探依赖）
    */
   _healthHandler(req, res) {
     if (this._checkHeadersSent(res)) return;
@@ -1361,7 +1361,8 @@ export default class AgentRuntime extends EventEmitter {
     return HttpResponse.json(res, {
       status: '健康',
       uptime: process.uptime(),
-      timestamp: Date.now()
+      timestamp: Date.now(),
+      requestId: req.requestId || null,
     });
   }
 
@@ -1375,10 +1376,12 @@ export default class AgentRuntime extends EventEmitter {
     const memUsage = process.memoryUsage();
     const cpuUsage = process.cpuUsage();
     const wsStats = this.getWebSocketStats();
+    const workflow = MonitorService.getTraceSummary();
 
     const metrics = {
       timestamp: Date.now(),
       uptime: process.uptime(),
+      requestId: req.requestId || null,
       memory: {
         rss: memUsage.rss,
         heapTotal: memUsage.heapTotal,
@@ -1391,6 +1394,7 @@ export default class AgentRuntime extends EventEmitter {
         system: cpuUsage.system
       },
       websocket: wsStats,
+      workflow,
       server: {
         httpPort: this.httpPort,
         httpsPort: this.httpsPort,
@@ -1991,7 +1995,7 @@ export default class AgentRuntime extends EventEmitter {
 
     const [streamResult, pluginsResult, apiResult] = await phase('loaders', () =>
       Promise.allSettled([
-        AiStreamLoader.load(),
+        AiWorkflowLoader.load(),
         PluginLoader.load(),
         HttpApiLoader.load()
       ])
@@ -2013,7 +2017,7 @@ export default class AgentRuntime extends EventEmitter {
     const watchResults = await phase('watchSetup', () =>
       Promise.allSettled([
         CommonConfigRegistry.watch(true),
-        AiStreamLoader.watch(true),
+        AiWorkflowLoader.watch(true),
         PluginLoader.watch(true),
         HttpApiLoader.watch(true)
       ])
@@ -2093,9 +2097,9 @@ export default class AgentRuntime extends EventEmitter {
 
     const phaseLabels = {
       proxyInit: '反向代理初始化',
-      packageloader: 'bootstrapRuntimePackages',
-      configLoader: '配置加载',
-      loaders: 'Stream/Plugins/Api 并行加载',
+      bootstrapPackages: 'bootstrapRuntimePackages',
+      commonConfig: 'CommonConfig',
+      loaders: 'Workflow/Plugins/Api 并行加载',
       watchSetup: '热加载监视',
       middleware: '中间件与路由',
       apiRegister: 'API 注册',

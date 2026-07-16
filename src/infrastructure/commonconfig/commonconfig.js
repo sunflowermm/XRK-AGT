@@ -1107,7 +1107,7 @@ export default class ConfigBase {
       let obj = value;
 
       // 兼容 Textarea 等组件：如果传入的是字符串，尝试按 JSON 解析
-      // 典型场景：如 aistream.mcp.remote.servers[*].headers 字段，前端用 Textarea 输入 JSON
+      // 典型场景：如 ai-workflow.mcp.remote.servers[*].headers 字段，前端用 Textarea 输入 JSON
       if (typeof obj === 'string') {
         const trimmed = obj.trim();
         // 空字符串视为“未填写”，交给上层必填规则处理（通常为可选字段）

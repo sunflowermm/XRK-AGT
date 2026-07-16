@@ -1,6 +1,6 @@
-import EventListenerBase from '#infrastructure/listener/base.js'
+import ListenerBase from '#infrastructure/listener/base.js'
 
-export default class StdinEvent extends EventListenerBase {
+export default class StdinEvent extends ListenerBase {
   constructor() {
     super('stdin')
   }

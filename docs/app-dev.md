@@ -50,7 +50,7 @@ flowchart TB
         S1["server.yaml"]
         S2["chatbot.yaml"]
         S3["group.yaml"]
-        S4["aistream.yaml"]
+        S4["ai-workflow.yaml"]
         S5["volcengine_llm.yaml"]
         S6["其他工厂配置..."]
     end
@@ -117,7 +117,7 @@ const deviceConfig = runtimeConfig.getGlobalConfig('device');
 | `server`         | `data/server_bots/{port}/server.yaml`         | 服务器配置（端口、代理等）                                           |
 | `chatbot`        | `data/server_bots/{port}/chatbot.yaml`        | 聊天机器人配置                                                 |
 | `group`          | `data/server_bots/{port}/group.yaml`          | 群组配置                                                    |
-| `aistream`       | `data/server_bots/{port}/aistream.yaml`       | AI 工作流、工厂默认提供商（`llm`/`asr`/`tts`）等，见 `docs/aistream.md` |
+| `ai-workflow`       | `data/server_bots/{port}/ai-workflow.yaml`       | AI 工作流、工厂默认提供商（`llm`/`asr`/`tts`）等，见 `docs/ai-workflow.md` |
 | `volcengine_llm` | `data/server_bots/{port}/volcengine_llm.yaml` | 火山引擎 LLM 配置                                             |
 | `其他工厂配置`         | `data/server_bots/{port}/*.yaml`              | 其他 LLM/ASR/TTS 提供商配置                                    |
 
@@ -162,7 +162,7 @@ const groupConfig = runtimeConfig.getServerConfig('group');
 
 **端口配置访问器**：
 
-- `runtimeConfig.aistream` - AI 工作流与工厂默认提供商等（`getServerConfig('aistream')`，文件在端口目录）
+- `runtimeConfig.aiWorkflow` - AI 工作流与工厂默认提供商等（`getServerConfig('ai-workflow')`，文件在端口目录）
 - `runtimeConfig.server` - 服务器配置
 - `runtimeConfig.chatbot` - 聊天机器人配置
 - `runtimeConfig.group` - 群组配置
@@ -214,7 +214,7 @@ export default class MyPlugin extends PluginBase {
     
     // 读取全局配置
     const redisConfig = runtimeConfig.redis;
-    const aistreamConfig = runtimeConfig.aistream;
+    const aiWorkflowConfig = runtimeConfig.aiWorkflow;
     
     // 读取群组配置
     const groupConfig = runtimeConfig.getGroup(e.group_id);
@@ -433,14 +433,14 @@ flowchart TB
         end
         
         subgraph Workflow["工作流系统"]
-            W1[AiWorkflow基类<br/>core/*/stream]
+            W1[AiWorkflow基类<br/>core/*/workflow]
             W2[函数调用<br/>Function Calling]
             W3[上下文增强<br/>RAG流程]
             W4[记忆系统<br/>Redis存储]
         end
         
         subgraph Infrastructure["基础设施层"]
-            I1[配置系统<br/>Cfg/ConfigBase]
+            I1[配置系统<br/>RuntimeConfig/ConfigBase]
             I2[渲染器<br/>Renderer]
             I3[事件系统<br/>AgentRuntime.em]
             I4[Tasker<br/>协议适配器]
@@ -497,7 +497,7 @@ export default class ChatPlugin extends PluginBase {
   }
   
   async chat(e) {
-    const stream = this.getStream('chat');
+    const stream = this.getWorkflow('chat');
     await stream.process(e, e.msg, {
       enableMemory: true  // 启用记忆系统
     });
@@ -530,7 +530,7 @@ export default class AssistantPlugin extends PluginBase {
   
   async assistant(e) {
     // 简单任务：直接使用工作流
-    const desktopStream = this.getStream('desktop');
+    const desktopStream = this.getWorkflow('desktop');
     await desktopStream.process(e, e.msg, {
       enableMemory: true,           // 整合记忆工具工作流
       enableDatabase: true,         // 整合知识库工具工作流
@@ -559,7 +559,7 @@ export default class AssistantPlugin extends PluginBase {
 
 ```javascript
 // 1. 创建HTTP API（core/my-core/http/ai-chat.js）
-import AiStreamLoader from '#infrastructure/ai-workflow/loader.js';
+import AiWorkflowLoader from '#infrastructure/ai-workflow/loader.js';
 
 export default {
   name: 'ai-chat-api',
@@ -570,7 +570,7 @@ export default {
       path: '/api/ai/chat',
       handler: async (req, res, bot) => {
         const { message, streamName = 'chat' } = req.body;
-        const stream = AiStreamLoader.getStream(streamName);
+        const stream = AiWorkflowLoader.getWorkflow(streamName);
         
         if (!stream) {
           return res.status(404).json({
@@ -635,7 +635,7 @@ export default class ReportPlugin extends PluginBase {
   
   async generateReport(e) {
     // 调用工作流分析数据
-    const stream = this.getStream('desktop');
+    const stream = this.getWorkflow('desktop');
     await stream.process(e, '分析数据并生成报表', {
       enableMemory: true
     });
@@ -711,7 +711,7 @@ export default class UnifiedPlugin extends PluginBase {
     const source = e.tasker || 'unknown';
     
     // 统一调用工作流
-    const stream = this.getStream('chat');
+    const stream = this.getWorkflow('chat');
     await stream.process(e, e.msg, {
       enableMemory: true
     });
@@ -792,7 +792,7 @@ flowchart TB
 - **[PROJECT_OVERVIEW.md](../PROJECT_OVERVIEW.md)**：目录树
 - **[system-Core 特性](system-core.md)**：Web 控制台与内置 API/工作流 ⭐
 - **[框架可扩展性指南](框架可扩展性指南.md)**：扩展点与 Core 开发
-- **[aistream.md](aistream.md)** · **[plugin-base.md](plugin-base.md)** · **[agent-runtime.md](agent-runtime.md)** · **[http-api.md](http-api.md)** · **[config-base.md](config-base.md)** · **[renderer.md](renderer.md)**
+- **[ai-workflow.md](ai-workflow.md)** · **[plugin-base.md](plugin-base.md)** · **[agent-runtime.md](agent-runtime.md)** · **[http-api.md](http-api.md)** · **[config-base.md](config-base.md)** · **[renderer.md](renderer.md)**
 
 ---
 

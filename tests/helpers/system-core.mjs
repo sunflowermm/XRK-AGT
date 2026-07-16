@@ -10,29 +10,34 @@ export const SYSTEM_CORE_DIR = path.join(root, 'core', 'system-Core');
 /** 框架基准：与 `git ls-files core/system-Core/<subdir>/*.js` 一致（vendor = 未入库本地 .js） */
 export const SYSTEM_CORE_BASELINE = Object.freeze({
   http: 12,
-  stream: 7,
+  workflow: 8,
   plugin: 15,
   tasker: 4,
   events: 4,
 });
 
-/** @param {string} subdir http | stream | plugin | tasker | events */
+/** @param {string} subdir http | workflow | plugin | tasker | events */
 export function listSystemCoreJs(subdir) {
   const glob = `core/system-Core/${subdir}/*.js`;
+  const fromDisk = () => {
+    const dir = path.join(SYSTEM_CORE_DIR, subdir);
+    if (!fs.existsSync(dir)) return [];
+    return fs.readdirSync(dir).filter((f) => f.endsWith('.js'));
+  };
   try {
     const out = execSync(`git ls-files -z -- "${glob}"`, {
       cwd: root,
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'ignore'],
     });
-    return out
+    const tracked = out
       .split('\0')
       .filter(Boolean)
       .map((p) => path.basename(p.replace(/^"|"$/g, '')));
+    // 目录刚 rename 尚未入库时 ls-files 为空，回退磁盘
+    return tracked.length > 0 ? tracked : fromDisk();
   } catch {
-    const dir = path.join(SYSTEM_CORE_DIR, subdir);
-    if (!fs.existsSync(dir)) return [];
-    return fs.readdirSync(dir).filter((f) => f.endsWith('.js'));
+    return fromDisk();
   }
 }
 
@@ -50,5 +55,5 @@ export function systemCorePluginKeys() {
 }
 
 export function systemCoreStreamBasenames() {
-  return listSystemCoreJs('stream').map((f) => f.replace(/\.js$/, ''));
+  return listSystemCoreJs('workflow').map((f) => f.replace(/\.js$/, ''));
 }

@@ -173,10 +173,10 @@ export default class OpenAIResponsesCompatibleLLMClient {
     if (Object.hasOwn(overrides, 'tools')) return overrides.tools || undefined;
 
     const workflow = overrides.workflow || this.config.workflow || this.config.streamName || null;
-    const streams = Array.isArray(overrides.streams) ? overrides.streams : null;
+    const workflows = Array.isArray(overrides.workflows) ? overrides.workflows : null;
 
     const mcpTools = this.config.enableTools !== false && MCPToolAdapter.hasTools()
-      ? MCPToolAdapter.convertMCPToolsToOpenAI({ workflow, streams })
+      ? MCPToolAdapter.convertMCPToolsToOpenAI({ workflow, workflows })
       : [];
 
     const customTools = Array.isArray(this.config.tools) ? this.config.tools : [];

@@ -1,5 +1,5 @@
 import { HttpResponse } from '#utils/http-utils.js';
-import { getAistreamConfigOptional } from '#utils/aistream-config.js';
+import { getAiWorkflowConfigOptional } from '#utils/ai-workflow-config.js';
 import runtimeConfig from '#infrastructure/config/config.js';
 
 /** 是否为本机 127.* 回环（AgentRuntime.checkApiAuthorization 与单测共用） */
@@ -16,7 +16,7 @@ export function isLoopback127Connection(address) {
  * 默认 true；可在 server.auth.requireLoopbackAuthWhenToolsRun 显式关闭。
  */
 export function shouldForceAuthOnLoopbackWhenToolsRun() {
-  const toolsOn = getAistreamConfigOptional()?.tools?.file?.runEnabled === true;
+  const toolsOn = getAiWorkflowConfigOptional()?.tools?.file?.runEnabled === true;
   if (!toolsOn) return false;
   return runtimeConfig.server?.auth?.requireLoopbackAuthWhenToolsRun !== false;
 }

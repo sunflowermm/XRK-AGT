@@ -35,10 +35,14 @@ describe('配置三件套：默认模板与 system.js schema', () => {
     it(`${name} 模板存在且 schema 含 ${name} 段`, () => {
       const file = path.join(defaultConfigDir, `${name}.yaml`);
       assert.ok(fs.existsSync(file), `缺少默认模板: ${file}`);
-      // 兼容：整文件巨石 `name: {`，或分域后的 `name: nameConfig` / `export const nameConfig`
+      // 兼容：巨石 `name: {`、分域 `name: nameConfig` / `'ai-workflow': aiWorkflowConfig` / `export const aiWorkflowConfig`
+      const camel = name.replace(/-([a-z])/g, (_, ch) => ch.toUpperCase());
       const ok =
         new RegExp(`\\b${name}:\\s*\\{`).test(systemSrc) ||
+        new RegExp(`['"]${name}['"]:\\s*${camel}Config\\b`).test(systemSrc) ||
         new RegExp(`\\b${name}:\\s*${name}Config\\b`).test(systemSrc) ||
+        new RegExp(`\\b${name}:\\s*${camel}Config\\b`).test(systemSrc) ||
+        new RegExp(`export\\s+const\\s+${camel}Config\\b`).test(systemSrc) ||
         new RegExp(`export\\s+const\\s+${name}Config\\b`).test(systemSrc);
       assert.ok(ok, `system 分域 schema 中未找到 ${name} 段`);
     });

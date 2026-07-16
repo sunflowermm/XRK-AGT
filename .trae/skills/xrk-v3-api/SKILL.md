@@ -1,6 +1,6 @@
 ---
 name: xrk-v3-api
-description: 当你需要对接/调试 `/api/v3/chat/completions` 与 SSE 流式输出、multipart 多模态上传、workflow->streams 工具白名单时使用。
+description: 当你需要对接/调试 `/api/v3/chat/completions` 与 SSE 流式输出、multipart 多模态上传、workflow 工具白名单时使用。
 ---
 
 ## 实现
@@ -11,7 +11,7 @@ description: 当你需要对接/调试 `/api/v3/chat/completions` 与 SSE 流式
 
 - 入参/出参兼容 OpenAI Chat Completions（含 SSE `[DONE]`）。
 - `model` = provider key。
-- `workflow.workflows` / `workflow.streams` → MCP 工具白名单。
+- `workflow.workflows` → MCP 工具白名单。
 - `multipart`：`messages` 为 JSON 字符串；`image/*` 转 base64 并入最后一条 user 消息。
 
 ## Node 26
@@ -22,4 +22,4 @@ description: 当你需要对接/调试 `/api/v3/chat/completions` 与 SSE 流式
 
 ## 排障
 
-401 → `docs/AUTH.md`；无 provider → 端口下 `aistream.yaml` / compat YAML；无工具 → `enableTools` 与 `streams` 白名单。
+401 → `docs/AUTH.md`；无 provider → 端口下 `ai-workflow.yaml` / compat YAML；无工具 → `enableTools` 与 `streams` 白名单。

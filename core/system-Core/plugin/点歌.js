@@ -1,4 +1,4 @@
-import { fetchWithPolicy } from '../lib/net/fetcher.js'
+import { fetchWithPolicy } from '#utils/fetch-with-retry.js'
 
 const SEARCH_API = 'https://music.163.com/api/search/get'
 const SONG_URL_API = 'https://music.163.com/song/media/outer/url'

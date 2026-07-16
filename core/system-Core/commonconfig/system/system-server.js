@@ -653,7 +653,7 @@ export const serverConfig = {
               requireLoopbackAuthWhenToolsRun: {
                 type: 'boolean',
                 label: '工具 run 开启时强制 loopback 鉴权',
-                description: 'aistream.tools.file.runEnabled=true 时，127.* 也须携带 API Key（默认 true）',
+                description: 'ai-workflow.tools.file.runEnabled=true 时，127.* 也须携带 API Key（默认 true）',
                 default: true,
                 component: 'Switch'
               },

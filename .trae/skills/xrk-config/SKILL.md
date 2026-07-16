@@ -12,7 +12,7 @@ description: 当你需要新增/调整配置字段、确保 YAML 与 commonconfi
 | 类型 | 路径 | 示例 |
 |------|------|------|
 | 全局 | `data/server_bots/<name>.yaml` | `agt`、`redis` |
-| 随端口 | `data/server_bots/{port}/<name>.yaml` | `server`、`aistream`、`chatbot` |
+| 随端口 | `data/server_bots/{port}/<name>.yaml` | `server`、`ai-workflow`、`chatbot` |
 | 工厂 LLM | `data/server_bots/{port}/<name>.yaml` | `openai_llm`、`*_compat_llm` |
 | **底层模板** | `config/default_config/<name>.yaml` | 仅 AGT/工厂/system-Core；**禁止**产品 Core |
 | **产品 Core 模板** | `core/<core名>/default/<name>.yaml` | `core/lsy-Core/default/lsy.yaml` |
@@ -36,7 +36,7 @@ description: 当你需要新增/调整配置字段、确保 YAML 与 commonconfi
 
 **勿混淆**：`core/<core>/AGENTS.md` 给**产品 Agent**（工作区/工具），不含 LLM 工厂与 `default_config` 约定；上述路径与模板规则仅写在 **本 skill / `xrk-project` / `core/<core>/README.md`**。
 
-`aistream.yaml`：`embedding`、`mcp`、`agentWorkspace`、`tools` 等见 `docs/aistream.md`。
+`ai-workflow.yaml`：`embedding`、`mcp`、`agentWorkspace`、`tools` 等见 `docs/ai-workflow.md`。
 
 ## Node 26
 

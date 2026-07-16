@@ -63,7 +63,7 @@ XRK-AGT/
 | `app.js` → `bootstrap.js` → `start.js` → `agent-runtime.js` | 启动链，见 [docs/startup.md](docs/startup.md) |
 | `core/*/plugin/` | 指令与增强插件 |
 | `core/*/http/` | HTTP API（`/api/` 默认鉴权） |
-| `core/*/stream/` | AI 工作流（`AiWorkflow`） |
+| `core/*/workflow/` | AI 工作流（`AiWorkflow`） |
 | `core/*/tasker/` | 平台协议 → 统一事件 |
 | `core/*/events/` | 去重、标准化 → `PluginLoader.deal` |
 | `core/*/www/<app>/` | 静态前端（如 `/xrk/`） |

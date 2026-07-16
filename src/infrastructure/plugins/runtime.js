@@ -28,11 +28,11 @@ class RuntimeExtensionRegistry {
     if (!key) return false
     const replace = options?.replace === true
     if (this.extensions.has(key) && !replace) {
-      logger.warn(`[Runtime] 扩展已存在，跳过注册: ${key}`)
+      logger.warn(`[PluginRuntime] 扩展已存在，跳过注册: ${key}`)
       return false
     }
     this.extensions.set(key, extension)
-    logger.info(`[Runtime] 注册扩展: ${key}${replace ? ' (replace)' : ''}`)
+    logger.info(`[PluginRuntime] 注册扩展: ${key}${replace ? ' (replace)' : ''}`)
     return true
   }
 
@@ -100,7 +100,7 @@ const extensionRegistry = new RuntimeExtensionRegistry()
  *   }
  * }
  */
-export default class Runtime {
+export default class PluginRuntime {
   constructor(e) {
     this.e = e
     this._extensions = {}
@@ -137,7 +137,7 @@ export default class Runtime {
           this._extensions[name] = Extension
         }
       } catch (error) {
-        logger.error(`[Runtime] 加载扩展 ${name} 失败: ${error.message}`)
+        logger.error(`[PluginRuntime] 加载扩展 ${name} 失败: ${error.message}`)
       }
     }
   }
@@ -256,19 +256,19 @@ export default class Runtime {
         try {
           await Extension.initCache()
         } catch (error) {
-          logger.error(`[Runtime] 扩展 ${name} 缓存初始化失败: ${error.message}`)
+          logger.error(`[PluginRuntime] 扩展 ${name} 缓存初始化失败: ${error.message}`)
         }
       }
     }
 
-    e.runtime = new Runtime(e)
+    e.runtime = new PluginRuntime(e)
     
     for (const [name, ext] of Object.entries(e.runtime._extensions)) {
       if (ext && typeof ext.init === 'function') {
         try {
           await ext.init()
         } catch (error) {
-          logger.error(`[Runtime] 扩展 ${name} 初始化失败: ${error.message}`)
+          logger.error(`[PluginRuntime] 扩展 ${name} 初始化失败: ${error.message}`)
         }
       }
     }

@@ -26,11 +26,11 @@
 当上层调用 `AgentRuntime.checkApiAuthorization(req)` 时，底层会统一执行（实现：`runtime-auth.js` + `auth.js`）：
 
 - **一般** `127.*`（含 `::ffff:127.*`）来源免鉴权；
-- **例外**：当 `aistream.tools.file.runEnabled === true`（或同类危险能力开启）时，loopback **也强制** API Key（可用 `server.auth.requireLoopbackAuthWhenToolsRun: false` 显式关闭，不推荐）；
+- **例外**：当 `ai-workflow.tools.file.runEnabled === true`（或同类危险能力开启）时，loopback **也强制** API Key（可用 `server.auth.requireLoopbackAuthWhenToolsRun: false` 显式关闭，不推荐）；
 - **可选白名单**：若 `server.auth.whitelist` 配置了前缀/正则规则，命中时免鉴权；
 - 非 `127.*` 来源按 API Key 规则严格校验。
 
-默认 `tools.file.runEnabled: false`（见 `config/default_config/aistream.yaml`）。
+默认 `tools.file.runEnabled: false`（见 `config/default_config/ai-workflow.yaml`）。
 
 ---
 
@@ -90,7 +90,7 @@ A：`src/agent-runtime.js` 只做静态资源放行；`/api/*` 由 `HttpApi` 在
 A：在 `core/<your-core>/http/*.js` 导出 `HttpApi` 路由对象即可；路径以 `/api/` 开头会自动鉴权。非 `/api/` 路径或不用 `HttpApi` 时，在 handler 内调用 `ensureSystemCoreAuth(req, res, bot, 'context')`（`src/infrastructure/http/auth.js`）。
 
 **Q：本地调试可以不带 Key 吗？**  
-A：默认可以——仅当来源是 `127.*`（或 `::ffff:127.*`）时自动放行；内网地址（如 `192.168.*`、`10.*`、`172.16-31.*`）不会自动放行。若开启了 `aistream.tools.file.runEnabled`，则 loopback 也必须带 Key。
+A：默认可以——仅当来源是 `127.*`（或 `::ffff:127.*`）时自动放行；内网地址（如 `192.168.*`、`10.*`、`172.16-31.*`）不会自动放行。若开启了 `ai-workflow.tools.file.runEnabled`，则 loopback 也必须带 Key。
 
 **Q：新增 HTTP 路由时鉴权要注意什么？**  
 A：经 `HttpApi` 注册且路径以 `/api/` 开头时**默认**鉴权；公开接口写 `systemAuth: false`。实现见 `src/infrastructure/http/http.js` 与 `src/infrastructure/http/auth.js`。

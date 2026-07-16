@@ -1,12 +1,12 @@
 import { spawn } from 'child_process';
 import RuntimeUtil from '#utils/runtime-util.js';
-import { getAistreamConfigOptional } from '#utils/aistream-config.js';
+import { getAiWorkflowConfigOptional } from '#utils/ai-workflow-config.js';
 
 /**
  * 远程 MCP 客户端宿主：stdio / HTTP / WebSocket transport，
  * 以及插件式 MCP 服务器的加载与工具注册。
  *
- * 通过依赖注入绑定 AiStreamLoader（mcpServer / mcpPluginServers / 日志）。
+ * 通过依赖注入绑定 AiWorkflowLoader（mcpServer / mcpPluginServers / 日志）。
  */
 export class RemoteMcpController {
   remoteMCPServers = new Map();
@@ -171,7 +171,7 @@ export class RemoteMcpController {
    * 获取远程MCP配置和选中的服务器名称集合
    */
   _getRemoteMCPConfig() {
-    const remoteConfig = getAistreamConfigOptional().mcp?.remote || {};
+    const remoteConfig = getAiWorkflowConfigOptional().mcp?.remote || {};
     if (!remoteConfig.enabled) return null;
     const blocks = Array.isArray(remoteConfig.mcpServers) ? remoteConfig.mcpServers : [];
     if (!blocks.length) return null;
@@ -227,7 +227,7 @@ export class RemoteMcpController {
       }
     }
 
-    // 2) 再加载 aistream.yaml 中配置的远程 MCP 服务器
+    // 2) 再加载 ai-workflow.yaml 中配置的远程 MCP 服务器
     const config = this._getRemoteMCPConfig();
     const yamlNames = new Set(
       (config?.servers || []).map((item) => String(item?.name || '').trim()).filter(Boolean)
@@ -536,8 +536,5 @@ export class RemoteMcpController {
     }
   }
 }
-
-/** @deprecated 别名，兼容偏好命名 RemoteMcpHost */
-export { RemoteMcpController as RemoteMcpHost };
 
 export default RemoteMcpController;

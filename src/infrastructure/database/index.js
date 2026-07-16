@@ -43,11 +43,6 @@ class DatabaseManager {
     this.initialized = false;
     RuntimeUtil.makeLog('info', 'Redis 连接已关闭', 'DatabaseManager');
   }
-
-  async getHealthStatus() {
-    const redis = await this.checkRedis();
-    return { redis };
-  }
 }
 
 let instance = null;

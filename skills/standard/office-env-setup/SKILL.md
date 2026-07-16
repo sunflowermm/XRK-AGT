@@ -60,7 +60,7 @@ pdftotext -v
 
 ## run 被关闭
 
-告知路径：`aistream.yaml` → `tools.file.runEnabled: true`，需管理员改配置并重启。
+告知路径：`ai-workflow.yaml` → `tools.file.runEnabled: true`，需管理员改配置并重启。
 
 ## 探测后写回 ENV.md
 

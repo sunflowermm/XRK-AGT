@@ -11,7 +11,7 @@
 export const GLOBAL_CONFIGS = ['agt', 'device', 'monitor', 'notice', 'redis'];
 
 // 服务器配置列表（随端口变化，存储在server_bots/{port}/）
-export const SERVER_CONFIGS = ['server', 'chatbot', 'group', 'aistream'];
+export const SERVER_CONFIGS = ['server', 'chatbot', 'group', 'ai-workflow'];
 
 // 工厂配置名称模式（随端口变化）
 export const FACTORY_CONFIG_PATTERNS = [

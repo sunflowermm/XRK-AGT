@@ -40,7 +40,7 @@ const DEFAULT_LOADER_SUBDIRS = [
   'plugin',
   'http',
   'commonconfig',
-  'stream',
+  'workflow',
   'tasker',
   'events'
 ];
@@ -50,7 +50,7 @@ const SUBSERVER_PLUGIN_CORE_SUBDIRS = [
   'plugin',
   'http',
   'commonconfig',
-  'stream',
+  'workflow',
   'tasker',
   'events'
 ];

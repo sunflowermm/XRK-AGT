@@ -1,6 +1,6 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
-import AiStreamLoader from '#infrastructure/ai-workflow/loader.js';
-import { getAistreamConfigOptional } from '#utils/aistream-config.js';
+import AiWorkflowLoader from '#infrastructure/ai-workflow/loader.js';
+import { getAiWorkflowConfigOptional } from '#utils/ai-workflow-config.js';
 import { auditToolUse, formatAuditDetail } from './ai-workspace-audit.js';
 import { normalizePresetId } from './ai-workspace-runtime.js';
 
@@ -12,7 +12,7 @@ function normalizeWorkspaceId(id) {
 }
 
 function isAuditEnabled() {
-  const runtimeConfig = getAistreamConfigOptional();
+  const runtimeConfig = getAiWorkflowConfigOptional();
   return runtimeConfig?.workspace?.audit?.enabled !== false;
 }
 
@@ -35,7 +35,7 @@ async function recordToolAudit(toolName, { ok = true, detail = '' } = {}) {
 export function installMcpAuditHook() {
   if (mcpAuditHookInstalled) return true;
 
-  const server = AiStreamLoader.mcpServer;
+  const server = AiWorkflowLoader.mcpServer;
   if (!server || typeof server.handleToolCall !== 'function') return false;
 
   const original = server.handleToolCall.bind(server);

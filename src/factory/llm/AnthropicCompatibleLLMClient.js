@@ -147,8 +147,8 @@ export default class AnthropicCompatibleLLMClient extends AnthropicLLMClient {
     const useCustomExecutor = typeof overrides.toolExecutor === 'function';
     const enableMcp = !useCustomExecutor
       && overrides.mcpToolMode !== 'passthrough'
-      && Array.isArray(overrides.streams)
-      && overrides.streams.length > 0;
+      && Array.isArray(overrides.workflows)
+      && overrides.workflows.length > 0;
     let currentMessages = normalizeAnthropicToolHistory(
       normalizeAnthropicMessages(await this.transformMessages(initialMessages)),
       this._toolNames

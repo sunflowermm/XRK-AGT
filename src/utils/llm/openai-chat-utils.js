@@ -1,5 +1,5 @@
 import { MCPToolAdapter } from './mcp-tool-adapter.js';
-import { getAistreamConfigOptional } from '../aistream-config.js';
+import { getAiWorkflowConfigOptional } from '../ai-workflow-config.js';
 import RuntimeUtil from '../runtime-util.js';
 import { pickFirstKey } from '#utils/coerce-pick.js';
 
@@ -163,11 +163,11 @@ export function applyOpenAITools(body, config = {}, overrides = {}) {
 
   // 获取工作流配置
   const workflow = overrides.workflow || config.workflow || config.streamName || null;
-  const streams = Array.isArray(overrides.streams) ? overrides.streams : null;
+  const workflows = Array.isArray(overrides.workflows) ? overrides.workflows : null;
 
   // 获取 MCP 工具列表
   const mcpTools = enableTools
-    ? MCPToolAdapter.convertMCPToolsToOpenAI({ workflow, streams })
+    ? MCPToolAdapter.convertMCPToolsToOpenAI({ workflow, workflows })
     : [];
 
   let finalTools;
@@ -190,8 +190,8 @@ export function applyOpenAITools(body, config = {}, overrides = {}) {
       downstreamToolNames = requestToolsArray.map(getToolName).filter(Boolean);
 
       // 读取工具合并策略配置
-      const aistreamCfg = getAistreamConfigOptional();
-      const toolMergeStrategy = aistreamCfg?.mcp?.toolMergeStrategy || 'preferRequest';
+      const aiWorkflowCfg = getAiWorkflowConfigOptional();
+      const toolMergeStrategy = aiWorkflowCfg?.mcp?.toolMergeStrategy || 'preferRequest';
 
       // 根据策略合并工具
       switch (toolMergeStrategy) {

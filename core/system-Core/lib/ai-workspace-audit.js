@@ -1,17 +1,17 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import paths from '#utils/paths.js';
-import { getAistreamConfigOptional } from '#utils/aistream-config.js';
+import { getAiWorkflowConfigOptional } from '#utils/ai-workflow-config.js';
 
 const MAX_AUDIT_BYTES = 512_000;
 
 function isAuditEnabled() {
-  const runtimeConfig = getAistreamConfigOptional();
+  const runtimeConfig = getAiWorkflowConfigOptional();
   return runtimeConfig?.workspace?.audit?.enabled !== false;
 }
 
 function getAuditMaxEntries() {
-  const runtimeConfig = getAistreamConfigOptional();
+  const runtimeConfig = getAiWorkflowConfigOptional();
   const n = Number(runtimeConfig?.workspace?.audit?.maxEntries);
   if (Number.isFinite(n) && n >= 10) return Math.min(500, Math.floor(n));
   return 200;

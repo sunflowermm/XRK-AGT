@@ -5,7 +5,7 @@ description: MCP 工具地图：默认工作流、web_search、何时启用 desk
 
 ## 默认能力（开箱即用）
 
-未显式指定 `workflow` 时，系统默认启用（`builtin-mcp.js` 兜底，配置留空即生效）：
+未显式指定 `workflow` 时，系统默认启用（`#utils/ai-workflow-config.js` 内置默认，配置留空即生效）：
 
 | 前缀 | 工作流 | 典型工具 |
 |------|--------|----------|

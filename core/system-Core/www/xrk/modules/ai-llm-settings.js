@@ -65,7 +65,7 @@ export function renderAiEndpointOptions(escapeHtml, vendors, factoryId, selected
   if (!endpoints.length) {
     return '<option value="" selected>该工厂暂无已配置端点</option>';
   }
-  const parts = [`<option value=""${selectedKey ? '' : ' selected'}>继承 aistream 默认</option>`];
+  const parts = [`<option value=""${selectedKey ? '' : ' selected'}>继承 ai-workflow 默认</option>`];
   for (const ep of endpoints) {
     const label = ep.label || ep.key;
     const modelHint = ep.model ? ` · ${ep.model}` : '';
@@ -99,8 +99,8 @@ export function syncAiEndpointMeta(llmOptions = {}, factoryId = '', endpointKey 
   if (!endpointKey) {
     const def = llmOptions.defaultProfile || '';
     meta.textContent = def
-      ? `未指定端点时将使用 aistream.llm.Provider（${def}）`
-      : '未指定端点时将使用 aistream.llm.Provider 或运行时默认';
+      ? `未指定端点时将使用 ai-workflow.llm.Provider（${def}）`
+      : '未指定端点时将使用 ai-workflow.llm.Provider 或运行时默认';
     return;
   }
 

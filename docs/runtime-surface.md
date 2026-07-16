@@ -152,7 +152,7 @@ sequenceDiagram
 
 | 单例 | import 路径 | 常用 API |
 |------|-------------|----------|
-| AiStreamLoader | `#infrastructure/ai-workflow/loader.js` | `getStream(name)`、`getStreamClass(name)` |
+| AiWorkflowLoader | `#infrastructure/ai-workflow/loader.js` | `getWorkflow(name)`、`getAllWorkflows()` |
 | PluginLoader | `#infrastructure/plugins/loader.js` | `deal(e)`（框架内）；插件通过基类间接使用 |
 | HttpApiLoader | `#infrastructure/http/loader.js` | `getApiList()`、`apis` Map（key = `resolveQualifiedCoreModuleKey`，如 `system-Core/ai-workspace`） |
 | CommonConfigRegistry | `#infrastructure/commonconfig/loader.js` | `get(name)`、`getList()` |
@@ -161,7 +161,7 @@ sequenceDiagram
 | ListenerLoader | `#infrastructure/listener/loader.js` | `load(bot)`（框架内） |
 | `runtimeConfig` | `#infrastructure/config/config.js` | `runtimeConfig.server`、`getGlobalConfig`、`getServerConfig` |
 
-插件基类已封装：`this.getStream(name)` → `getAiStreamHost().getStream(name)`（见 `plugin-base.js` + `stream-host.js`）。
+插件基类已封装：`this.getWorkflow(name)` → `getAiWorkflowHost().getWorkflow(name)`（见 `plugin-base.js` + `workflow-host.js`）。
 
 ---
 
@@ -180,7 +180,7 @@ export default class Demo extends PluginBase {
   }
   async hi(e) {
     AgentRuntime.makeLog('info', 'hi', this.name);           // Proxy → RuntimeUtil
-    const stream = this.getStream('chat');          // → AiStreamLoader
+    const stream = this.getWorkflow('chat');          // → AiWorkflowLoader
     return this.reply('pong');                      // → e.reply / 事件回复链
   }
 }
@@ -208,7 +208,7 @@ export default {
 
 `req.agentRuntime` 与 handler 第三参 `AgentRuntime` 相同；`/api/*` 默认鉴权，公开路由设 `systemAuth: false`。
 
-### AI 工作流（`core/*/stream/`）
+### AI 工作流（`core/*/workflow/`）
 
 ```javascript
 import AiWorkflow from '#infrastructure/ai-workflow/ai-workflow.js';
@@ -230,7 +230,7 @@ export default class MyStream extends AiWorkflow {
 
 ### 事件监听（`core/*/events/`）
 
-继承 `EventListenerBase`，实现 `async init()`；Loader 注入 `this.bot`。见 [base-classes.md](base-classes.md#eventlistenerbaselistenerbasejs)。
+继承 `ListenerBase`，实现 `async init()`；Loader 注入 `this.bot`。见 [base-classes.md](base-classes.md#eventlistenerbaselistenerbasejs)。
 
 ---
 

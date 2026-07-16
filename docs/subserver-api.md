@@ -189,7 +189,7 @@ uv pip install -r apis/<组名>/requirements.txt   # 按实际插件目录
 | 端口被占用 | `PORT=8001 uv run xrk` 或改 `data/subserver/config.yaml` |
 ## 相关文档
 
-- **[AiWorkflow 文档](aistream.md)** - Node 侧工作流与 LLM/MCP 调用说明
+- **[AiWorkflow 文档](ai-workflow.md)** - Node 侧工作流与 LLM/MCP 调用说明
 - **[Docker 部署指南](docker.md)** - 容器化部署说明
 - **[框架可扩展性指南](框架可扩展性指南.md)** - 扩展开发完整指南
 

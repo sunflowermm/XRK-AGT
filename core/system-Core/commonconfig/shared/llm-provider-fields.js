@@ -74,7 +74,7 @@ function baseProviderEntryFields(options = {}) {
     key: {
       type: 'string',
       label: '端点标识（provider key）',
-      description: 'aistream.llm.Provider 与 v3 model 引用的唯一 key',
+      description: 'ai-workflow.llm.Provider 与 v3 model 引用的唯一 key',
       default: '',
       component: 'Input'
     },

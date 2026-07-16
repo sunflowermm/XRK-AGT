@@ -2,42 +2,41 @@ import path from 'path';
 import RuntimeUtil from '#utils/runtime-util.js';
 import paths from '#utils/paths.js';
 import { resolveQualifiedCoreModuleKey } from '#utils/core-fs.js';
-import { getAistreamConfigOptional } from '#utils/aistream-config.js';
-import { getStreamRequestContext } from './stream-request-context.js';
+import { getAiWorkflowConfigOptional } from '#utils/ai-workflow-config.js';
+import { getWorkflowRequestContext } from './workflow-request-context.js';
 import { MCPServer } from '#utils/mcp-server.js';
 import { FileLoader } from '#utils/file-loader.js';
 import { HotReloadBase } from '#utils/hot-reload-base.js';
 import { LOADER_BATCH_SIZE } from '#utils/loader-constants.js';
 import MonitorService from '#infrastructure/ai-workflow/monitor-service.js';
-import { setAiStreamHost } from './stream-host.js';
+import { setAiWorkflowHost } from './workflow-host.js';
 import { RemoteMcpController } from './remote-mcp.js';
 
 /**
  * AI工作流加载器
  * 标准化初始化流程，避免重复加载
  */
-class AiStreamLoader {
-  streams = new Map();
-  streamClasses = new Map();
+class AiWorkflowLoader {
+  workflows = new Map();
   mcpPluginServers = new Map();
   loaded = false;
   _hotReload = null;
   loadStats = {
-    streams: [],
+    workflows: [],
     totalLoadTime: 0,
     startTime: 0,
-    totalStreams: 0,
-    failedStreams: 0
+    totalWorkflows: 0,
+    failedWorkflows: 0
   };
   /** 文件 basename（无 .js）→ stream.name，热重载清理用 */
-  fileKeyToStreamName = new Map();
+  fileKeyToWorkflowName = new Map();
 
   constructor() {
     this._remoteMcp = new RemoteMcpController({
       getMcpServer: () => this.mcpServer,
       getMcpPluginServers: () => this.mcpPluginServers,
       makeLog: (level, message, error) =>
-        RuntimeUtil.makeLog(level, message, 'AiStreamLoader', error),
+        RuntimeUtil.makeLog(level, message, 'AiWorkflowLoader', error),
       registerTool: (name, def) => this.mcpServer?.registerTool?.(name, def)
     });
   }
@@ -56,53 +55,52 @@ class AiStreamLoader {
    */
   async load(isRefresh = false) {
     if (!isRefresh && this.loaded) {
-      RuntimeUtil.makeLog('debug', '工作流已加载，跳过', 'AiStreamLoader');
+      RuntimeUtil.makeLog('debug', '工作流已加载，跳过', 'AiWorkflowLoader');
       return;
     }
 
     try {
       this.loadStats.startTime = Date.now();
-      this.loadStats.streams = [];
-      this.loadStats.failedStreams = 0;
+      this.loadStats.workflows = [];
+      this.loadStats.failedWorkflows = 0;
 
       if (!isRefresh) {
-        this.streams.clear();
-        this.streamClasses.clear();
+        this.workflows.clear();
       }
 
-      RuntimeUtil.makeLog('info', '开始加载工作流...', 'AiStreamLoader');
+      RuntimeUtil.makeLog('info', '开始加载工作流...', 'AiWorkflowLoader');
 
-      // 获取所有 core 目录下的 stream 目录
-      const files = await FileLoader.getCoreSubDirFiles('stream', {
+      // 获取所有 core 目录下的 workflow 目录
+      const files = await FileLoader.getCoreSubDirFiles('workflow', {
         ext: '.js',
         recursive: false
       });
       
       if (files.length === 0) {
-        RuntimeUtil.makeLog('info', '未找到工作流，跳过加载', 'AiStreamLoader');
+        RuntimeUtil.makeLog('info', '未找到工作流，跳过加载', 'AiWorkflowLoader');
         this.loaded = true;
         return;
       }
 
-      this._streamDirsCache = await paths.getCoreSubDirs('stream');
+      this._workflowDirsCache = await paths.getCoreSubDirs('workflow');
       // 阶段1: 加载工作流类
-      await FileLoader.forEachBatch(files, LOADER_BATCH_SIZE, (file) => this.loadStreamClass(file));
-      this._streamDirsCache = null;
+      await FileLoader.forEachBatch(files, LOADER_BATCH_SIZE, (file) => this.loadWorkflowClass(file));
+      this._workflowDirsCache = null;
 
       // 阶段2: 合并 Embedding/RAG 配置到各工作流
-      this.applyEmbeddingConfig(getAistreamConfigOptional().embedding || {});
+      this.applyEmbeddingConfig(getAiWorkflowConfigOptional().embedding || {});
 
       // 阶段3: 初始化MCP服务（注册所有工具）
       await this.initMCP();
 
       this.loadStats.totalLoadTime = Date.now() - this.loadStats.startTime;
-      this.loadStats.totalStreams = this.streams.size;
+      this.loadStats.totalWorkflows = this.workflows.size;
       this.loaded = true;
 
       // 显示加载结果
       this.displayLoadSummary();
     } catch (error) {
-      RuntimeUtil.makeLog('error', `工作流加载失败: ${error.message}`, 'AiStreamLoader', error);
+      RuntimeUtil.makeLog('error', `工作流加载失败: ${error.message}`, 'AiWorkflowLoader', error);
       throw error;
     }
   }
@@ -110,7 +108,7 @@ class AiStreamLoader {
   /**
    * 加载单个工作流类
    */
-  async loadStreamClass(file) {
+  async loadWorkflowClass(file) {
     const streamName = path.basename(file, '.js');
     const startTime = Date.now();
 
@@ -137,22 +135,21 @@ class AiStreamLoader {
       // 文件键同时记 basename 与 Core 限定名，供热重载精确清理
       const qualifiedFileKey = resolveQualifiedCoreModuleKey(
         file,
-        this._streamDirsCache || [],
-        'stream'
+        this._workflowDirsCache || [],
+        'workflow'
       );
-      this.fileKeyToStreamName.set(streamName, stream.name);
+      this.fileKeyToWorkflowName.set(streamName, stream.name);
       if (qualifiedFileKey && qualifiedFileKey !== streamName) {
-        this.fileKeyToStreamName.set(qualifiedFileKey, stream.name);
+        this.fileKeyToWorkflowName.set(qualifiedFileKey, stream.name);
       }
-      if (this.streams.has(stream.name)) {
+      if (this.workflows.has(stream.name)) {
         RuntimeUtil.makeLog(
           'warn',
           `工作流名冲突，后加载覆盖: ${stream.name} ← ${qualifiedFileKey || streamName}`,
-          'AiStreamLoader'
+          'AiWorkflowLoader'
         );
       }
-      this.streams.set(stream.name, stream);
-      this.streamClasses.set(stream.name, StreamClass);
+      this.workflows.set(stream.name, stream);
 
       // 若模块导出 getMcpServers，则记录插件提供的远程 MCP 服务器配置（插件式 MCP）
       if (typeof module.getMcpServers === 'function') {
@@ -163,8 +160,8 @@ class AiStreamLoader {
             if (names.length > 0) {
               RuntimeUtil.makeLog(
                 'info',
-                `检测到 MCP 插件服务器: ${names.join(', ')} (来自 stream: ${stream.name})`,
-                'AiStreamLoader'
+                `检测到 MCP 插件服务器: ${names.join(', ')} (来自 workflow: ${stream.name})`,
+                'AiWorkflowLoader'
               );
               for (const [name, runtimeConfig] of Object.entries(servers)) {
                 if (!name) continue;
@@ -173,12 +170,12 @@ class AiStreamLoader {
             }
           }
         } catch (e) {
-          RuntimeUtil.makeLog('warn', `加载 MCP 插件服务器失败: ${e.message}`, 'AiStreamLoader');
+          RuntimeUtil.makeLog('warn', `加载 MCP 插件服务器失败: ${e.message}`, 'AiWorkflowLoader');
         }
       }
 
       const loadTime = Date.now() - startTime;
-      this.loadStats.streams.push({
+      this.loadStats.workflows.push({
         name: stream.name,
         version: stream.version,
         loadTime,
@@ -187,24 +184,24 @@ class AiStreamLoader {
         mcpTools: stream.mcpTools?.size || 0
       });
 
-      if (getAistreamConfigOptional().global?.debug) {
-        RuntimeUtil.makeLog('debug', `加载工作流: ${stream.name} v${stream.version} (${loadTime}ms)`, 'AiStreamLoader');
+      if (getAiWorkflowConfigOptional().global?.debug) {
+        RuntimeUtil.makeLog('debug', `加载工作流: ${stream.name} v${stream.version} (${loadTime}ms)`, 'AiWorkflowLoader');
       }
     } catch (error) {
-      this.loadStats.failedStreams++;
+      this.loadStats.failedWorkflows++;
       const loadTime = Date.now() - startTime;
       const errorMessage = error.message || String(error);
       const errorStack = error.stack ? `\n${error.stack}` : '';
-      this.loadStats.streams.push({ name: streamName, loadTime, success: false, error: errorMessage });
-      RuntimeUtil.makeLog('error', `工作流加载失败: ${streamName} - ${errorMessage}${errorStack}`, 'AiStreamLoader');
+      this.loadStats.workflows.push({ name: streamName, loadTime, success: false, error: errorMessage });
+      RuntimeUtil.makeLog('error', `工作流加载失败: ${streamName} - ${errorMessage}${errorStack}`, 'AiWorkflowLoader');
     }
   }
 
-  /** 将 aistream.embedding 合并到各工作流 embeddingConfig（无外部向量服务初始化） */
+  /** 将 ai-workflow.embedding 合并到各工作流 embeddingConfig（无外部向量服务初始化） */
   applyEmbeddingConfig(embeddingConfig = null) {
-    const config = embeddingConfig || getAistreamConfigOptional().embedding || {};
+    const config = embeddingConfig || getAiWorkflowConfigOptional().embedding || {};
 
-    for (const stream of this.streams.values()) {
+    for (const stream of this.workflows.values()) {
       if (stream.embeddingConfig?.enabled === false) continue;
       if (config.enabled === false) {
         stream.embeddingConfig = { ...stream.embeddingConfig, enabled: false };
@@ -218,39 +215,39 @@ class AiStreamLoader {
    * 显示加载摘要
    */
   displayLoadSummary() {
-    const successCount = this.streams.size;
-    const failedCount = this.loadStats.failedStreams;
+    const successCount = this.workflows.size;
+    const failedCount = this.loadStats.failedWorkflows;
     const totalTime = (this.loadStats.totalLoadTime / 1000).toFixed(2);
 
     if (failedCount > 0) {
-      RuntimeUtil.makeLog('info', `工作流加载完成: 成功${successCount}个, 失败${failedCount}个, 耗时${totalTime}秒`, 'AiStreamLoader');
+      RuntimeUtil.makeLog('info', `工作流加载完成: 成功${successCount}个, 失败${failedCount}个, 耗时${totalTime}秒`, 'AiWorkflowLoader');
     } else {
-      RuntimeUtil.makeLog('info', `工作流加载完成: ${successCount}个, 耗时${totalTime}秒`, 'AiStreamLoader');
+      RuntimeUtil.makeLog('info', `工作流加载完成: ${successCount}个, 耗时${totalTime}秒`, 'AiWorkflowLoader');
     }
 
     // 列出工作流（仅在debug模式下）
-    if (getAistreamConfigOptional().global?.debug) {
-      this.listStreamsQuiet();
+    if (getAiWorkflowConfigOptional().global?.debug) {
+      this.listWorkflowsQuiet();
     }
   }
 
   /**
    * 安静地列出工作流（简洁版）
    */
-  listStreamsQuiet() {
-    if (this.streams.size === 0) return;
+  listWorkflowsQuiet() {
+    if (this.workflows.size === 0) return;
 
-    RuntimeUtil.makeLog('debug', '工作流列表:', 'AiStreamLoader');
+    RuntimeUtil.makeLog('debug', '工作流列表:', 'AiWorkflowLoader');
     
-    const streams = this.getStreamsByPriority();
-    for (const stream of streams) {
+    const workflows = this.getWorkflowsByPriority();
+    for (const stream of workflows) {
       const status = stream.config.enabled ? '启用' : '禁用';
       const toolCount = stream.mcpTools?.size || 0;
       
       const ragTag = stream.embeddingConfig?.enabled ? ' RAG' : '';
       RuntimeUtil.makeLog('debug',
         `  ${stream.name} v${stream.version} (${toolCount}工具, ${status}${ragTag})`,
-        'AiStreamLoader'
+        'AiWorkflowLoader'
       );
     }
   }
@@ -259,54 +256,49 @@ class AiStreamLoader {
    * 重新加载工作流
    */
   async reload() {
-    RuntimeUtil.makeLog('info', '开始重新加载...', 'AiStreamLoader');
+    RuntimeUtil.makeLog('info', '开始重新加载...', 'AiWorkflowLoader');
     
     // 清理
-    for (const stream of this.streams.values()) {
+    for (const stream of this.workflows.values()) {
       if (typeof stream.cleanup === 'function') {
         await stream.cleanup().catch(() => {});
       }
     }
 
-    this.streams.clear();
-    this.streamClasses.clear();
+    this.workflows.clear();
     this.loaded = false;
     
     // 重新加载
     await this.load();
-    RuntimeUtil.makeLog('success', '重新加载完成', 'AiStreamLoader');
+    RuntimeUtil.makeLog('success', '重新加载完成', 'AiWorkflowLoader');
   }
 
-  getStream(name) {
-    return this.streams.get(name) || null;
+  getWorkflow(name) {
+    return this.workflows.get(name) || null;
   }
 
-  getStreamClass(name) {
-    return this.streamClasses.get(name);
+  getAllWorkflows() {
+    return Array.from(this.workflows.values());
   }
 
-  getAllStreams() {
-    return Array.from(this.streams.values());
+  getEnabledWorkflows() {
+    return this.getAllWorkflows().filter(s => s.config?.enabled !== false);
   }
 
-  getEnabledStreams() {
-    return this.getAllStreams().filter(s => s.config?.enabled !== false);
-  }
-
-  getStreamsByPriority() {
-    return this.getAllStreams().sort((a, b) => (a.priority || 100) - (b.priority || 100));
+  getWorkflowsByPriority() {
+    return this.getAllWorkflows().sort((a, b) => (a.priority || 100) - (b.priority || 100));
   }
 
   /**
    * 获取统计信息
    */
   getStats() {
-    const total = this.streams.size;
-    const enabled = this.getEnabledStreams().length;
-    const totalTools = this.getAllStreams().reduce(
+    const total = this.workflows.size;
+    const enabled = this.getEnabledWorkflows().length;
+    const totalTools = this.getAllWorkflows().reduce(
       (sum, s) => sum + (s.mcpTools?.size || 0), 0
     );
-    const embeddingEnabled = this.getAllStreams().filter(
+    const embeddingEnabled = this.getAllWorkflows().filter(
       s => s.embeddingConfig?.enabled
     ).length;
 
@@ -326,7 +318,7 @@ class AiStreamLoader {
   /**
    * 创建合并工作流（主工作流 + 副工作流，仅合并 mcpTools）
    */
-  mergeStreams(options = {}) {
+  mergeWorkflows(options = {}) {
     const {
       name,
       main,
@@ -336,16 +328,16 @@ class AiStreamLoader {
     } = options;
 
     if (!main || secondary.length === 0) {
-      throw new Error('mergeStreams 需要主工作流和至少一个副工作流');
+      throw new Error('mergeWorkflows 需要主工作流和至少一个副工作流');
     }
 
-    const mainStream = this.getStream(main);
+    const mainStream = this.getWorkflow(main);
     if (!mainStream) {
       throw new Error(`主工作流未找到: ${main}`);
     }
 
     const secondaryStreams = secondary
-      .map(n => this.getStream(n))
+      .map(n => this.getWorkflow(n))
       .filter(Boolean);
 
     if (secondaryStreams.length === 0) {
@@ -354,8 +346,8 @@ class AiStreamLoader {
 
     const mergedName = name || `${main}-merged`;
 
-    if (this.streams.has(mergedName)) {
-      return this.streams.get(mergedName);
+    if (this.workflows.has(mergedName)) {
+      return this.workflows.get(mergedName);
     }
 
     // 构建合并实例：克隆主工作流的原型和核心属性，独立的 mcpTools 集合
@@ -388,35 +380,20 @@ class AiStreamLoader {
       adoptMCPTools(s, false);
     }
 
-    this.streams.set(mergedName, merged);
+    this.workflows.set(mergedName, merged);
     return merged;
-  }
-
-  /**
-   * 为单个工作流注册 MCP 工具（供插件 init 等动态合并后调用）
-   * 跳过合成实例；工具名已含 `.` 前缀时不再二次加 stream.name
-   */
-  registerStreamTools(stream) {
-    if (!this.mcpServer || !stream?.mcpTools?.size) return;
-    if (Array.isArray(stream._mergedStreams) && stream._mergedStreams.length > 0) {
-      RuntimeUtil.makeLog('debug', `跳过合成流 registerStreamTools: ${stream.name}`, 'AiStreamLoader');
-      return;
-    }
-    for (const [toolName, tool] of stream.mcpTools.entries()) {
-      this._registerTool(this.mcpServer, stream, toolName, tool);
-    }
   }
 
   /**
    * 清理所有资源
    */
   async cleanupAll() {
-    RuntimeUtil.makeLog('info', '清理资源...', 'AiStreamLoader');
+    RuntimeUtil.makeLog('info', '清理资源...', 'AiWorkflowLoader');
     
     await this._hotReload?.stop();
     this._hotReload = null;
     
-    for (const stream of this.streams.values()) {
+    for (const stream of this.workflows.values()) {
       if (typeof stream.cleanup === 'function') {
         await stream.cleanup().catch(() => {});
       }
@@ -426,35 +403,33 @@ class AiStreamLoader {
 
     MonitorService.reset();
 
-    this.streams.clear();
-    this.streamClasses.clear();
-    this.fileKeyToStreamName.clear();
+    this.workflows.clear();
+    this.fileKeyToWorkflowName.clear();
     this.loaded = false;
 
-    RuntimeUtil.makeLog('success', '清理完成', 'AiStreamLoader');
+    RuntimeUtil.makeLog('success', '清理完成', 'AiWorkflowLoader');
   }
 
   /**
    * 清理工作流资源（优化：统一清理逻辑）
    * @private
    */
-  async _cleanupStream(streamName) {
-    const stream = this.streams.get(streamName)
+  async _cleanupWorkflow(streamName) {
+    const stream = this.workflows.get(streamName)
     if (stream && typeof stream.cleanup === 'function') {
       await stream.cleanup().catch(() => {})
     }
-    this.streams.delete(streamName)
-    this.streamClasses.delete(streamName)
-    for (const [fileKey, name] of this.fileKeyToStreamName) {
-      if (name === streamName) this.fileKeyToStreamName.delete(fileKey)
+    this.workflows.delete(streamName)
+    for (const [fileKey, name] of this.fileKeyToWorkflowName) {
+      if (name === streamName) this.fileKeyToWorkflowName.delete(fileKey)
     }
   }
 
-  _streamNameForFile(filePath) {
+  _workflowNameForFile(filePath) {
     const fileKey = path.basename(filePath, '.js')
-    const qualified = resolveQualifiedCoreModuleKey(filePath, [], 'stream')
-    return this.fileKeyToStreamName.get(qualified)
-      ?? this.fileKeyToStreamName.get(fileKey)
+    const qualified = resolveQualifiedCoreModuleKey(filePath, [], 'workflow')
+    return this.fileKeyToWorkflowName.get(qualified)
+      ?? this.fileKeyToWorkflowName.get(fileKey)
       ?? fileKey
   }
 
@@ -462,9 +437,9 @@ class AiStreamLoader {
    * 重新加载工作流（优化：统一重载逻辑）
    * @private
    */
-  async _reloadStream(filePath) {
-    await this.loadStreamClass(filePath)
-    this.applyEmbeddingConfig(getAistreamConfigOptional().embedding || {})
+  async _reloadWorkflow(filePath) {
+    await this.loadWorkflowClass(filePath)
+    this.applyEmbeddingConfig(getAiWorkflowConfigOptional().embedding || {})
     await this.initMCP()
   }
 
@@ -482,35 +457,35 @@ class AiStreamLoader {
     if (this._hotReload?.watcher) return;
 
     try {
-      const hotReload = new HotReloadBase({ loggerName: 'AiStreamLoader' });
+      const hotReload = new HotReloadBase({ loggerName: 'AiWorkflowLoader' });
       
-      const streamDirs = await paths.getCoreSubDirs('stream');
+      const streamDirs = await paths.getCoreSubDirs('workflow');
       if (streamDirs.length === 0) return;
 
       const started = await hotReload.watch(true, {
         dirs: streamDirs,
         onAdd: async (filePath) => {
           const streamName = hotReload.getFileKey(filePath);
-          RuntimeUtil.makeLog('debug', `检测到新工作流: ${streamName}`, 'AiStreamLoader');
-          await this._reloadStream(filePath);
+          RuntimeUtil.makeLog('debug', `检测到新工作流: ${streamName}`, 'AiWorkflowLoader');
+          await this._reloadWorkflow(filePath);
         },
         onChange: async (filePath) => {
-          const streamName = this._streamNameForFile(filePath);
-          RuntimeUtil.makeLog('debug', `检测到工作流变更: ${streamName}`, 'AiStreamLoader');
-          await this._cleanupStream(streamName);
-          await this._reloadStream(filePath);
+          const streamName = this._workflowNameForFile(filePath);
+          RuntimeUtil.makeLog('debug', `检测到工作流变更: ${streamName}`, 'AiWorkflowLoader');
+          await this._cleanupWorkflow(streamName);
+          await this._reloadWorkflow(filePath);
         },
         onUnlink: async (filePath) => {
-          const streamName = this._streamNameForFile(filePath);
-          RuntimeUtil.makeLog('debug', `检测到工作流删除: ${streamName}`, 'AiStreamLoader');
-          await this._cleanupStream(streamName);
+          const streamName = this._workflowNameForFile(filePath);
+          RuntimeUtil.makeLog('debug', `检测到工作流删除: ${streamName}`, 'AiWorkflowLoader');
+          await this._cleanupWorkflow(streamName);
           await this.initMCP();
         }
       });
 
       if (started) this._hotReload = hotReload;
     } catch (error) {
-      RuntimeUtil.makeLog('error', '启动工作流文件监视失败', 'AiStreamLoader', error);
+      RuntimeUtil.makeLog('error', '启动工作流文件监视失败', 'AiWorkflowLoader', error);
     }
   }
 
@@ -521,17 +496,16 @@ class AiStreamLoader {
     const fullToolName = stream.name === 'mcp' || alreadyQualified
       ? toolName
       : `${stream.name}.${toolName}`;
-    const loader = this;
     mcpServer.registerTool(fullToolName, {
       description: tool.description || `执行${toolName}操作`,
       inputSchema: tool.inputSchema || {},
       handler: async (args) => {
         const context = {
           get e() {
-            return getStreamRequestContext()?.e ?? args.e ?? loader.currentEvent ?? null;
+            return getWorkflowRequestContext()?.e ?? args.e ?? null;
           },
           get turnState() {
-            return getStreamRequestContext()?.turnState ?? null;
+            return getWorkflowRequestContext()?.turnState ?? null;
           },
           question: null,
           stream
@@ -552,19 +526,19 @@ class AiStreamLoader {
               const ev = context.e;
               if (ev) stream.recordToolCallResult(ev, fullToolName, normalized, args || {});
             } catch (recErr) {
-              RuntimeUtil.makeLog('debug', `recordToolCallResult: ${recErr.message}`, 'AiStreamLoader');
+              RuntimeUtil.makeLog('debug', `recordToolCallResult: ${recErr.message}`, 'AiWorkflowLoader');
             }
           }
           return normalized;
         } catch (error) {
-          RuntimeUtil.makeLog('error', `MCP工具调用失败[${fullToolName}]: ${error.message}`, 'AiStreamLoader');
+          RuntimeUtil.makeLog('error', `MCP工具调用失败[${fullToolName}]: ${error.message}`, 'AiWorkflowLoader');
           const fail = { success: false, error: error.message };
           if (typeof stream.recordToolCallResult === 'function') {
             try {
               const ev = context.e;
               if (ev) stream.recordToolCallResult(ev, fullToolName, fail, args || {});
             } catch (recErr) {
-              RuntimeUtil.makeLog('debug', `recordToolCallResult on error: ${recErr.message}`, 'AiStreamLoader');
+              RuntimeUtil.makeLog('debug', `recordToolCallResult on error: ${recErr.message}`, 'AiWorkflowLoader');
             }
           }
           return fail;
@@ -577,7 +551,7 @@ class AiStreamLoader {
   registerMCP(mcpServer) {
     if (!mcpServer) return;
     const seen = new Set();
-    for (const stream of this.streams.values()) {
+    for (const stream of this.workflows.values()) {
       // 合成实例工具已带二次前缀风险；只从成分流注册，LLM 白名单按成分流名匹配
       if (Array.isArray(stream?._mergedStreams) && stream._mergedStreams.length > 0) continue;
       if (!stream?.mcpTools?.size) continue;
@@ -586,7 +560,10 @@ class AiStreamLoader {
         const full = stream.name === 'mcp' || alreadyQualified
           ? toolName
           : `${stream.name}.${toolName}`;
-        if (seen.has(full)) continue;
+        if (seen.has(full)) {
+          RuntimeUtil.makeLog('warn', `MCP 工具名冲突已跳过: ${full}`, 'AiWorkflowLoader');
+          continue;
+        }
         if (this._registerTool(mcpServer, stream, toolName, tool)) seen.add(full);
       }
     }
@@ -597,7 +574,7 @@ class AiStreamLoader {
    * 初始化MCP服务（如果配置启用）
    */
   async initMCP() {
-    const mcpConfig = getAistreamConfigOptional().mcp || {};
+    const mcpConfig = getAiWorkflowConfigOptional().mcp || {};
     if (mcpConfig.enabled === false) return;
 
     if (!this.mcpServer) {
@@ -627,7 +604,7 @@ class AiStreamLoader {
       if (localCount > 0) parts.push(`本地${localCount}个`);
       if (remoteCount > 0) parts.push(`远程${remoteCount}个`);
       const detail = parts.length > 0 ? `: ${parts.join(', ')}` : '';
-      RuntimeUtil.makeLog('info', `MCP服务已挂载${detail}, 共${totalCount}个工具`, 'AiStreamLoader');
+      RuntimeUtil.makeLog('info', `MCP服务已挂载${detail}, 共${totalCount}个工具`, 'AiWorkflowLoader');
     }
   }
 
@@ -645,6 +622,6 @@ class AiStreamLoader {
   }
 }
 
-const aiStreamLoader = new AiStreamLoader();
-setAiStreamHost(aiStreamLoader);
-export default aiStreamLoader;
+const aiWorkflowLoader = new AiWorkflowLoader();
+setAiWorkflowHost(aiWorkflowLoader);
+export default aiWorkflowLoader;

@@ -11,7 +11,7 @@ description: 当你需要理解 XRK-AGT 的运行时核心（AgentRuntime 主类
 ## 关键职责
 
 - 启动 HTTP/HTTPS/WebSocket 服务器，以及基础中间件（压缩、安全头、CORS、日志、基础认证等）。
-- 初始化加载器：TaskerLoader / HttpApiLoader / AiStreamLoader / PluginLoader。
+- 初始化加载器：TaskerLoader / HttpApiLoader / AiWorkflowLoader / PluginLoader。
 - 维护运行时 `AgentRuntime`（Proxy）：`AgentRuntime[self_id]`、`AgentRuntime.tasker` / `AgentRuntime.wsf` / `AgentRuntime.uin` / `AgentRuntime.em()` / `AgentRuntime.makeLog()`。
 
 ## 全局写法（业务 `core/`）

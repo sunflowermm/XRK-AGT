@@ -32,18 +32,18 @@ describe('加载器集成（system-Core 基准）', () => {
     assert.ok(PluginLoader.pluginCount >= SYSTEM_CORE_BASELINE.plugin);
   });
 
-  it(`AiStreamLoader 加载全部 ${SYSTEM_CORE_BASELINE.stream} 个 system-Core 工作流`, async () => {
+  it(`AiWorkflowLoader 加载全部 ${SYSTEM_CORE_BASELINE.workflow} 个 system-Core 工作流`, async () => {
     const basenames = systemCoreStreamBasenames();
-    assert.equal(basenames.length, SYSTEM_CORE_BASELINE.stream);
-    const { default: AiStreamLoader } = await import('../../src/infrastructure/ai-workflow/loader.js');
-    await AiStreamLoader.load(true);
-    const loaded = new Set(AiStreamLoader.streams.keys());
+    assert.equal(basenames.length, SYSTEM_CORE_BASELINE.workflow);
+    const { default: AiWorkflowLoader } = await import('../../src/infrastructure/ai-workflow/loader.js');
+    await AiWorkflowLoader.load(true);
+    const loaded = new Set(AiWorkflowLoader.workflows.keys());
     for (const name of basenames) {
       assert.ok(loaded.has(name), `缺少工作流: ${name}`);
     }
     assert.ok(
-      AiStreamLoader.getStats().total >= SYSTEM_CORE_BASELINE.stream,
-      `已加载工作流总数 ${AiStreamLoader.getStats().total}`,
+      AiWorkflowLoader.getStats().total >= SYSTEM_CORE_BASELINE.workflow,
+      `已加载工作流总数 ${AiWorkflowLoader.getStats().total}`,
     );
   });
 });

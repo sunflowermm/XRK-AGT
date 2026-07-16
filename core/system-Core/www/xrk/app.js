@@ -1097,7 +1097,7 @@ class App {
   _isLlmRelatedConfigName(name = '', child = '') {
     const n = String(name || '');
     const c = String(child || '');
-    return n.endsWith('_llm') || c.endsWith('_llm') || n === 'aistream' || c === 'aistream';
+    return n.endsWith('_llm') || c.endsWith('_llm') || n === 'ai-workflow' || c === 'ai-workflow';
   }
   
   _unbindChatEvents() {
@@ -2385,7 +2385,7 @@ class App {
         finalMessages.unshift({ role: 'system', content: mermaidRules });
       }
 
-      // 如果用户选择了provider，使用用户选择的；否则不传model，让后端使用aistream.yaml配置的默认Provider
+      // 如果用户选择了provider，使用用户选择的；否则不传model，让后端使用ai-workflow.yaml配置的默认Provider
       const requestBody = {
         messages: finalMessages,
         stream: true,

@@ -104,7 +104,7 @@ import { getRedis } from '#infrastructure/database/index.js'
 
 ```javascript
 import getDatabaseManager from '#infrastructure/database/index.js'
-const { redis: ok } = await getDatabaseManager().getHealthStatus()
+const redisOk = await getDatabaseManager().checkRedis()
 ```
 
 ---

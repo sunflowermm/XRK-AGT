@@ -58,7 +58,7 @@
 
 - **CommonConfigRegistry**：监视器回调用 **`reloadFile(绝对路径)`**，勿仅用 basename 调 `reload(name)`（多 Core 同名 schema 会歧义）。
 - **PluginLoader**：`changePlugin(key, filePath)` 优先用监视器路径；`createTask()` 对 cron 指纹 `_taskScheduleKey` 去重，插件热更但 schedule 未变时不重建全部定时任务。
-- **HttpApiLoader / AiStreamLoader**：`onChange` 应基于监视器报告的 `filePath` 重载（Api 实例已缓存 `filePath` 时等价）。
+- **HttpApiLoader / AiWorkflowLoader**：`onChange` 应基于监视器报告的 `filePath` 重载（Api 实例已缓存 `filePath` 时等价）。
 - **AgentRuntime.run watchSetup**：统一启动 Config / Stream / Plugins / **Api** 四监视器（Api 不再挂到 listener 阶段）。
 - **runtimeConfig（`config.js`）**：单文件 `files` 模式 + `shouldHandle: () => true`；YAML 原子写入同样受 hash / unlink 延迟保护。
 - **加载顺序**：`CommonConfigRegistry.load` → 挂载 `CommonConfigRegistry` → 再并行 Stream / Plugins / Api（避免插件 init 读不到配置）。

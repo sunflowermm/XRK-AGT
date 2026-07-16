@@ -1,0 +1,211 @@
+# ============================================
+# AI 工作流配置（随端口变化）
+# ============================================
+# 每个 HTTP 端口独立一份。控制工作流开关、LLM/ASR/TTS 厂商、MCP、子服务端等。
+# 位置：data/server_bots/{port}/ai-workflow.yaml
+# 包含：工作流开关与目录、全局超时、缓存、LLM/ASR/TTS 厂商选择、MCP、Python 子服务端。
+
+# ----------------------------------------
+# 工作流系统
+# ----------------------------------------
+enabled: true
+
+# ----------------------------------------
+# 工作流全局
+# ----------------------------------------
+global:
+  debug: false
+
+# ----------------------------------------
+# LLM 厂商
+# ----------------------------------------
+# 填写各工厂 providers[] 条目的 key（先在 data/server_bots/{port}/*_llm.yaml 配置端点）
+llm:
+  Provider: ""
+  timeout: 360000      # 请求超时（毫秒）
+  retry:
+    enabled: true
+    maxAttempts: 3
+    delay: 2000        # 重试间隔（毫秒）
+    retryOn: ["timeout", "network", "5xx"]
+  # Provider 提示缓存：提高前缀命中率、降低 input token 费用（OpenAI / Anthropic / DeepSeek 等）
+  promptCache:
+    enabled: true
+    keyPrefix: xrk
+    retention: in-memory
+    anthropicCache: true
+    scopeInKey: true
+
+# ----------------------------------------
+# ASR 厂商
+# ----------------------------------------
+# 详细配置见 data/server_bots/{port}/volcengine_asr.yaml
+asr:
+  Provider: volcengine
+
+# ----------------------------------------
+# TTS 厂商
+# ----------------------------------------
+# 详细配置见 data/server_bots/{port}/volcengine_tts.yaml。onlyForASR：true 表示仅 ASR 触发时才 TTS
+tts:
+  Provider: volcengine
+  onlyForASR: true
+
+# ----------------------------------------
+# MCP 服务
+# ----------------------------------------
+# Model Context Protocol：工具调用与跨平台集成。remote 可桥接外部 MCP（stdio/HTTP/SSE/WebSocket）。
+mcp:
+  enabled: true
+  remote:
+    enabled: false
+    # 用户自增远程 MCP（数组模式）。开放域检索内置 web.web_search（parallel-free 零配置）
+    mcpServers: []
+  # 留空=内置默认（tools + web）；显式填写则覆盖内置
+  defaultWorkflows: []
+  defaultRemoteMcp: []
+  toolMergeStrategy: preferRequest  # 工具合并策略：preferRequest | preferStream | merge
+
+# Agent 文件工作区（tools / desktop MCP 的 cwd，以及控制台工作区预设）
+workspace:
+  defaultId: default       # data/ai-workspace/{id}；控制台默认选中
+  audit:
+    enabled: true
+    maxEntries: 200
+
+# Agent 工作区上下文（data/ai-workspace/{id} 内 AGENTS/SOUL/USER/memory + 项目 rules/skills → system prompt）
+# 根目录 AGENTS.md 仅 IDE；agents/workspace/ 仅为首次引导模板，运行时不从项目根注入
+agentWorkspace:
+  enabled: true
+  root: ""                 # 留空=data/ai-workspace/{workspace.defaultId}；请求 workspace 会覆盖
+  # 留空=全部；否则仅注入列出的入口：工作流 name（chat/web/desktop/tools…）+ v3（POST /api/v3/chat/completions）
+  workflows: []
+  includeRules: true
+  includeAgentMd: true
+  includeSubagents: true
+  includeDiagnostics: false   # true 时在缺失 MEMORY.md 时追加简短诊断提示
+  # 0 = 不限制 prose 总长；Skills 仍受 maxSkillsPromptChars 约束
+  maxTotalChars: 0
+  maxDiagnosticsChars: 2000   # 诊断提示最大字符
+  contextFiles: []         # 额外注入的 Markdown 路径（相对工作区根）
+  # Skills 预算与目录结构（formatSkillsForPrompt）
+  maxCandidatesPerRoot: 300
+  maxSkillsLoadedPerSource: 200
+  maxSkillsInPrompt: 150
+  maxSkillsPromptChars: 30000
+  maxSkillFileBytes: 256000
+  customSkillRoots:
+    - "skills/standard/core"  # Agent 基础：agent-core / agent-tools / agent-search / agent-memory / answer-format
+    - "skills/standard"       # 办公扩展：office-*（docx/xlsx/pdf 等走 skills+tools.run，不依赖 desktop doc MCP）
+  # 另自动合并 data/ai-workspace/{id}/skills（种子自 standard，缺啥补啥不覆盖）
+  maxRulesChars: 12000
+  maxAgentMdChars: 12000
+
+# RAG / 记忆增强（AiWorkflowLoader.applyEmbeddingConfig 合并到各工作流 embeddingConfig）
+embedding:
+  enabled: true
+  maxContexts: 5
+
+# crawl：web_fetch / web_search / browser（browser 启动参数另合并 renderer/playwright）
+crawl:
+  webFetch:
+    timeoutSeconds: 30
+    cacheTtlMinutes: 15
+    maxChars: 50000
+    maxResponseBytes: 2000000
+    maxRedirects: 3
+    pinDns: true
+    readabilityEnabled: true
+    userAgent: ""
+    firecrawlApiKey: ""
+    firecrawlBaseUrl: "https://api.firecrawl.dev"
+    firecrawlEnabled: false
+  webSearch:
+    enabled: true
+    provider: ""
+    timeoutSeconds: 20
+    cacheTtlMinutes: 15
+    region: ""
+    safeSearch: moderate
+    country: ""
+    parallelFree:
+      url: "https://search.parallel.ai/mcp"
+    brave:
+      apiKey: ""
+      baseUrl: ""
+    perplexity:
+      apiKey: ""
+      openRouterApiKey: ""
+      baseUrl: ""
+      model: ""
+    exa:
+      apiKey: ""
+      baseUrl: ""
+    tavily:
+      apiKey: ""
+      baseUrl: ""
+    parallel:
+      apiKey: ""
+      baseUrl: ""
+    gemini:
+      apiKey: ""
+      baseUrl: ""
+      model: ""
+    kimi:
+      apiKey: ""
+      baseUrl: ""
+      model: ""
+    minimax:
+      apiKey: ""
+      baseUrl: ""
+      region: ""
+      apiHost: ""
+    firecrawl:
+      apiKey: ""
+      baseUrl: ""
+    searxng:
+      baseUrl: ""
+      categories: ""
+      language: ""
+    ollama:
+      baseUrl: "http://127.0.0.1:11434"
+      apiKey: ""
+      cloudApiKey: ""
+  browser:
+    browserType: chromium
+    headless: true
+    wsEndpoint: ""
+    executablePath: ""
+    launchTimeoutMs: 120000
+    navigationTimeoutMs: 60000
+    maxTextChars: 50000
+    screenshotMaxBytes: 4194304
+    screenshotFontDir: ""
+    screenshotFontUrlBase: ""
+    screenshotFontFiles: []
+    ssrfPolicy:
+      allowPrivateNetwork: false
+      dangerouslyAllowPrivateNetwork: false
+
+# 工具子系统（与 system.js ai-workflow.schema.fields.tools 一一对应）
+tools:
+  # tools 工作流：文件/命令工作区（core/system-Core/workflow/tools.js）
+  file:
+    workspace: ""              # 空=data/ai-workspace/{workspace.defaultId}；agent:xxx；project；~/；绝对/相对路径
+    maxReadChars: 500000       # read 返回正文最大字符，超出截断并标注
+    grepMaxResults: 100
+    runEnabled: false            # 默认关闭 shell run；开启后 loopback 也强制 API Key
+    runTimeoutMs: 120000
+    maxCommandOutputChars: 200000
+
+# 多语言子服务端（CommonConfig → AiWorkflow → 子服务端）
+subserver:
+  default: pyserver
+  timeout: 30000
+  runtimes:
+    pyserver:  { enabled: true, host: "127.0.0.1", port: 8000 }
+    goserver:  { enabled: true, host: "127.0.0.1", port: 8001 }
+    phpserver: { enabled: true, host: "127.0.0.1", port: 8002 }
+    jserver:   { enabled: true, host: "127.0.0.1", port: 8003 }
+    netserver: { enabled: true, host: "127.0.0.1", port: 8004 }
+    rustserver: { enabled: true, host: "127.0.0.1", port: 8005 }

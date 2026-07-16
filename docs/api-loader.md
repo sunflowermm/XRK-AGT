@@ -329,10 +329,10 @@ export default {
 
 ### 与工作流系统集成
 
-API可以通过 `AiStreamLoader` 调用工作流系统：
+API可以通过 `AiWorkflowLoader` 调用工作流系统：
 
 ```javascript
-import AiStreamLoader from '#infrastructure/ai-workflow/loader.js';
+import AiWorkflowLoader from '#infrastructure/ai-workflow/loader.js';
 
 export default {
   name: 'ai-api',
@@ -341,7 +341,7 @@ export default {
       method: 'POST',
       path: '/api/ai/chat', // 自定义 Core 示例路径；内置 AI 见 ai.js（/api/v3/chat/completions 等）
       handler: async (req, res, bot) => {
-        const stream = AiStreamLoader.getStream('chat');
+        const stream = AiWorkflowLoader.getWorkflow('chat');
         if (!stream) {
           return res.status(404).json({ success: false, message: '工作流未找到' });
         }

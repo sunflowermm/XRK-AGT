@@ -47,8 +47,8 @@ function listFilesRecursive(dir, predicate) {
   return out;
 }
 
-function sliceWorkspaceCfg(aistreamCfg) {
-  return aistreamCfg?.agentWorkspace ?? {};
+function sliceWorkspaceCfg(aiWorkflowCfg) {
+  return aiWorkflowCfg?.agentWorkspace ?? {};
 }
 
 function truncate(text, max, label) {
@@ -139,7 +139,7 @@ export async function buildAgentWorkspaceSection(agentWorkspaceCfg = {}, streamN
   const runtimeConfig = {
     enabled: true,
     root: '',
-    streams: null,
+    workflows: null,
     includeRules: true,
     includeAgentMd: true,
     includeSubagents: true,
@@ -160,8 +160,8 @@ export async function buildAgentWorkspaceSection(agentWorkspaceCfg = {}, streamN
 
   if (runtimeConfig.enabled === false) return '';
 
-  if (Array.isArray(runtimeConfig.streams) && runtimeConfig.streams.length > 0 && streamName) {
-    if (!runtimeConfig.streams.includes(streamName)) return '';
+  if (Array.isArray(runtimeConfig.workflows) && runtimeConfig.workflows.length > 0 && streamName) {
+    if (!runtimeConfig.workflows.includes(streamName)) return '';
   }
 
   let workspaceRoot;
@@ -279,16 +279,16 @@ export async function buildAgentWorkspaceSection(agentWorkspaceCfg = {}, streamN
   return `\n\n---\n\n# Workspace context\n\n${parts.join('\n\n')}\n`;
 }
 
-export async function appendAgentWorkspaceToPrompt(basePrompt, aistreamCfg = {}, streamName = '') {
+export async function appendAgentWorkspaceToPrompt(basePrompt, aiWorkflowCfg = {}, streamName = '') {
   if (basePrompt == null) return basePrompt;
-  const extra = await buildAgentWorkspaceSection(sliceWorkspaceCfg(aistreamCfg), streamName);
+  const extra = await buildAgentWorkspaceSection(sliceWorkspaceCfg(aiWorkflowCfg), streamName);
   if (!extra) return String(basePrompt);
   return `${basePrompt}${extra}`;
 }
 
-export async function mergeAgentWorkspaceIntoMessages(messages, aistreamCfg = {}, streamName = '') {
+export async function mergeAgentWorkspaceIntoMessages(messages, aiWorkflowCfg = {}, streamName = '') {
   if (!Array.isArray(messages)) return messages;
-  const extra = await buildAgentWorkspaceSection(sliceWorkspaceCfg(aistreamCfg), streamName);
+  const extra = await buildAgentWorkspaceSection(sliceWorkspaceCfg(aiWorkflowCfg), streamName);
   if (!extra) return messages;
   const first = messages[0];
   if (first?.role === 'system' && typeof first.content === 'string') {

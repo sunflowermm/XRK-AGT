@@ -1,5 +1,5 @@
 import RuntimeUtil from '#utils/runtime-util.js';
-import { getAistreamConfigOptional } from '#utils/aistream-config.js';
+import { getAiWorkflowConfigOptional } from '#utils/ai-workflow-config.js';
 import { pickTrimmed } from '#utils/coerce-pick.js';
 
 /**
@@ -26,7 +26,7 @@ export function buildPromptCacheKey(parts = {}) {
 }
 
 function getGlobalPromptCacheCfg() {
-  return getAistreamConfigOptional().llm?.promptCache ?? {};
+  return getAiWorkflowConfigOptional().llm?.promptCache ?? {};
 }
 
 export function isPromptCacheEnabled(resolvedConfig = {}) {

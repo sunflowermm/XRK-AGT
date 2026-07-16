@@ -7,7 +7,7 @@
 | 职责 | 位置 |
 |------|------|
 | **编辑**（控制台） | 主服 `CommonConfigRegistry`：`core/*/commonconfig/` + `subserver/*/apis/*/core/commonconfig/` |
-| **子服连接 host/port** | 主服 `aistream.yaml` → `runtimeConfig.subserver`（系统配置 → AiWorkflow → 子服务端） |
+| **子服连接 host/port** | 主服 `ai-workflow.yaml` → `runtimeConfig.subserver`（系统配置 → AiWorkflow → 子服务端） |
 | **读取** | 子服 `load_plugin_config` → `data/<group>/config.yaml`（**只读**，不写 HTTP 配置 API） |
 
 详见 [docs/subserver-commonconfig.md](../docs/subserver-commonconfig.md)。
@@ -40,7 +40,7 @@
 | `apis/<group>/` | 业务插件（Python/Go/… 的 `service` 入口） |
 | `apis/<group>/core/` | **主服 Core 扩展**（`commonconfig/`、`plugin/`、`http/` 等，与 `core/system-Core` 同结构） |
 
-主服扫描 `subserver/<runtime>/apis/<group>/core/{commonconfig,plugin,...}`。**配置全在主服 CommonConfig 编辑**；业务 yaml 在 `data/<group>/`；子服 host/port 在 `aistream.yaml` → `runtimeConfig.subserver`。见 [docs/subserver-commonconfig.md](../docs/subserver-commonconfig.md)。
+主服扫描 `subserver/<runtime>/apis/<group>/core/{commonconfig,plugin,...}`。**配置全在主服 CommonConfig 编辑**；业务 yaml 在 `data/<group>/`；子服 host/port 在 `ai-workflow.yaml` → `runtimeConfig.subserver`。见 [docs/subserver-commonconfig.md](../docs/subserver-commonconfig.md)。
 
 新建插件：复制 `pyserver/apis/media-tools` 或本地 `jmcomic`；开发指南 [docs/subserver-plugin-development.md](../docs/subserver-plugin-development.md)。
 

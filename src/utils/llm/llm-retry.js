@@ -1,8 +1,8 @@
 import RuntimeUtil from '#utils/runtime-util.js';
-import { getAistreamConfigOptional } from '#utils/aistream-config.js';
+import { getAiWorkflowConfigOptional } from '#utils/ai-workflow-config.js';
 
 function getLlmRetryConfig() {
-  const llm = getAistreamConfigOptional().llm || {};
+  const llm = getAiWorkflowConfigOptional().llm || {};
   const retryConfig = llm.retry || {};
   return {
     enabled: retryConfig.enabled !== false,
