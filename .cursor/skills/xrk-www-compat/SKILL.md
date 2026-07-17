@@ -60,8 +60,9 @@ const { webVersion } = json.data; // 对象拍平后 data 常为 undefined
 
 ## www 放码与挂载
 
-- 路径：`core/<core>/www/<应用名>/`（**必须**子目录；`shared` 为 system-Core 共享名，勿被其它 Core 抢占 `/shared`）
-- 同名子目录先挂载者占用；冲突打 warn 并跳过
+- 路径：`core/<core>/www/<应用名>/`（**必须**子目录）
+- **`/shared`**：仅 `system-Core/www/shared`（框架 compat）；产品 Core **勿**再用目录名 `shared`（例：lsy 用 `www/lsy-shared` → `/lsy-shared`）
+- 同名根路径：先挂载者占用，后者 warn 跳过
 - 含 `sign.json` 的子目录跳过根路径静态挂载（前端自建构建产物约定）
 - 保留段不可作应用名：`api`、`core`、`media`、`uploads`、`File`
 

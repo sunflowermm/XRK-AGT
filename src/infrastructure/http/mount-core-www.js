@@ -4,7 +4,7 @@
  * 规则（与 skill `xrk-www-compat` / `docs/app-dev.md` 一致）：
  * - 每个 Core：`core/<名>/www` → 额外挂 `/core/<名>`（整棵 www）
  * - www 下每个**子目录** → `/<子目录名>`（如 `www/xrk`→`/xrk`，`www/shared`→`/shared`）
- * - 同名 `/<子目录>` 先挂载者占用，后者 warn 跳过（勿让产品 Core 抢 `shared`）
+ * - 同名 `/<子目录>` 先挂载者占用，后者 warn 跳过（`/shared` 留给 system-Core；产品勿用此名）
  * - 子目录含 `sign.json`：跳过根路径静态挂载（自建前端构建约定）
  * - 保留段不可作应用名：见 RESERVED_ROOT_SEGMENTS
  */
