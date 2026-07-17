@@ -12,9 +12,9 @@ description: 编写或审查 core/src 代码时的写法与性能规范（全局
 
 ## 30 秒记忆
 
-1. 业务 **`core/`** — 裸名 `AgentRuntime`/`msgSegment`，勿 `global.`；HTTP 用 `req.agentRuntime` + `HttpResponse`
+1. 业务 **`core/`** — 裸名 `AgentRuntime`/`msgSegment`，勿 `global.`；HTTP 用 `req.agentRuntime` + `HttpResponse`（`success` 对象拍平约定见 skill **`xrk-http-api`**）
 2. **类字段**存 Map/缓存，constructor 只 `super()` + 固定配置
-3. 热路径 **`fs/promises`**，批加载 **`forEachBatch`**，出站 **`fetch` + `AbortSignal.timeout`**
+3. 热路径 **`fs/promises`**，批加载 **`forEachBatch`**，出站 **`fetch` + `AbortSignal.timeout`**（**服务端**；浏览器 Core www 用 `/shared/xrk-web-compat.js` 的 `abortTimeout`，见 **`xrk-app-dev`**）
 4. 错误 **`normalizeError`**，Shell **`#utils/exec-async.js`**
 5. 有 `package.json` 的子 Core **不用 `#` 别名**
 

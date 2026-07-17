@@ -3,7 +3,7 @@
  * 由 renderHome → _applyHomeData / _loadHomeDataAndUpdate 驱动
  */
 
-import { escapeHtml } from '../utils.js';
+import { escapeHtml, abortTimeout } from '../utils.js';
 import { setUpdating, clearUpdating } from '../dom.js';
 
 function hashStr(s) {
@@ -123,7 +123,7 @@ export async function loadPluginsInfoPanel(app) {
   try {
     const res = await fetch(`${app.serverUrl}/api/plugins/summary`, {
       headers: app.getHeaders(),
-      signal: AbortSignal.timeout(5000)
+      signal: abortTimeout(5000)
     });
 
     if (!res.ok) {

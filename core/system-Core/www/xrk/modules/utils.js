@@ -3,6 +3,13 @@
  * 提供格式化、转义、剪贴板等通用工具函数
  */
 
+export {
+  randomId,
+  unwrapSuccess,
+  abortTimeout,
+  deepClone
+} from '/shared/xrk-web-compat.js';
+
 /**
  * 格式化字节大小
  * @param {number} bytes - 字节数
@@ -115,7 +122,7 @@ export async function copyToClipboard(text) {
 }
 
 /**
- * 深度克隆值
+ * 深度克隆值（Date/RegExp 友好；纯 JSON 场景可优先用 deepClone）
  * @param {any} value - 要克隆的值
  * @returns {any} 克隆后的值
  */
@@ -128,7 +135,7 @@ export function cloneValue(value) {
 
   const cloned = {};
   for (const key in value) {
-    if (value.hasOwnProperty(key)) {
+    if (Object.hasOwn(value, key)) {
       cloned[key] = cloneValue(value[key]);
     }
   }

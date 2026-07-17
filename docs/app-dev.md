@@ -271,6 +271,12 @@ export default {
 
 **访问路径**：`/<目录名>`（如 `/xrk`，具体端口由启动配置决定）
 
+### Core www 浏览器兼容（`/shared`）
+
+浏览器页 **不等于** Node ≥26。校园 WebView / 非 HTTPS 下 `crypto.randomUUID`、`AbortSignal.timeout`、`structuredClone` 可能缺失；`HttpResponse.success` 对普通对象拍平字段，前端勿默认读 `json.data`。
+
+共享模块：`core/system-Core/www/shared/xrk-web-compat.js` → **`/shared/xrk-web-compat.js`**（`randomId` / `unwrapSuccess` / `abortTimeout` / `deepClone`）。控制台经 `www/xrk/modules/utils.js` 再导出。见 skill **`xrk-app-dev`**、**`xrk-http-api`**。
+
 | 页面 | 实拍 |
 |------|------|
 | 系统概览 | ![概览](../resources/mdimg/showcase/console-home-11451.png) |

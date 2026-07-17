@@ -32,8 +32,16 @@ alwaysApply: true
 
 - **导入**：`import { HttpResponse } from '#utils/http-utils.js'`（文件名是 http-utils，不是 http-response）。
 - **用途**：统一 HTTP 响应格式与错误处理；`core/*/http/*.js` 的 handler 应优先使用。
+- **`success` 响应形状（底层定义，前端必遵）**：
+  - `HttpResponse.success(res, data, message)` → 始终含 `success: true` 与 `message`。
+  - **普通对象**（非数组）：字段 **拍平到顶层**（`Object.assign`），**没有**统一的 `data` 包裹。  
+    例：`success(res, { assessments, webVersion })` → `{ success, message, assessments, webVersion }`。
+  - **数组 / 标量 / null**：放在 `data` 字段。  
+    例：`success(res, list)` → `{ success, message, data: list }`；`success(res, null, 'ok')` → 仅 `success`+`message`。
+  - 若业务就要一个叫 `data` 的字段：显式 `success(res, { data: payload })`，拍平后顶层仍有 `data`。
+  - **前端禁止**默认 `return json.data` 再读字段（会得到 `undefined.xxx`）。正确做法：有 `json.data` 用它，否则去掉 `success`/`message` 后的剩余字段；或直接读顶层字段（如 `json.configs`）。ESM 页优先 `import { unwrapSuccess } from '/shared/xrk-web-compat.js'`（`core/system-Core/www/shared/`；WebView 兼容另见 skill `xrk-app-dev`）。
 - **常用静态方法**：
-  - `HttpResponse.success(res, data, message)`：成功；
+  - `HttpResponse.success(res, data, message)`：成功（形状见上）；
   - `HttpResponse.error(res, error, statusCode, context)`：统一错误与日志；
   - `HttpResponse.validationError(res, message, code)`：400；
   - `HttpResponse.notFound(res, message)`、`HttpResponse.unauthorized(res, message)`、`HttpResponse.forbidden(res, message)`；

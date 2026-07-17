@@ -388,7 +388,13 @@ handler: async (req, res, bot) => {
 
 ### 2. 响应格式：统一用 HttpResponse
 
-- **成功**：`HttpResponse.success(res, data, message)`，会输出 `{ success: true, message, ...data }`。
+- **成功**：`HttpResponse.success(res, data, message)`：
+  - 始终：`{ success: true, message }`。
+  - **普通对象**（非数组）：字段**拍平到顶层** → `{ success, message, ...data }`（**没有**统一外层 `data`）。
+  - **数组 / 标量**：→ `{ success, message, data: <值> }`。
+  - **`null`**：仅 `success` + `message`。
+  - 业务需要顶层 `data` 字段时：显式 `success(res, { data: payload })`。
+  - **前端**：勿默认 `json.data` 再读字段；有 `data` 用 `data`，否则读顶层业务字段，或解包去掉 `success`/`message` 的剩余对象。反例：psyche 曾 `return json.data` 后读 `webVersion` → `undefined.webVersion`。ESM 页优先 `import { unwrapSuccess } from '/shared/xrk-web-compat.js'`（`core/system-Core/www/shared/`）。
 - **原样 JSON**（兼容端点）：`HttpResponse.json(res, body)`，不包 `success` 外壳（如 `/api/stdin/command`）。
 - **错误**：`HttpResponse.error(res, error, statusCode, context)`、`HttpResponse.validationError(res, message)`、`HttpResponse.notFound(res, message)`、`HttpResponse.forbidden(res, message)` 等，格式统一为 `{ success: false, message, code }`。
 - **避免**在 handler 里直接 `res.status(200).json({ ... })` 或手写错误 JSON，以便日志与前端解析一致。

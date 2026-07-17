@@ -11,6 +11,12 @@ export class HttpResponse {
    * @param {*} data - 响应数据
    * @param {string} message - 响应消息
    * @returns {Object} Express响应
+   *
+   * 形状（底层约定）：
+   * - 普通对象：拍平到顶层 `{ success, message, ...data }`（无外层 data）
+   * - 数组/标量：`{ success, message, data }`
+   * - null：仅 `{ success, message }`
+   * 前端勿默认只读 json.data；见 skill xrk-http-api / docs/http-api.md
    */
   static success(res, data = null, message = '操作成功') {
     const response = { success: true, message }

@@ -38,6 +38,7 @@ const SUITES = {
     'runtime-polish.test.mjs',
     'runtime-net.test.mjs',
     'www-xrk.test.mjs',
+    'www-web-compat.test.mjs',
     'http-api-structure.test.mjs',
   ],
   integration: ['loaders-integration.test.mjs'],

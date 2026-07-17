@@ -7,6 +7,8 @@ import {
   escapeSelector,
   copyToClipboard as copyTextToClipboard,
   cloneValue,
+  deepClone,
+  abortTimeout,
   isSameValue,
   formatKeyValueLines,
   parseKeyValueLines,
@@ -549,7 +551,7 @@ class App {
     try {
       const res = await fetch(`${this.serverUrl}/api/status`, {
         headers: this.getHeaders(),
-        signal: AbortSignal.timeout(5000)
+        signal: abortTimeout(5000)
       });
       
       const status = $('#connectionStatus');
@@ -829,7 +831,7 @@ class App {
       try {
       const res = await fetch(`${this.serverUrl}/api/system/overview?withHistory=1`, {
         headers: this.getHeaders(),
-        signal: AbortSignal.timeout(10000)
+        signal: abortTimeout(10000)
       });
       
       if (!res.ok) {
@@ -1322,7 +1324,7 @@ class App {
 
   _summarizeToolResultText(payload) {
     if (payload == null || payload === '') return '';
-    const clone = typeof payload === 'object' ? structuredClone(payload) : this._parseToolResultPayload(payload);
+    const clone = typeof payload === 'object' ? deepClone(payload) : this._parseToolResultPayload(payload);
     if (!clone || typeof clone !== 'object') {
       return typeof payload === 'string' ? payload : String(payload);
     }
