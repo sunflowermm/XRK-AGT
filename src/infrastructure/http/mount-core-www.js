@@ -1,5 +1,12 @@
 /**
  * 挂载各 Core 的 www 静态目录（从 AgentRuntime 内聚逻辑抽出，便于单测与复用）
+ *
+ * 规则（与 skill `xrk-www-compat` / `docs/app-dev.md` 一致）：
+ * - 每个 Core：`core/<名>/www` → 额外挂 `/core/<名>`（整棵 www）
+ * - www 下每个**子目录** → `/<子目录名>`（如 `www/xrk`→`/xrk`，`www/shared`→`/shared`）
+ * - 同名 `/<子目录>` 先挂载者占用，后者 warn 跳过（勿让产品 Core 抢 `shared`）
+ * - 子目录含 `sign.json`：跳过根路径静态挂载（自建前端构建约定）
+ * - 保留段不可作应用名：见 RESERVED_ROOT_SEGMENTS
  */
 import path from 'node:path';
 import fsSync from 'node:fs';
@@ -8,12 +15,13 @@ import RuntimeUtil from '#utils/runtime-util.js';
 import paths from '#utils/paths.js';
 import { statDirs, statFiles } from '#utils/core-fs.js';
 
+/** 根路径保留段：不可被 Core www 子目录占用 */
 const RESERVED_ROOT_SEGMENTS = ['api', 'core', 'media', 'uploads', 'File'];
 
 /**
  * @param {import('express').Application} app
  * @param {object} staticOptions express.static 选项
- * @returns {Promise<Set<string>>} 已挂载路径
+ * @returns {Promise<Set<string>>} 已挂载路径（含 `/core/<名>` 与 `/<app>`）
  */
 export async function mountCoreWwwStatic(app, staticOptions = {}) {
   const coreDirs = await paths.getCoreDirs();
@@ -46,7 +54,7 @@ export async function mountCoreWwwStatic(app, staticOptions = {}) {
       for (let di = 0; di < dirEntries.length; di++) {
         const entry = dirEntries[di];
         const subDirName = entry.name;
-        const subDirPath = path.join(wwwDir, subDirName);
+        const subDirPath = path.join(wwwDir, entry.name);
         const mountPath = `/${subDirName}`;
 
         if (signExists[di]) {

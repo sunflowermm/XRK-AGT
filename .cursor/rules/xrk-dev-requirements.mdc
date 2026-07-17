@@ -39,7 +39,7 @@ alwaysApply: true
   - **数组 / 标量 / null**：放在 `data` 字段。  
     例：`success(res, list)` → `{ success, message, data: list }`；`success(res, null, 'ok')` → 仅 `success`+`message`。
   - 若业务就要一个叫 `data` 的字段：显式 `success(res, { data: payload })`，拍平后顶层仍有 `data`。
-  - **前端禁止**默认 `return json.data` 再读字段（会得到 `undefined.xxx`）。正确做法：有 `json.data` 用它，否则去掉 `success`/`message` 后的剩余字段；或直接读顶层字段（如 `json.configs`）。ESM 页优先 `import { unwrapSuccess } from '/shared/xrk-web-compat.js'`（`core/system-Core/www/shared/`；WebView 兼容另见 skill `xrk-app-dev`）。
+  - **前端禁止**默认 `return json.data` 再读字段（会得到 `undefined.xxx`）。正确做法：有 `json.data` 用它，否则去掉 `success`/`message` 后的剩余字段；或直接读顶层字段（如 `json.configs`）。ESM 页优先 `import { unwrapSuccess } from '/shared/xrk-web-compat.js'`（`core/system-Core/www/shared/`；权威约定 skill **`xrk-www-compat`**）。
 - **常用静态方法**：
   - `HttpResponse.success(res, data, message)`：成功（形状见上）；
   - `HttpResponse.error(res, error, statusCode, context)`：统一错误与日志；
@@ -50,11 +50,19 @@ alwaysApply: true
   - 流式/SSE：`HttpResponse.streamResponse(res, streamHandler, context)`；MCP：`jsonRpcError` / `jsonRpcSuccess` / `validateJsonRpcRequest`。
 - **约定**：handler 内用 `return HttpResponse.xxx(...)` 提前返回，不要与裸 `res.json()` 混用；兼容端点（如 stdin 原样 JSON）用 `HttpResponse.json(res, body)`。
 
-## Node 26 运行时（全局）
+## Core www（浏览器 ≠ Node 26）
+
+> skill **`xrk-www-compat`** · `core/system-Core/www/shared/xrk-web-compat.js` → `/shared/xrk-web-compat.js`
+
+- **勿**在 `www/` 裸用 `crypto.randomUUID`、`AbortSignal.timeout`、无降级的 `structuredClone`。
+- 用共享导出：`randomId`、`unwrapSuccess`、`abortTimeout`、`deepClone`。
+- 新兼容能力优先扩 shared，再改各产品页；经典脚本内联须注释对齐 shared。
+
+## Node 26 运行时（服务端全局）
 
 > skill `xrk-node-runtime` · `docs/node-26-runtime.md`
 
-- **fetch / 超时**：`fetch(url, { signal: AbortSignal.timeout(ms) })`；禁止 `node-fetch`、`AbortController`+`setTimeout`。
+- **fetch / 超时**（**仅 Node**）：`fetch(url, { signal: AbortSignal.timeout(ms) })`；禁止 `node-fetch`、`AbortController`+`setTimeout`。浏览器 Core www 用 `abortTimeout`（见上节）。
 - **exec**：仅通过 `#utils/exec-async.js`；禁止在 constructor/插件/HTTP 内 `util.promisify(exec)`。
 - **错误**：`Error.isError` + `normalizeError`；禁止基础设施式 `instanceof Error`。
 - **二进制**：`Buffer#toBase64()` / `Uint8Array.fromBase64`；禁止 `toString('base64')` 新代码。

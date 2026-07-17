@@ -275,7 +275,7 @@ export default {
 
 浏览器页 **不等于** Node ≥26。校园 WebView / 非 HTTPS 下 `crypto.randomUUID`、`AbortSignal.timeout`、`structuredClone` 可能缺失；`HttpResponse.success` 对普通对象拍平字段，前端勿默认读 `json.data`。
 
-共享模块：`core/system-Core/www/shared/xrk-web-compat.js` → **`/shared/xrk-web-compat.js`**（`randomId` / `unwrapSuccess` / `abortTimeout` / `deepClone`）。控制台经 `www/xrk/modules/utils.js` 再导出。见 skill **`xrk-app-dev`**、**`xrk-http-api`**。
+共享模块：`core/system-Core/www/shared/xrk-web-compat.js` → **`/shared/xrk-web-compat.js`**（`randomId` / `unwrapSuccess` / `abortTimeout` / `deepClone`）。控制台经 `www/xrk/modules/utils.js` 再导出。权威 skill：**`xrk-www-compat`**；响应形状见 **`xrk-http-api`**。
 
 | 页面 | 实拍 |
 |------|------|

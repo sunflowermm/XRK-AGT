@@ -1,22 +1,31 @@
 import { errorHandler, ErrorCodes } from './error-handler.js'
 
 /**
- * HTTP响应工具类
- * 统一HTTP响应格式，减少重复代码
+ * HTTP 响应工具类
+ * 统一 HTTP 响应格式与错误处理；`core/*/http` handler 应优先使用。
+ *
+ * `success` 形状是**底层契约**（前端必遵）：
+ * - 普通对象拍平到顶层；数组/标量进 `data`；见 JSDoc / skill `xrk-http-api`
+ * - 浏览器解包：`unwrapSuccess`（`/shared/xrk-web-compat.js`，skill `xrk-www-compat`）
  */
 export class HttpResponse {
   /**
    * 成功响应
-   * @param {Object} res - Express响应对象
-   * @param {*} data - 响应数据
-   * @param {string} message - 响应消息
-   * @returns {Object} Express响应
+   * @param {Object} res - Express 响应对象
+   * @param {*} [data=null] - 业务载荷。普通对象（非数组）会 Object.assign 到顶层；
+   *   数组/标量放在 `response.data`；`null` 则仅返回 success+message。
+   *   若业务需要顶层字段名就叫 `data`：传入 `{ data: payload }`。
+   * @param {string} [message='操作成功']
+   * @returns {Object} Express 响应
    *
-   * 形状（底层约定）：
-   * - 普通对象：拍平到顶层 `{ success, message, ...data }`（无外层 data）
-   * - 数组/标量：`{ success, message, data }`
-   * - null：仅 `{ success, message }`
-   * 前端勿默认只读 json.data；见 skill xrk-http-api / docs/http-api.md
+   * @example
+   * HttpResponse.success(res, { assessments, webVersion })
+   * // → { success: true, message, assessments, webVersion }
+   *
+   * HttpResponse.success(res, list)
+   * // → { success: true, message, data: list }
+   *
+   * // 前端：import { unwrapSuccess } from '/shared/xrk-web-compat.js'
    */
   static success(res, data = null, message = '操作成功') {
     const response = { success: true, message }

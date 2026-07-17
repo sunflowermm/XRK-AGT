@@ -10,8 +10,8 @@
 
 ## 必读（优先 `.cursor/rules/`）
 
-- `xrk-project.mdc` — 架构、放码位置、配置模板归属
-- `xrk-dev-requirements.mdc` — 全局裸名、HttpResponse、Node 26（详见 `docs/coding-style.md`）
+- `xrk-project.mdc` — 架构、放码位置、配置模板归属（含 **www ≠ Node 26**）
+- `xrk-dev-requirements.mdc` — 全局裸名、HttpResponse、Core www、Node 26（详见 `docs/coding-style.md`）
 
 ## 技能与文档
 
@@ -19,6 +19,7 @@
 - 工程师 skill 源码（已 clone）：`~/.agents/skills-sources/`（superpowers、planning-with-files、awesome-cursorrules 等）
 - 其它 skill：`~/.agents/skills/`（不含与 skills-sources 重复的 obra/planning 副本）
 - 框架能力：`.cursor/skills/xrk-*/SKILL.md` · 索引 `SKILL_INDEX.md`
+  - 写 **www**：`xrk-www-compat`；写 **HTTP**：`xrk-http-api`；写 **Node API**：`xrk-node-runtime`
 - 文档导航：`docs/`、skill `xrk-docs`
 - 外部调研：`xrk-github-research`
 - XRK 边界补充：`.cursor/rules/xrk-agent-behavior.mdc`

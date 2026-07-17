@@ -17,19 +17,21 @@
 | 基类 | `import PluginBase` / `HttpApi` / `AiWorkflow` | 依赖 `global.PluginBase` 写新插件（勿裸靠全局写新基类） |
 | 配置 | `import runtimeConfig from '#infrastructure/config/config.js'` | 无必要写 `global.runtimeConfig` |
 | 状态 | **类字段** `cache = new Map()` 或 `init()` 一次初始化 | constructor 里 `this.cache = new Map()` |
-| 出站 HTTP | `fetch` + `AbortSignal.timeout(ms)` | `node-fetch`；`AbortController`+`setTimeout` |
+| 出站 HTTP | **服务端** `fetch` + `AbortSignal.timeout(ms)`；**浏览器 www** `abortTimeout`（`/shared/xrk-web-compat.js`） | `node-fetch`；服务端手写 `AbortController`+`setTimeout`；www 裸 `AbortSignal.timeout` |
 | Shell | `#utils/exec-async.js` 的 `exec` | 各文件 `promisify(exec)` |
 | 判错 | `Error.isError` / `normalizeError` | `instanceof Error` |
 | 二进制 | `buf.toBase64()` / `Uint8Array.fromBase64` | `toString('base64')` 新代码 |
 | 日志 | `RuntimeUtil.makeLog` 或裸 `AgentRuntime.makeLog` | `console.log` 持久化路径 |
-| HTTP 响应 | `HttpResponse.success/error/asyncHandler` | handler 裸 `res.json()`（兼容体用 `HttpResponse.json`） |
+| HTTP 响应 | `HttpResponse.success/error/asyncHandler`；前端 `unwrapSuccess` 或读顶层 | handler 裸 `res.json()`；前端默认 `json.data.字段` |
+| Core www | `www/<app>/` + skill **`xrk-www-compat`** | 假设 Node 26 API；各 Core 复制兼容垫片 |
 | 热路径 I/O | `fs/promises`；`try/catch` 代替反复 `existsSync` | 请求链路里 `readFileSync` / 循环 `existsSync` |
 | 批量加载 | `FileLoader.forEachBatch` + `LOADER_BATCH_SIZE` | 全量 `Promise.all(上千 import)` |
 | Map 默认 | `map.getOrInsert(k, () => v)` | `get \|\| set` 样板（可写时） |
 | 热重载 | `HotReloadBase`（`#utils/hot-reload-base.js`） | 业务/Loader 直接 `chokidar`；仅用 basename 重载多 Core 同名文件 |
 | 挂载 | `setRuntimeGlobal`（`#utils/runtime-globals.js`） | `global.x = globalThis.x =` 双写 |
 
-Node 26 API 明细与审查清单见 [node-26-runtime.md](node-26-runtime.md)、skill **`xrk-node-runtime`**。
+Node 26 API 明细与审查清单见 [node-26-runtime.md](node-26-runtime.md)、skill **`xrk-node-runtime`**。  
+Core www / WebView 见 skill **`xrk-www-compat`**、[app-dev.md](app-dev.md)「`/shared`」节。
 
 ---
 
@@ -40,8 +42,16 @@ Node 26 API 明细与审查清单见 [node-26-runtime.md](node-26-runtime.md)、
 | Core | `core/<名>/plugin|http|stream|tasker|events|commonconfig|www/` | 业务 |
 | Infrastructure | `src/infrastructure/`、`src/utils/`、`src/factory/` | Loader、基类、工厂、工具 |
 | Runtime | `src/agent-runtime.js`、`start.js` | 启动、中间件、挂载 |
+| 共享静态 | `core/system-Core/www/shared/` → `/shared` | 浏览器兼容层（非 Node 工具） |
 
 独立产品 Core 配置：`core/<名>/default/*.yaml` + `data/<产品>/`（见 `xrk-project` 规则）。勿把业务 yaml 放进 `config/default_config/`。
+
+### 1.1 Core www（浏览器 ≠ Node）
+
+- 环境：校园 WebView、HTTP 非安全上下文；**不要**假设 `crypto.randomUUID` / `AbortSignal.timeout` / `structuredClone` 可用。
+- 标准垫片：`import { randomId, unwrapSuccess, abortTimeout, deepClone } from '/shared/xrk-web-compat.js'`。
+- `HttpResponse.success` 对普通对象**拍平**字段；前端用 `unwrapSuccess` 或读顶层，禁止默认 `json.data.xxx`。
+- 权威 skill：**`xrk-www-compat`**；挂载：`mountCoreWwwStatic`（`src/infrastructure/http/mount-core-www.js`）。
 
 ---
 
@@ -210,7 +220,8 @@ export default {
 - [ ] 无 `global.` 前缀（业务裸名或 import）  
 - [ ] 无 constructor 可变容器  
 - [ ] 无 `node-fetch` / 分散 `promisify(exec)` / `instanceof Error`  
-- [ ] HTTP 用 `HttpResponse` + 超时 `fetch`  
+- [ ] HTTP 用 `HttpResponse` + 服务端超时 `fetch`；www 用 `unwrapSuccess` / `abortTimeout`  
+- [ ] 改 `www/` 对照 skill **`xrk-www-compat`**  
 - [ ] 配置三件套已同步（若改字段）  
 - [ ] 与 [代码审查清单.md](代码审查清单.md) 架构节一致  
 
@@ -220,10 +231,11 @@ export default {
 
 - [runtime-surface.md](runtime-surface.md) — 挂载与 AgentRuntime Proxy  
 - [node-26-runtime.md](node-26-runtime.md) — Node API  
+- [app-dev.md](app-dev.md) — 控制台与 `/shared`  
 - [base-classes.md](base-classes.md) — export 形状  
 - [http-api.md](http-api.md) — 路由与鉴权  
 - [代码审查清单.md](代码审查清单.md) — 发布前  
 
 ---
 
-*最后更新：2026-06-14*
+*最后更新：2026-07-17*

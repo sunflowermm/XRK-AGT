@@ -46,28 +46,21 @@ HttpResponse.success(res, items); // 数组
 
 **禁止**默认 `const data = json.data` 再读业务字段（对象拍平后 `json.data === undefined` → `Cannot read properties of undefined`）。
 
-推荐解包（浏览器 ESM 优先用共享模块）：
+浏览器 ESM：
 
 ```javascript
 import { unwrapSuccess } from '/shared/xrk-web-compat.js';
-// → core/system-Core/www/shared/xrk-web-compat.js，挂载 /shared/
-
-function unwrapSuccess(json) {
-  if (!json?.success) throw new Error(json?.message || '请求失败');
-  if (json.data !== undefined) return json.data;
-  const { success, message, ...rest } = json;
-  return rest;
-}
+const payload = unwrapSuccess(json);
 ```
 
-或直接读顶层：`json.assessments`、`json.configs`（system-Core `www/xrk` 即此风格）。
+权威细则、挂载、审查清单：skill **`xrk-www-compat`**。或直接读顶层：`json.assessments`、`json.configs`（system-Core `www/xrk` 即此风格）。
 
 需要「整包在 `data` 下」时，服务端应写 `success(res, { data: payload })`（如 kaguya 行情、xiaozhi config），不要指望框架自动包一层。
 
-详见 `docs/http-api.md`「响应格式」；WebView 兼容另见 skill **`xrk-app-dev`**（`randomId` / `abortTimeout`）。
+详见 `docs/http-api.md`「响应格式」。
 
 ## Node 26（Core HTTP）
 
-- 模块内出站请求：`fetch` + `AbortSignal.timeout`。
+- 模块内出站请求：`fetch` + `AbortSignal.timeout`（**仅服务端**；浏览器用 `abortTimeout`，见 **`xrk-www-compat`**）。
 - catch：`Error.isError` / `normalizeError`（见 skill **`xrk-node-runtime`**）。
 - 禁止 `node-fetch`、手写 `AbortController` 超时。
