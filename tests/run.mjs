@@ -39,6 +39,7 @@ const SUITES = {
     'runtime-net.test.mjs',
     'www-xrk.test.mjs',
     'www-web-compat.test.mjs',
+    'mount-core-www.test.mjs',
     'http-api-structure.test.mjs',
   ],
   integration: ['loaders-integration.test.mjs'],

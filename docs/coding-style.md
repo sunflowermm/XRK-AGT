@@ -17,7 +17,7 @@
 | 基类 | `import PluginBase` / `HttpApi` / `AiWorkflow` | 依赖 `global.PluginBase` 写新插件（勿裸靠全局写新基类） |
 | 配置 | `import runtimeConfig from '#infrastructure/config/config.js'` | 无必要写 `global.runtimeConfig` |
 | 状态 | **类字段** `cache = new Map()` 或 `init()` 一次初始化 | constructor 里 `this.cache = new Map()` |
-| 出站 HTTP | **服务端** `fetch` + `AbortSignal.timeout(ms)`；**浏览器 www** `abortTimeout`（`/xrk/modules/web-compat.js`） | `node-fetch`；服务端手写 `AbortController`+`setTimeout`；www 裸 `AbortSignal.timeout` |
+| 出站 HTTP | **服务端** `fetch` + `AbortSignal.timeout`；**浏览器** `abortTimeout`（`/xrk` 用 `./web-compat.js`，产品页内联） | `node-fetch`；www 裸 `AbortSignal.timeout`；产品页依赖 `/shared` |
 | Shell | `#utils/exec-async.js` 的 `exec` | 各文件 `promisify(exec)` |
 | 判错 | `Error.isError` / `normalizeError` | `instanceof Error` |
 | 二进制 | `buf.toBase64()` / `Uint8Array.fromBase64` | `toString('base64')` 新代码 |
@@ -31,7 +31,7 @@
 | 挂载 | `setRuntimeGlobal`（`#utils/runtime-globals.js`） | `global.x = globalThis.x =` 双写 |
 
 Node 26 API 明细与审查清单见 [node-26-runtime.md](node-26-runtime.md)、skill **`xrk-node-runtime`**。  
-Core www / WebView 见 skill **`xrk-www-compat`**、[app-dev.md](app-dev.md)「`/shared`」节。
+Core www / WebView 见 skill **`xrk-www-compat`**、[app-dev.md](app-dev.md)「Core www」节。
 
 ---
 
@@ -48,8 +48,9 @@ Core www / WebView 见 skill **`xrk-www-compat`**、[app-dev.md](app-dev.md)「`
 ### 1.1 Core www（浏览器 ≠ Node）
 
 - 环境：校园 WebView、HTTP 非安全上下文；**不要**假设 `crypto.randomUUID` / `AbortSignal.timeout` / `structuredClone` 可用。
-- 标准垫片：`core/system-Core/www/xrk/modules/web-compat.js`（`randomId` / `unwrapSuccess` / `abortTimeout` / `deepClone`）；产品页可 `/xrk/modules/web-compat.js` 或内联。
-- `HttpResponse.success` 对普通对象**拍平**字段；前端用 `unwrapSuccess` 或读顶层，禁止默认 `json.data.xxx`。
+- 标准垫片语义：`core/system-Core/www/xrk/modules/web-compat.js`。**仅 `/xrk` 相对导入**；其它产品页**只内联**。
+- 根名 `shared` 保留（`RESERVED_ROOT_SEGMENTS`）；产品用自有目录名（如 `lsy-shared`）。
+- `HttpResponse.success` 对普通对象**拍平**；前端 `unwrapSuccess` 或读顶层。
 - 权威 skill：**`xrk-www-compat`**。
 
 ---
@@ -230,7 +231,7 @@ export default {
 
 - [runtime-surface.md](runtime-surface.md) — 挂载与 AgentRuntime Proxy  
 - [node-26-runtime.md](node-26-runtime.md) — Node API  
-- [app-dev.md](app-dev.md) — 控制台与 `/shared`  
+- [app-dev.md](app-dev.md) — 控制台与 Core www 兼容
 - [base-classes.md](base-classes.md) — export 形状  
 - [http-api.md](http-api.md) — 路由与鉴权  
 - [代码审查清单.md](代码审查清单.md) — 发布前  

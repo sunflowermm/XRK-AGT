@@ -3,10 +3,10 @@
  *
  * 规则（与 skill `xrk-www-compat` / `docs/app-dev.md` 一致）：
  * - 每个 Core：`core/<名>/www` → 额外挂 `/core/<名>`（整棵 www）
- * - www 下每个**子目录** → `/<子目录名>`（如 `www/xrk`→`/xrk`）
- * - 同名 `/<子目录>` 先挂载者占用，后者 warn 跳过（产品勿用根名 `shared`；lsy 用 `lsy-shared`）
+ * - www 下每个**子目录** → `/<子目录名>`（如 `www/xrk`→`/xrk`，`www/lsy-shared`→`/lsy-shared`）
+ * - 同名根路径：先挂载者占用，后者 warn 跳过
  * - 子目录含 `sign.json`：跳过根路径静态挂载（自建前端构建约定）
- * - 保留段不可作应用名：见 RESERVED_ROOT_SEGMENTS
+ * - 保留段不可作应用名：见 RESERVED_ROOT_SEGMENTS（含 `shared`，避免与框架约定冲突）
  */
 import path from 'node:path';
 import fsSync from 'node:fs';
@@ -15,8 +15,11 @@ import RuntimeUtil from '#utils/runtime-util.js';
 import paths from '#utils/paths.js';
 import { statDirs, statFiles } from '#utils/core-fs.js';
 
-/** 根路径保留段：不可被 Core www 子目录占用 */
-const RESERVED_ROOT_SEGMENTS = ['api', 'core', 'media', 'uploads', 'File'];
+/**
+ * 根路径保留段：不可被 Core www 子目录占用。
+ * `shared`：保留根名（历史冲突）；兼容语义在 `www/xrk/modules/web-compat.js`，产品页只内联、用自有目录名（如 lsy-shared）。
+ */
+export const RESERVED_ROOT_SEGMENTS = ['api', 'core', 'media', 'uploads', 'File', 'shared'];
 
 /**
  * @param {import('express').Application} app

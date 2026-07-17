@@ -6,7 +6,7 @@ import { errorHandler, ErrorCodes } from './error-handler.js'
  *
  * success 形状是底层契约（前端必遵）：
  * - 普通对象拍平到顶层；数组/标量进 data；见 JSDoc / skill xrk-http-api
- * - 浏览器解包：unwrapSuccess（/xrk/modules/web-compat.js，skill xrk-www-compat）
+ * - 浏览器解包：unwrapSuccess（web-compat.js / 产品内联；skill xrk-www-compat）
  */
 export class HttpResponse {
   /**
@@ -25,7 +25,7 @@ export class HttpResponse {
    * HttpResponse.success(res, list)
    * // -> { success: true, message, data: list }
    *
-   * // 前端：import { unwrapSuccess } from '/xrk/modules/web-compat.js'
+   * // 前端：unwrapSuccess（web-compat.js）或产品页内联
    */
   static success(res, data = null, message = '操作成功') {
     const response = { success: true, message }

@@ -1,13 +1,11 @@
 /**
- * Core www 浏览器兼容层（权威实现，随 /xrk 静态挂载，已进 git）
+ * Core www 浏览器兼容层（语义权威；随 /xrk 进 git）
  *
  * 路径：`core/system-Core/www/xrk/modules/web-compat.js`
- * URL：`/xrk/modules/web-compat.js`
- * 控制台：`import { … } from './web-compat.js'`（见 utils.js）
- * 其它 Core ESM：可 `import from '/xrk/modules/web-compat.js'`，或内联同语义（勿再依赖 /shared）
+ * 控制台：`import { … } from './web-compat.js'`（utils.js 再导出）
+ * 其它产品 Core：**只内联**同语义，禁止依赖本 URL（避免跨应用 404）
  *
- * 面向校园 WebView / 非安全上下文：勿假设 Node 26 全量 API。
- * 约定：skill `xrk-www-compat`
+ * 约定：skill `xrk-www-compat` · `RESERVED_ROOT_SEGMENTS` 含 `shared`
  */
 
 /** @param {string} [prefix='id'] @returns {string} */

@@ -394,7 +394,7 @@ handler: async (req, res, bot) => {
   - **数组 / 标量**：→ `{ success, message, data: <值> }`。
   - **`null`**：仅 `success` + `message`。
   - 业务需要顶层 `data` 字段时：显式 `success(res, { data: payload })`。
-  - **前端**：勿默认 `json.data` 再读字段；有 `data` 用 `data`，否则读顶层业务字段，或解包去掉 `success`/`message` 的剩余对象。反例：psyche 曾 `return json.data` 后读 `webVersion` → `undefined.webVersion`。ESM 可用 `import { unwrapSuccess } from '/xrk/modules/web-compat.js'` 或内联（skill **`xrk-www-compat`**）。
+  - **前端**：勿默认 `json.data` 再读字段；`/xrk` 用 `unwrapSuccess`（`web-compat.js`），产品页内联或读顶层。见 skill **`xrk-www-compat`**。
 - **原样 JSON**（兼容端点）：`HttpResponse.json(res, body)`，不包 `success` 外壳（如 `/api/stdin/command`）。
 - **错误**：`HttpResponse.error(res, error, statusCode, context)`、`HttpResponse.validationError(res, message)`、`HttpResponse.notFound(res, message)`、`HttpResponse.forbidden(res, message)` 等，格式统一为 `{ success: false, message, code }`。
 - **避免**在 handler 里直接 `res.status(200).json({ ... })` 或手写错误 JSON，以便日志与前端解析一致。

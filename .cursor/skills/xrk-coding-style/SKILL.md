@@ -17,7 +17,7 @@ description: 编写或审查 core/src 代码时的写法与性能规范（全局
 3. 热路径 **`fs/promises`**，批加载 **`forEachBatch`**，出站 **`fetch` + `AbortSignal.timeout`**（**服务端**；浏览器 Core www 见 **`xrk-www-compat`**）
 4. 错误 **`normalizeError`**，Shell **`#utils/exec-async.js`**
 5. 有 `package.json` 的子 Core **不用 `#` 别名**
-6. 改 `core/*/www`：读 **`xrk-www-compat`**（`unwrapSuccess` / `randomId` / `abortTimeout`）
+6. 改 `core/*/www`：读 **`xrk-www-compat`**（`/xrk`→`./web-compat.js`；产品页只内联；勿用根名 `shared`）
 
 ## 审查
 

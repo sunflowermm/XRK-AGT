@@ -44,18 +44,24 @@ HttpResponse.success(res, items); // 数组
 
 ### 前端 / Core www 消费约定
 
-**禁止**默认 `const data = json.data` 再读业务字段（对象拍平后 `json.data === undefined` → `Cannot read properties of undefined`）。
+**禁止**默认 `const data = json.data` 再读业务字段（对象拍平后常为 `undefined`）。
 
-浏览器 ESM：
+| 场景 | 做法 |
+|------|------|
+| `/xrk` | `import { unwrapSuccess } from './web-compat.js'` |
+| 其它产品 www | **内联**同语义（见 skill **`xrk-www-compat`**） |
+| 或 | 直接读顶层：`json.assessments`、`json.configs` |
 
 ```javascript
-import { unwrapSuccess } from '/xrk/modules/web-compat.js';
-const payload = unwrapSuccess(json);
+function unwrapSuccess(json) {
+  if (!json?.success) throw new Error(json?.message || '请求失败');
+  if (json.data !== undefined) return json.data;
+  const { success, message, ...rest } = json;
+  return rest;
+}
 ```
 
-权威细则、挂载、审查清单：skill **`xrk-www-compat`**。或直接读顶层：`json.assessments`、`json.configs`（system-Core `www/xrk` 即此风格）。
-
-需要「整包在 `data` 下」时，服务端应写 `success(res, { data: payload })`（如 kaguya 行情、xiaozhi config），不要指望框架自动包一层。
+需要「整包在 `data` 下」时，服务端应写 `success(res, { data: payload })`（如 kaguya、xiaozhi config）。
 
 详见 `docs/http-api.md`「响应格式」。
 
