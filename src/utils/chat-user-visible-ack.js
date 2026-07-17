@@ -4,7 +4,9 @@ export function createUserVisibleTurnState() {
   return {
     queuedReplyContent: '',
     queuedReplyMessageId: null,
-    lastOutboundSummary: ''
+    lastOutboundSummary: '',
+    /** reply 已在工具轮内发出，execute 勿再发 */
+    replyFlushed: false
   };
 }
 
@@ -30,13 +32,18 @@ export function formatUserVisibleDuplicateAck(where, alreadySent, attemptedTool)
   return `你已在本次对话中向${where}发出过：${prev || '可见内容'}，用户已看到。本次 ${tool} 未再发送。\n${TOOL_DELIVERED_FOOTER}`;
 }
 
-/** AGT：reply 工具拟定正文，由 execute 在 tool 轮结束后统一 sendMessages */
-export function formatReplyQueuedAck(where, content, messageId) {
+/** AGT：reply 已立即发到 QQ（工具轮内 flush） */
+export function formatReplySentAck(where, content, messageId) {
   const line = String(content ?? '').trim();
   const ref = messageId != null && String(messageId).trim()
     ? `（引用消息 ${String(messageId).trim()}）`
     : '';
-  return `你已通过 reply 拟定${where}的回复${ref}：「${line}」。框架将在本轮 tool 轮结束后统一发到 QQ，用户届时可见。若无其它工具任务，结束 tool 调用即可。\n${TOOL_DELIVERED_FOOTER}`;
+  return `你已通过 reply 向${where}发出${ref}：「${line}」。用户在 QQ 里已能看到。若无其它工具任务，结束 tool 调用即可。\n${TOOL_DELIVERED_FOOTER}`;
+}
+
+/** @deprecated 保留兼容：旧「仅拟定、稍后统一发」文案；现 reply 已立即发送 */
+export function formatReplyQueuedAck(where, content, messageId) {
+  return formatReplySentAck(where, content, messageId);
 }
 
 export function formatDeliveredAck(where, sentLines) {

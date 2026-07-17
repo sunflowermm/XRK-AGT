@@ -9,6 +9,11 @@ import { BaseTools } from '#utils/base-tools.js';
 import { getAiWorkflowConfigOptional } from '#utils/ai-workflow-config.js';
 import { resolveConfiguredWorkspace, ensureAgentWorkspaceSync, getConfiguredDefaultWorkspaceId } from '../lib/ai-workspace-runtime.js';
 import si from 'systeminformation';
+import {
+  buildAgtUserContent,
+  extractVisionFromSegments,
+  visionRefToLocator
+} from '#utils/llm/vision-content.js';
 
 const IS_WINDOWS = process.platform === 'win32';
 const IS_DARWIN = process.platform === 'darwin';
@@ -905,17 +910,10 @@ ${isMaster ? '【权限】\n你拥有主人权限，可以执行所有系统操�
       ? question
       : (question?.content ?? question?.text ?? '');
 
-    // 从事件中提取图片（OneBot segments / device segments）
-    // Web 客户端通过 WS -> http/device.js 会把 payload.message 作为 e.message 透传到工作流
-    const images = [];
-    if (e && Array.isArray(e.message)) {
-      for (const seg of e.message) {
-        if (!seg || typeof seg !== 'object') continue;
-        if (seg.type !== 'image') continue;
-        const url = seg.url || seg.data?.url || seg.data?.file;
-        if (url) images.push(url);
-      }
-    }
+    // 从事件中提取图片（标准层：OneBot / device / 任意 image|mface 段）
+    const extracted = extractVisionFromSegments(e?.message, { skipStickers: true });
+    const images = extracted.images.map((x) => visionRefToLocator(x)).filter(Boolean);
+    const replyImages = extracted.replyImages.map((x) => visionRefToLocator(x)).filter(Boolean);
 
     const userName =
       question?.userName ||
@@ -942,21 +940,14 @@ ${isMaster ? '【权限】\n你拥有主人权限，可以执行所有系统操�
       }).catch(() => { });
     }
 
-    // 多模态：若存在图片，则按 {text, images} 结构交给 LLM 工厂统一转各家协议
-    if (images.length > 0) {
-      messages.push({
-        role: 'user',
-        content: {
-          text: `${prefix}${text}`,
-          images
-        }
-      });
-    } else {
-      messages.push({
-        role: 'user',
-        content: `${prefix}${text}`
-      });
-    }
+    messages.push({
+      role: 'user',
+      content: buildAgtUserContent({
+        text: `${prefix}${text}`,
+        images,
+        replyImages
+      })
+    });
 
     return messages;
   }

@@ -1,22 +1,28 @@
 /**
  * 消息转换工具：
- * - 统一处理形如 { text, images, replyImages } 的自定义结构
- * - 为不同厂商输出两种形态：
- *   - openai: 生成 OpenAI Chat Completions 多模态 content 数组（text + image_url），支持 base64
- *   - text_only: 退化为纯文本，在末尾追加简单的图片占位描述
+ * - 统一处理 AGT 形态 `{ text, images, replyImages }`（见 vision-content.js）
+ * - 也兼容已是 OpenAI multimodal 数组的 content
+ * - 为不同厂商输出：
+ *   - openai: OpenAI Chat Completions 多模态 parts（text + image_url），含引用/当前标注与多图上限
+ *   - text_only: 纯文本 + 占位描述
  *
- * 说明：
- * - 不再依赖独立的 VisionFactory，也不再调用单独的“识图工厂”
- * - 真正的图片理解由各家 LLM 自身的多模态能力完成
+ * 真正的图片理解由各家 LLM 多模态能力完成；本层只做结构标准化。
  */
 
+import {
+  buildOpenAIVisionParts,
+  coerceVisionRefList,
+  DEFAULT_VISION_MAX_IMAGES
+} from '#utils/llm/vision-content.js';
+
 /**
- * 将消息数组转换为目标 LLM 可用的 content 结构
- * @param {Array} messages - OpenAI-like messages
- * @param {Object} config - LLM config（目前仅用于读取可选的 visionImageMimeType 等）
+ * @param {Array} messages
+ * @param {Object} config - LLM config（visionImageMimeType / visionMaxImages）
  * @param {Object} options
- * @param {('openai'|'text_only')} [options.mode='text_only'] - 多模态输出模式
- * @param {boolean} [options.allowBase64=true] - 是否把裸 base64 自动包装为 data:image/*;base64, 前缀
+ * @param {('openai'|'text_only')} [options.mode='text_only']
+ * @param {boolean} [options.allowBase64=true]
+ * @param {boolean} [options.labelImages]
+ * @param {number} [options.maxImages]
  * @returns {Promise<Array>}
  */
 export async function transformMessagesWithVision(messages, config = {}, options = {}) {
@@ -24,50 +30,26 @@ export async function transformMessagesWithVision(messages, config = {}, options
 
   const mode = options.mode === 'openai' ? 'openai' : 'text_only';
   const allowBase64 = options.allowBase64 !== false;
-  const defaultMime = config.visionImageMimeType || 'image/png';
-
-  const isProbablyBase64 = (str) => {
-    if (!str || typeof str !== 'string') return false;
-    if (str.startsWith('data:')) return true;
-    if (str.includes('://')) return false;
-    const s = str.trim();
-    if (s.length < 64) return false;
-    return /^[A-Za-z0-9+/=\r\n]+$/.test(s);
-  };
-
-  const buildOpenAIContentParts = (text, images, replyImages) => {
-    const parts = [];
-    if (text) {
-      parts.push({ type: 'text', text: String(text) });
-    }
-
-    const allImages = [...(replyImages || []), ...(images || [])];
-    for (const img of allImages) {
-      if (!img) continue;
-      let url = String(img).trim();
-      if (!url) continue;
-
-      // 裸 base64 统一包装为 data URL，其余保持为原始字符串（由各 LLM 客户端自行决定是否转为 base64）
-      if (allowBase64 && isProbablyBase64(url) && !url.startsWith('data:')) {
-        url = `data:${defaultMime};base64,${url}`;
-      }
-
-      parts.push({
-        type: 'image_url',
-        image_url: { url }
-      });
-    }
-    return parts;
-  };
+  const maxImages = Math.max(
+    1,
+    Number(options.maxImages ?? config.visionMaxImages ?? DEFAULT_VISION_MAX_IMAGES) ||
+      DEFAULT_VISION_MAX_IMAGES
+  );
 
   const transformed = [];
   for (const msg of messages) {
     const newMsg = { ...msg };
 
-    if (msg.role === 'user' && msg.content && typeof msg.content === 'object') {
-      // 已经是 OpenAI 风格的多模态 content 数组，则在 openai 模式下直接透传，不再二次转换
+    if (msg.role === 'user' && msg.content != null && typeof msg.content === 'object') {
+      // 已是 OpenAI 风格 parts：openai 模式透传（仍可按上限截断 image_url）
       if (Array.isArray(msg.content) && mode === 'openai') {
-        newMsg.content = msg.content;
+        newMsg.content = truncateOpenAIImageParts(msg.content, maxImages);
+        transformed.push(newMsg);
+        continue;
+      }
+
+      if (Array.isArray(msg.content) && mode === 'text_only') {
+        newMsg.content = openAIPartsToTextOnly(msg.content);
         transformed.push(newMsg);
         continue;
       }
@@ -75,9 +57,18 @@ export async function transformMessagesWithVision(messages, config = {}, options
       const text = msg.content.text || msg.content.content || '';
       const images = msg.content.images || [];
       const replyImages = msg.content.replyImages || [];
+      const flags = { ...msg.content };
+      delete flags.text;
+      delete flags.content;
+      delete flags.images;
+      delete flags.replyImages;
 
       if (mode === 'openai') {
-        const parts = buildOpenAIContentParts(text, images, replyImages);
+        const parts = buildOpenAIVisionParts(
+          { text, images, replyImages },
+          config,
+          { allowBase64, labelImages: options.labelImages, maxImages }
+        );
         if (parts.length === 1 && parts[0].type === 'text') {
           newMsg.content = parts[0].text;
         } else if (parts.length > 0) {
@@ -86,17 +77,11 @@ export async function transformMessagesWithVision(messages, config = {}, options
           newMsg.content = '';
         }
       } else {
-        let content = text || '';
-        const allImages = [...replyImages, ...images];
-        if (allImages.length > 0) {
-          const placeholders = allImages.map((img) => {
-            const prefix = replyImages.includes(img) ? '[回复图片:' : '[图片:';
-            return `${prefix}${String(img)}]`;
-          });
-          content = content ? `${content} ${placeholders.join(' ')}` : placeholders.join(' ');
-        }
-        newMsg.content = content;
+        newMsg.content = agtContentToTextOnly(text, images, replyImages, maxImages);
       }
+
+      // 保留非视觉内部标记会污染 API；不回写 flags
+      void flags;
     } else if (newMsg.content && typeof newMsg.content === 'object') {
       newMsg.content = newMsg.content.text || newMsg.content.content || '';
     } else if (newMsg.content == null) {
@@ -107,6 +92,64 @@ export async function transformMessagesWithVision(messages, config = {}, options
   }
 
   return transformed;
+}
+
+function truncateOpenAIImageParts(parts, maxImages) {
+  let imageCount = 0;
+  const out = [];
+  let truncated = false;
+  for (const p of parts) {
+    const isImg =
+      p?.type === 'image_url' || p?.type === 'image' || p?.type === '__image_url__';
+    if (isImg) {
+      if (imageCount >= maxImages) {
+        truncated = true;
+        continue;
+      }
+      imageCount += 1;
+    }
+    out.push(p);
+  }
+  if (truncated) {
+    out.push({
+      type: 'text',
+      text: `[附图已截断：本次最多送入 ${maxImages} 张]`
+    });
+  }
+  return out;
+}
+
+function openAIPartsToTextOnly(parts) {
+  const texts = [];
+  let imgIdx = 0;
+  for (const p of parts) {
+    if (p?.type === 'text' && p.text) texts.push(String(p.text));
+    else if (p?.type === 'image_url' || p?.type === 'image') {
+      imgIdx += 1;
+      const url = p.image_url?.url || p.url || '';
+      texts.push(`[图片${imgIdx}:${String(url).slice(0, 80)}]`);
+    }
+  }
+  return texts.join(' ').trim();
+}
+
+function agtContentToTextOnly(text, images, replyImages, maxImages) {
+  let content = text || '';
+  const replyList = coerceVisionRefList(replyImages, { role: 'reply' });
+  const currentList = coerceVisionRefList(images, { role: 'current' });
+  const all = [...replyList, ...currentList].slice(0, maxImages);
+  if (all.length === 0) return content;
+  const placeholders = all.map((item, i) => {
+    const tag = item.role === 'reply' || replyList.some((r) => r.ref === item.ref)
+      ? '引用附图'
+      : '当前附图';
+    return `[${tag}${all.length > 1 ? ` ${i + 1}/${all.length}` : ''}:${item.ref}]`;
+  });
+  content = content ? `${content} ${placeholders.join(' ')}` : placeholders.join(' ');
+  if (replyList.length + currentList.length > maxImages) {
+    content += ` [附图已截断]`;
+  }
+  return content;
 }
 
 /** OpenAI Chat Completions 多模态别名（HTTP v3 / 兼容工厂共用） */

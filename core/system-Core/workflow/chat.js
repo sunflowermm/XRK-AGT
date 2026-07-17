@@ -8,7 +8,7 @@ import { PARSEABLE_EMOTIONS, QQ_EMOJI_REACTION_IDS, EMOJI_REACTION_TYPES } from 
 import {
   actionAck,
   createUserVisibleTurnState,
-  formatReplyQueuedAck,
+  formatReplySentAck,
   formatSessionWhere,
   formatUserVisibleDuplicateAck,
   isOverlappingUserVisible
@@ -30,6 +30,12 @@ import {
 } from '#utils/chat-reply-protocol.js';
 import { summarizeToolForHistory } from '#utils/mcp-tool-result-text.js';
 import { readImageBuffer } from '#utils/entry-media.js';
+import {
+  buildAgtUserContent,
+  extractVisionFromEvent,
+  extractVisionFromSegments,
+  visionRefToLocator
+} from '#utils/llm/vision-content.js';
 
 const EMOTIONS_DIR = path.join(process.cwd(), 'resources/aiimages');
 const IMAGE_SEND_EXTS = new Set(['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp']);
@@ -646,19 +652,40 @@ export default class ChatStream extends AiWorkflow {
         ? userMessage.content
         : (userMessage.content?.text ?? '');
     const body = ChatStream.stripInboundReplyDecorators(rawContent);
-    const images =
+
+    let images =
       typeof userMessage.content === 'object' && userMessage.content
-        ? userMessage.content.images || []
+        ? [...(userMessage.content.images || [])]
         : [];
-    const replyImages =
+    let replyImages =
       typeof userMessage.content === 'object' && userMessage.content
-        ? userMessage.content.replyImages || []
+        ? [...(userMessage.content.replyImages || [])]
         : [];
+
+    const inboundParts = this._segmentsToHistoryParts(Array.isArray(e.message) ? e.message : []);
+    if (
+      (inboundParts.hasImage || (Array.isArray(e.img) && e.img.length > 0)) &&
+      images.length === 0 &&
+      replyImages.length === 0
+    ) {
+      const extracted = await this._extractImagesFromEvent(e);
+      images = extracted.images || [];
+      replyImages = extracted.replyImages || [];
+      if (images.length === 0 && replyImages.length === 0) {
+        RuntimeUtil.makeLog(
+          'warn',
+          '[ChatStream] 当前消息标记含图但未能解析图片引用，多模态将不可用',
+          'ChatStream'
+        );
+      }
+    }
+
     const hasMedia = images.length > 0 || replyImages.length > 0;
     const replyCtx = await this._resolveInboundReplyContext(e);
-    const inboundParts = this._segmentsToHistoryParts(Array.isArray(e.message) ? e.message : []);
 
-    const lineBody = body || (hasMedia || inboundParts.hasImage || inboundParts.hasFile ? '[附图]' : replyCtx ? '' : '');
+    const lineBody =
+      body ||
+      (hasMedia || inboundParts.hasImage || inboundParts.hasFile ? '[附图]' : replyCtx ? '' : '');
     if (!lineBody && !hasMedia && !replyCtx && !inboundParts.hasFile) return null;
 
     const tags = [
@@ -1015,7 +1042,8 @@ export default class ChatStream extends AiWorkflow {
     });
 
     this.registerMCPTool('reply', {
-      description: '拟定文字回复（本轮 tool 轮结束后由框架统一发到 QQ）。content：| 分句；[回复:消息ID] 引用（可省略，默认引用 [当前消息]）；群聊 [at:数字QQ]。禁止 @QQ/@昵称，发表情用 emotion。',
+      description:
+        '向当前会话发送文字（立即发到 QQ）。content：| 分句；[回复:消息ID] 引用（可省略，默认引用 [当前消息]）；群聊 [at:数字QQ]。禁止 @QQ/@昵称，发表情用 emotion。',
       inputSchema: {
         type: 'object',
         properties: {
@@ -1042,10 +1070,11 @@ export default class ChatStream extends AiWorkflow {
           fallbackReplyId: fallbackId
         });
         const where = formatSessionWhere(e);
-        if (turn.queuedReplyContent) {
-          const prev = resolveOutgoingMessage(turn.queuedReplyContent, {
-            fallbackReplyId: turn.queuedReplyMessageId
-          }).displayText;
+        if (turn.replyFlushed || turn.queuedReplyContent) {
+          const prev = turn.lastOutboundSummary
+            || resolveOutgoingMessage(turn.queuedReplyContent || '', {
+              fallbackReplyId: turn.queuedReplyMessageId
+            }).displayText;
           if (isOverlappingUserVisible(displayText, prev)) {
             return {
               success: true,
@@ -1053,11 +1082,23 @@ export default class ChatStream extends AiWorkflow {
             };
           }
         }
+
+        if (!e?.reply) return { success: false, error: '当前环境无法发送消息' };
+
+        try {
+          await this.sendMessages(e, rawContent, { fallbackReplyId: replyId });
+        } catch (err) {
+          return { success: false, error: err?.message || '发送失败' };
+        }
+
         turn.queuedReplyContent = rawContent;
         turn.queuedReplyMessageId = replyId;
+        turn.replyFlushed = true;
+        turn.lastOutboundSummary = displayText || rawContent;
+        this.recordAIResponse(e, displayText || rawContent);
         return {
           success: true,
-          raw: formatReplyQueuedAck(where, displayText, replyId)
+          raw: formatReplySentAck(where, displayText, replyId)
         };
       },
       enabled: true
@@ -2366,7 +2407,7 @@ export default class ChatStream extends AiWorkflow {
       persona,
       '',
       '## 对用户说话（须调 MCP，勿用文字假装）',
-      '- **reply**：当前会话。`|` 分句 · `[回复:ID]` · 群聊 `[at:QQ]`',
+      '- **reply**：当前会话文字（调用后立即发到 QQ）。`|` 分句 · `[回复:ID]` · 群聊 `[at:QQ]`',
       '- **poke** / **emotion** / **send_image** / **send_file** / **emojiReaction**：戳一戳、表情、图文件、表情回应',
       '- **saveMessageAsset**：按消息 ID 把图/文件/自定义表情落到工作区 `downloads/`；成功拿到 `workspacePath` 后再 `send_image`/`send_file`',
       '- **relayPrivate***：向好友私聊传话（正文不在群里露出）',
@@ -2424,49 +2465,37 @@ export default class ChatStream extends AiWorkflow {
     return enhanced;
   }
 
+  /** 从消息段取出可用的图片引用（委托标准层） */
+  _imageRefFromSegment(seg) {
+    const { images } = extractVisionFromSegments(seg ? [seg] : []);
+    return images[0] ? visionRefToLocator(images[0]) : null;
+  }
+
+  /**
+   * 通道无关提取：段 / e.img / getReply → string[]（兼容既有 payload）
+   */
   async _extractImagesFromEvent(e) {
-    const images = [];
-    const replyImages = [];
+    const { images, replyImages } = await extractVisionFromEvent(e, { skipStickers: true });
+    const toLocators = (list) =>
+      list.map((x) => visionRefToLocator(x)).filter(Boolean);
 
-    if (e && Array.isArray(e.message)) {
-      let inReplyRegion = false;
-      for (const seg of e.message) {
-        if (seg.type === 'reply') {
-          inReplyRegion = true;
-          continue;
-        }
-        if (seg.type === 'image') {
-          // 跳过 QQ 商店表情贴纸（sub_type===1），避免无意义视觉噪声
-          const subType = seg.sub_type ?? seg.data?.sub_type;
-          if (subType === 1 || subType === '1') continue;
-          const ref = seg.file || seg.url || seg.data?.file || seg.data?.url;
-          if (!ref) continue;
-          if (inReplyRegion) {
-            replyImages.push(ref);
-          } else {
-            images.push(ref);
-          }
-        }
-      }
+    const outImages = toLocators(images);
+    const outReply = toLocators(replyImages);
+
+    if (
+      (Array.isArray(e?.message) &&
+        e.message.some((s) => s?.type === 'image' || s?.type === 'mface')) &&
+      outImages.length === 0 &&
+      outReply.length === 0
+    ) {
+      RuntimeUtil.makeLog(
+        'warn',
+        '[ChatStream] 消息含图片段但未能解析引用，多模态将不可用',
+        'ChatStream'
+      );
     }
 
-    if (typeof e?.getReply === 'function') {
-      try {
-        const reply = await e.getReply();
-        if (reply && Array.isArray(reply.message)) {
-          for (const seg of reply.message) {
-            if (seg.type === 'image') {
-              const ref = seg.file || seg.url || seg.data?.file || seg.data?.url;
-              if (ref) replyImages.push(ref);
-            }
-          }
-        }
-      } catch (err) {
-        AgentRuntime.makeLog('debug', `[ChatStream] _extractImagesFromEvent 获取被回复图片失败: ${err?.message}`, 'ChatStream');
-      }
-    }
-
-    return { images, replyImages };
+    return { images: outImages, replyImages: outReply };
   }
 
   async buildChatContext(e, question) {
@@ -2480,31 +2509,20 @@ export default class ChatStream extends AiWorkflow {
       content: await this.buildSystemPrompt({ e, question })
     });
 
-    // 基础文本
     const text = typeof question === 'string'
       ? question
       : (question?.content ?? question?.text ?? '');
 
     const isGlobalTrigger = !!(question && typeof question === 'object' && question.isGlobalTrigger);
     const { images, replyImages } = await this._extractImagesFromEvent(e);
+    const userContent = buildAgtUserContent({
+      text: text || '',
+      images,
+      replyImages,
+      extra: isGlobalTrigger ? { isGlobalTrigger: true } : undefined
+    });
 
-    if (images.length === 0 && replyImages.length === 0) {
-      messages.push({
-        role: 'user',
-        content: isGlobalTrigger ? { text, isGlobalTrigger: true } : text,
-      });
-    } else {
-      messages.push({
-        role: 'user',
-        content: {
-          text: text || '',
-          images,
-          replyImages,
-          ...(isGlobalTrigger ? { isGlobalTrigger: true } : {}),
-        },
-      });
-    }
-
+    messages.push({ role: 'user', content: userContent });
     return messages;
   }
 
@@ -2800,9 +2818,43 @@ export default class ChatStream extends AiWorkflow {
 
   /** 合并 LLM 正文与 reply 工具拟定内容（有拟定则始终以拟定为准，忽略 LLM 收尾摘要） */
   _resolveOutboundText(llmText, turn) {
+    if (turn?.replyFlushed) return '';
     const queued = String(turn?.queuedReplyContent ?? '').trim();
     if (queued) return queued;
     return (llmText ?? '').toString().trim();
+  }
+
+  /**
+   * 本轮工具结束后：若末工具为 reply 且已发出，跳过下一轮 LLM 收尾（省十数秒）
+   */
+  buildCallOverrides(resolvedConfig, apiConfig = {}, opts = {}) {
+    const base = super.buildCallOverrides(resolvedConfig, apiConfig, opts);
+    const prevHook = base.onAfterToolRound;
+    return {
+      ...base,
+      onAfterToolRound: async (info = {}) => {
+        if (typeof prevHook === 'function') {
+          const early = await prevHook(info);
+          if (early?.stop) return early;
+        }
+        const turn = getWorkflowRequestContext()?.turnState;
+        if (!turn?.replyFlushed) return null;
+        const names = (info.toolNames || []).map((n) => {
+          const s = String(n || '');
+          return s.includes('.') ? s.split('.').pop() : s;
+        });
+        const last = names[names.length - 1];
+        if (last === 'reply') {
+          RuntimeUtil.makeLog(
+            'debug',
+            '[ChatStream] reply 已发出，跳过后续 LLM 收尾轮',
+            'ChatStream'
+          );
+          return { stop: true, content: '' };
+        }
+        return null;
+      }
+    };
   }
 
   async execute(e, question, config) {
@@ -2815,6 +2867,11 @@ export default class ChatStream extends AiWorkflow {
 
         const turn = getWorkflowRequestContext()?.turnState;
         const aiResult = await this.callAI(messages, config);
+
+        // reply 已在工具轮内发出：即使 LLM 收尾轮被跳过/返回空，也视为成功
+        if (turn?.replyFlushed) {
+          return turn.lastOutboundSummary || '';
+        }
         if (!aiResult) return null;
 
         const trimmed = this._resolveOutboundText(aiResult.content, turn);

@@ -24,6 +24,7 @@ import { initOpenAIChatSSE, pipeOpenAIChatCompletionsStream, writeOpenAiWorkflow
 import { pickPromptCacheOverrides } from '#utils/llm/prompt-cache-policy.js';
 import { expandChatToolWorkflowWhitelist } from '#infrastructure/ai-workflow/chat-tool-streams.js';
 import { transformOpenAIStyleVisionMessages } from '#utils/llm/message-transform.js';
+import { mergeUploadedImagesIntoMessages } from '#utils/llm/vision-content.js';
 import { assembleChatLlmMessages } from '#infrastructure/ai-workflow/chat-pipeline.js';
 import { runWithWorkflowRequestContext } from '#infrastructure/ai-workflow/workflow-request-context.js';
 import {
@@ -138,6 +139,10 @@ function resolveDefaultWorkflows() {
  * 特性概览：
  * - 路径：POST /api/v3/chat/completions
  * - 支持 JSON 与 multipart/form-data（含图片上传，多模态对话）
+ * - 图片约定（与 OpenAI Chat Completions 对齐）：
+ *   - JSON：`content` 可为 string、OpenAI parts 数组、或 AGT `{ text, images[], replyImages[] }`
+ *   - multipart：文件落盘为 `/media/{uuid}` URL；可选 `image_roles`（current|reply）对齐文件顺序
+ *   - 多图：默认最多 visionMaxImages（10）张，transform 层截断并标注
  * - 非流式：直接调用各 provider 的 client.chat，返回 OpenAI 风格响应
  * - 流式：通过 client.chatStream + SSE 输出 chat.completion.chunk 事件，前端按 choices[0].delta.content 渲染
  * - 工作流/工具：仅负责把前端选择的“带 MCP 工具的工作流”转换为 streams 透传给 LLM 工厂，用于工具白名单控制
@@ -212,12 +217,23 @@ async function handleChatCompletionsV3(req, res) {
         }
       }
       
-      // 处理上传的图片：改为落盘文件 URL，避免 base64 膨胀与内存峰值
+      // 处理上传的图片：落盘为 /media/{uuid} URL，避免 base64 膨胀（OpenAI image_url 标准用法）
       if (files && files.length > 0) {
         const baseUrl = String(bot?.url || bot?.getServerUrl?.() || `${req.protocol}://${req.get('host')}`).replace(/\/+$/, '');
         for (const file of files) {
           const filename = file.filename || path.basename(file.path);
           uploadedImages.push(`${baseUrl}/media/${filename}`);
+        }
+      }
+      // 可选：image_roles JSON 数组，与文件顺序对齐，取值 current|reply
+      if (fields.image_roles) {
+        try {
+          body.image_roles = JSON.parse(fields.image_roles);
+        } catch {
+          body.image_roles = String(fields.image_roles)
+            .split(',')
+            .map((s) => s.trim())
+            .filter(Boolean);
         }
       }
     } catch (e) {
@@ -269,40 +285,34 @@ async function handleChatCompletionsV3(req, res) {
     'ai.v3.chat.completions'
   );
   
-  // 如果有上传的图片，将图片添加到最后一条用户消息中
+  // 上传图合并进末条 user（兼容 string / OpenAI parts / {text,images,replyImages}）
   if (uploadedImages.length > 0) {
-    const imageParts = uploadedImages.map(img => ({
-      type: 'image_url',
-      image_url: { url: img }
-    }));
-
-    if (messages.length > 0 && messages[messages.length - 1].role === 'user') {
-      const lastMessage = messages[messages.length - 1];
-      // 兼容多种 content 形态：
-      // - string: 转为 [text, ...images]
-      // - array(OpenAI multimodal): 直接 push images
-      // - object({text, images, replyImages}): 追加到 images
-      if (Array.isArray(lastMessage.content)) {
-        lastMessage.content.push(...imageParts);
-      } else if (typeof lastMessage.content === 'string') {
-        const text = lastMessage.content.trim();
-        lastMessage.content = text ? [{ type: 'text', text }, ...imageParts] : imageParts;
-      } else if (lastMessage.content && typeof lastMessage.content === 'object') {
-        const c = lastMessage.content;
-        const text = (c.text || c.content || '').toString().trim();
-        const images = Array.isArray(c.images) ? c.images : [];
-        // 这里把上传后的图片 URL 追加到 images，后续由各 provider 的 transformMessagesWithVision 统一转协议
-        c.text = text;
-        c.images = [...images, ...uploadedImages];
-        lastMessage.content = c;
-      } else {
-        lastMessage.content = imageParts;
+    mergeUploadedImagesIntoMessages(messages, uploadedImages, {
+      roles: Array.isArray(body.image_roles) ? body.image_roles : []
+    });
+  }
+  // JSON 亦可直接带 images / replyImages（URL 或 data URL），不强制 multipart
+  if (Array.isArray(body.images) || Array.isArray(body.replyImages)) {
+    const last = messages[messages.length - 1];
+    if (last?.role === 'user') {
+      if (typeof last.content === 'string') {
+        last.content = {
+          text: last.content,
+          images: Array.isArray(body.images) ? body.images : [],
+          replyImages: Array.isArray(body.replyImages) ? body.replyImages : []
+        };
+      } else if (last.content && typeof last.content === 'object' && !Array.isArray(last.content)) {
+        if (Array.isArray(body.images)) {
+          last.content.images = [...(last.content.images || []), ...body.images];
+        }
+        if (Array.isArray(body.replyImages)) {
+          last.content.replyImages = [...(last.content.replyImages || []), ...body.replyImages];
+        }
+      } else if (Array.isArray(last.content) && Array.isArray(body.images)) {
+        for (const url of body.images) {
+          last.content.push({ type: 'image_url', image_url: { url: String(url) } });
+        }
       }
-    } else {
-      messages.push({
-        role: 'user',
-        content: imageParts
-      });
     }
   }
 

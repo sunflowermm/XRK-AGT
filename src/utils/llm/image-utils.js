@@ -7,6 +7,9 @@
 
 import { readImageBuffer } from '#utils/entry-media.js';
 import { getWorkflowRequestContext } from '#infrastructure/ai-workflow/workflow-request-context.js';
+import { decodeHtmlEntitiesInUrl } from '#utils/llm/vision-content.js';
+
+export { decodeHtmlEntitiesInUrl } from '#utils/llm/vision-content.js';
 
 const DATA_URL_CACHE = new Map();
 
@@ -20,7 +23,7 @@ function getServerPublicUrl() {
 }
 
 function normalizeToAbsoluteUrl(url) {
-  const u = String(url ?? '').trim();
+  const u = decodeHtmlEntitiesInUrl(url);
   if (!u) return '';
   if (u.startsWith('data:')) return u;
   if (/^https?:\/\//i.test(u)) return u;
@@ -59,7 +62,7 @@ function bufferToVisionPayload(buf, fallbackMime = 'image/png') {
  * - QQ file 哈希 / 本地路径 / CDN：readImageBuffer + 可选 get_image
  */
 export async function fetchAsBase64(url, { timeoutMs = 30000, sendApi } = {}) {
-  const raw = String(url ?? '').trim();
+  const raw = decodeHtmlEntitiesInUrl(url);
   if (!raw) return null;
 
   if (raw.startsWith('data:')) {
@@ -89,7 +92,7 @@ export async function fetchAsBase64(url, { timeoutMs = 30000, sendApi } = {}) {
   }
 
   const api = resolveVisionSendApi({ sendApi });
-  const buf = await readImageBuffer({ file: raw, url: raw }, api, {
+  const buf = await readImageBuffer({ file: raw, url: abs || raw }, api, {
     fetchTimeout: timeoutMs,
     getImageTimeout: timeoutMs
   });

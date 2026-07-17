@@ -221,6 +221,17 @@ export default class AnthropicCompatibleLLMClient extends AnthropicLLMClient {
         });
         if (toolResults === null) return lastText;
 
+        if (typeof overrides.onAfterToolRound === 'function') {
+          const early = await overrides.onAfterToolRound({
+            toolNames: toolUses.map((t) => t.name),
+            toolResults,
+            round
+          });
+          if (early?.stop) {
+            return early.content != null ? early.content : lastText;
+          }
+        }
+
         toolResultBlocks = toolResults.map((tr) => ({
           type: 'tool_result',
           tool_use_id: tr.tool_call_id,

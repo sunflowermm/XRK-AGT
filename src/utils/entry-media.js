@@ -43,8 +43,9 @@ async function readLocalBuffer(ref) {
 }
 
 async function fetchRefBuffer(ref, timeoutMs) {
-  if (!ref || !isHttpRef(ref)) return null;
-  const fetched = await RuntimeUtil.Buffer(ref, { http: false, timeout: timeoutMs });
+  const url = String(ref ?? '').replace(/&amp;/gi, '&').trim();
+  if (!url || !isHttpRef(url)) return null;
+  const fetched = await RuntimeUtil.Buffer(url, { http: false, timeout: timeoutMs });
   return Buffer.isBuffer(fetched) && fetched.length ? fetched : null;
 }
 

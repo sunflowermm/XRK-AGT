@@ -292,6 +292,20 @@ export default class OpenAICompatibleLLMClient {
       const toolResults = await this._executeToolCalls(toolCalls, overrides, handlers.onDelta);
       if (toolResults === null) return { content, executedToolNames: Array.from(state.toolNameSet) };
       state.messages.push(...toolResults);
+
+      if (typeof overrides.onAfterToolRound === 'function') {
+        const early = await overrides.onAfterToolRound({
+          toolNames: toolCalls.map((tc) => tc?.function?.name),
+          toolResults,
+          round
+        });
+        if (early?.stop) {
+          return {
+            content: early.content != null ? early.content : content,
+            executedToolNames: Array.from(state.toolNameSet)
+          };
+        }
+      }
     }
 
     RuntimeUtil.makeLog('warn', `[OpenAICompatibleLLMClient] 达到最大工具调用轮数: ${maxToolRounds}`, 'LLMFactory');
