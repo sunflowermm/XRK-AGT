@@ -8,20 +8,18 @@ import {
   unwrapSuccess,
   abortTimeout,
   deepClone,
-} from '../../core/system-Core/www/shared/xrk-web-compat.js';
+} from '../../core/system-Core/www/xrk/modules/web-compat.js';
 
-const sharedRoot = path.resolve(
+const compatPath = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
-  '../../core/system-Core/www/shared'
+  '../../core/system-Core/www/xrk/modules/web-compat.js'
 );
 
-describe('www/shared 静态资源', () => {
-  it('存在 xrk-web-compat.js', () => {
-    assert.ok(fs.existsSync(path.join(sharedRoot, 'xrk-web-compat.js')));
+describe('www/xrk web-compat', () => {
+  it('存在 modules/web-compat.js', () => {
+    assert.ok(fs.existsSync(compatPath));
   });
-});
 
-describe('xrk-web-compat', () => {
   it('randomId 返回非空字符串', () => {
     const id = randomId('t');
     assert.equal(typeof id, 'string');

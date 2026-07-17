@@ -13,7 +13,7 @@ alwaysApply: true
 - **Core 边界**：业务在 `core/`；Core 开发者**禁止**改 `src/`（Runtime）。框架开发者维护 `src/infrastructure/`、`src/utils/`、`src/factory/`。
 - 配置：独立 Core 用 `core/<名>/default/` + `commonconfig/` + `data/<产品>/`；勿把业务 yaml 放进 `config/default_config/`
 - 写 Core / 碰 Node API：读 `xrk-node-runtime`；HTTP 用 `HttpResponse`；全局对象用裸名（见 `xrk-dev-requirements.mdc`）
-- 写 / 审 `core/*/www`：读 **`xrk-www-compat`**（浏览器 ≠ Node 26；`/shared/xrk-web-compat.js`）
+- 写 / 审 `core/*/www`：读 **`xrk-www-compat`**（浏览器 ≠ Node 26；`/xrk/modules/web-compat.js`）
 
 ## 本仓库 Skill 入口
 
@@ -22,7 +22,7 @@ alwaysApply: true
 | 架构与放码 | `xrk-project`（rules）、`xrk-project-overview` |
 | 外部调研 | `xrk-github-research` |
 | 编码与性能 | `xrk-coding-style`、`docs/coding-style.md` |
-| Core www / WebView | **`xrk-www-compat`**、`docs/app-dev.md`（`/shared` 节） |
+| Core www / WebView | **`xrk-www-compat`**、`docs/app-dev.md` |
 | HTTP API / 响应形状 | `xrk-http-api`、`docs/http-api.md` |
 | 扩展点 | `xrk-infrastructure`、`docs/base-classes.md` |
 | 索引 | `.cursor/skills/SKILL_INDEX.md` |

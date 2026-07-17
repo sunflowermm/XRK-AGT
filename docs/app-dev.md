@@ -271,11 +271,11 @@ export default {
 
 **访问路径**：`/<目录名>`（如 `/xrk`，具体端口由启动配置决定）
 
-### Core www 浏览器兼容（`/shared`）
+### Core www 浏览器兼容
 
-浏览器页 **不等于** Node ≥26。校园 WebView / 非 HTTPS 下 `crypto.randomUUID`、`AbortSignal.timeout`、`structuredClone` 可能缺失；`HttpResponse.success` 对普通对象拍平字段，前端勿默认读 `json.data`。
+浏览器页 **不等于** Node ≥26。校园 WebView 下勿裸用 `crypto.randomUUID` / `AbortSignal.timeout`；`HttpResponse.success` 对象拍平，勿默认读 `json.data`。
 
-共享模块：`core/system-Core/www/shared/xrk-web-compat.js` → **`/shared/xrk-web-compat.js`**（`randomId` / `unwrapSuccess` / `abortTimeout` / `deepClone`）。控制台经 `www/xrk/modules/utils.js` 再导出。权威 skill：**`xrk-www-compat`**；响应形状见 **`xrk-http-api`**。挂载时 **system-Core 优先**；其它 Core 的 `www/shared`（如 lsy）叠加回落，避免再出现「路径冲突跳过」。
+权威模块：`core/system-Core/www/xrk/modules/web-compat.js` → **`/xrk/modules/web-compat.js`**（`randomId` / `unwrapSuccess` / `abortTimeout` / `deepClone`）。产品页可 import 或内联。见 skill **`xrk-www-compat`**。
 
 | 页面 | 实拍 |
 |------|------|

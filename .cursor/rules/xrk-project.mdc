@@ -12,18 +12,18 @@ alwaysApply: true
 ## 架构与放码位置
 
 - **业务逻辑**：一律放在 `core/<core名>/` 下，按类型分目录：
-  - `plugin/` 插件；`http/` HTTP API；`workflow/` AI 工作流；`tasker/` 协议适配；`events/` 事件监听；`commonconfig/` 配置 Schema；`www/<应用名>/` 静态前端（必须建子目录；跨 Core 共享静态放 `system-Core/www/shared/` → `/shared`）。
+  - `plugin/` 插件；`http/` HTTP API；`workflow/` AI 工作流；`tasker/` 协议适配；`events/` 事件监听；`commonconfig/` 配置 Schema；`www/<应用名>/` 静态前端（必须建子目录；跨 Core 共享静态放 `system-Core/www/xrk/modules/web-compat.js` → `/xrk/modules/web-compat.js`）。
 - **基础设施**：基类、加载器、工具在 `src/infrastructure/`、`src/utils/`、`src/factory/`；入口为 `src/agent-runtime.js`，应用启动为 `app.js` / `start.js`。
 - **禁止（Core 开发者）**：业务代码不得写在 `src/`；Core 内**不得修改** `src/infrastructure/`、`src/utils/`、`src/factory/` 等 Runtime 代码。
 - **框架开发者**：维护 Runtime、Loader、工厂与共享工具时**可以且应当**改 `src/`，并通过文档与 commonconfig 向 Core 暴露能力。
-- **充分利用底层**：Core 业务应只继承基类、填 schema/实现接口，用足 ConfigBase、插件/HTTP/工作流基类等已有能力；缺能力由框架扩展 `src/`，Core 不重复造轮。浏览器兼容能力扩 `system-Core/www/shared/`，勿各产品 Core 复制踩坑。
+- **充分利用底层**：Core 业务应只继承基类、填 schema/实现接口，用足 ConfigBase、插件/HTTP/工作流基类等已有能力；缺能力由框架扩展 `src/`，Core 不重复造轮。浏览器兼容能力扩 `web-compat.js`，产品页可 import 或内联同语义。
 - **导入路径**：**无** package.json 的 core 使用根包 `#` 别名（`#infrastructure/*`、`#utils/*`）；**有** package.json 的 core **不得**使用 `#`（子包无该别名），须用相对路径引用根目录下 `src/`（如 `../../../src/infrastructure/...`）。
 
 ## 技术栈与版本
 
 - Node.js ≥ 26.0（Current，2026-10 转 LTS）；包管理仅支持 **pnpm**。
 - **服务端**可使用 Node 25/26 特性：`Error.isError()`、`Map.getOrInsert*`、`Uint8Array.fromBase64/toBase64/toHex`、`AbortSignal.timeout`、全局 `URLPattern`、原生 `fetch`（Undici 8 + `ProxyAgent`）、默认启用的 `Temporal` 与 Web Storage 等。
-- **Core www（浏览器）≠ Node 26**：勿把上述 API 原样抄进 `www/`；用 `/shared/xrk-web-compat.js`（skill **`xrk-www-compat`**）。
+- **Core www（浏览器）≠ Node 26**：勿把上述 API 原样抄进 `www/`；用 `/xrk/modules/web-compat.js` 或内联（skill **`xrk-www-compat`**）。
 - 异步 `exec`：统一 `#utils/exec-async.js`（`util.promisify` 单点封装；26.2 尚无 `node:child_process/promises` 子模块，勿在各文件重复 promisify）。
 - 禁止旧写法（**服务端**）：`instanceof Error` 判错、`node-fetch`、分散的 `util.promisify(exec)`、`import ... child_process/promises`、`AbortController`+`setTimeout` 拼超时、URLPattern/Error 特性检测回退。
 

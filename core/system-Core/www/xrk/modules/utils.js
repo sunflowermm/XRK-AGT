@@ -1,17 +1,14 @@
 /**
  * 工具函数模块（XRK 控制台 `/xrk`）
- *
- * 格式化、转义、剪贴板等；浏览器兼容 API 从 `/shared/xrk-web-compat.js` 再导出，
- * 避免控制台与产品页各写一份（skill `xrk-www-compat`）。
+ * 浏览器兼容 API 见同目录 `web-compat.js`（skill `xrk-www-compat`）。
  */
 
-/** @see /shared/xrk-web-compat.js — randomId / unwrapSuccess / abortTimeout / deepClone */
 export {
   randomId,
   unwrapSuccess,
   abortTimeout,
   deepClone
-} from '/shared/xrk-web-compat.js';
+} from './web-compat.js';
 
 /**
  * 格式化字节大小

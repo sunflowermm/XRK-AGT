@@ -26,8 +26,6 @@ const requiredFiles = [
   'modules/pages/home-plugins-workflow.js'
 ];
 
-const sharedRoot = path.resolve(wwwRoot, '../shared');
-
 describe('www/xrk 静态资源', () => {
   for (const rel of requiredFiles) {
     it(`存在 ${rel}`, () => {
@@ -48,10 +46,10 @@ describe('www/xrk 静态资源', () => {
     assert.match(html, /css\/styles-layout\.css/);
   });
 
-  it('utils 再导出 /shared/xrk-web-compat', () => {
+  it('utils 再导出 ./web-compat', () => {
     const src = fs.readFileSync(path.join(wwwRoot, 'modules/utils.js'), 'utf8');
-    assert.match(src, /\/shared\/xrk-web-compat\.js/);
-    assert.ok(fs.existsSync(path.join(sharedRoot, 'xrk-web-compat.js')));
+    assert.match(src, /from '\.\/web-compat\.js'/);
+    assert.ok(fs.existsSync(path.join(wwwRoot, 'modules/web-compat.js')));
   });
 });
 

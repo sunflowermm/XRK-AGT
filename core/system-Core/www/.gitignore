@@ -1,10 +1,6 @@
-# system-Core/www：默认忽略；仅跟踪控制台与框架共享静态
+# system-Core/www：默认忽略，仅跟踪 xrk 控制台静态资源
 *
 !.gitignore
 
 !xrk/
 !xrk/**
-
-# 框架浏览器兼容层（挂载 /shared）— 勿忽略，否则部署机 404
-!shared/
-!shared/**

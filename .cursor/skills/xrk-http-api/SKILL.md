@@ -49,7 +49,7 @@ HttpResponse.success(res, items); // 数组
 浏览器 ESM：
 
 ```javascript
-import { unwrapSuccess } from '/shared/xrk-web-compat.js';
+import { unwrapSuccess } from '/xrk/modules/web-compat.js';
 const payload = unwrapSuccess(json);
 ```
 
