@@ -1,9 +1,12 @@
 /**
  * 图片 / 多模态辅助工具：
  * - 统一将相对路径 / 内部 URL 转成可 fetch 的绝对 URL
- * - 统一下载图片并转为 base64
+ * - 统一下载图片并转为 base64（含 QQ file 哈希：经 entry-media + bot.sendApi get_image）
  * - 可选：在 OpenAI 风格 messages 上，把 image_url.url 统一转为 data URL
  */
+
+import { readImageBuffer } from '#utils/entry-media.js';
+import { getWorkflowRequestContext } from '#infrastructure/ai-workflow/workflow-request-context.js';
 
 const DATA_URL_CACHE = new Map();
 
@@ -34,47 +37,70 @@ function parseDataUrl(dataUrl) {
   return { mimeType: m[1], base64: m[2] };
 }
 
+function resolveVisionSendApi(options = {}) {
+  if (typeof options.sendApi === 'function') return options.sendApi;
+  const e = getWorkflowRequestContext()?.e;
+  if (e?.bot && typeof e.bot.sendApi === 'function') {
+    return (action, params) => e.bot.sendApi(action, params);
+  }
+  return null;
+}
+
+function bufferToVisionPayload(buf, fallbackMime = 'image/png') {
+  if (!Buffer.isBuffer(buf) || !buf.length) return null;
+  const mimeType = fallbackMime || 'image/png';
+  return { mimeType, base64: buf.toBase64() };
+}
+
 /**
  * 下载图片并返回 { mimeType, base64 }
- * - 支持 data URL：直接解析
- * - 支持相对路径：通过 AgentRuntime.url 转成绝对 URL 后下载
+ * - data URL：直接解析
+ * - http(s)：原生 fetch
+ * - QQ file 哈希 / 本地路径 / CDN：readImageBuffer + 可选 get_image
  */
-export async function fetchAsBase64(url, { timeoutMs = 30000 } = {}) {
+export async function fetchAsBase64(url, { timeoutMs = 30000, sendApi } = {}) {
   const raw = String(url ?? '').trim();
   if (!raw) return null;
 
-  // 已经是 data URL
   if (raw.startsWith('data:')) {
     const parsed = parseDataUrl(raw);
     return parsed && parsed.base64 ? parsed : null;
   }
 
   const abs = normalizeToAbsoluteUrl(raw);
-  if (!/^https?:\/\//i.test(abs)) {
-    return null;
+  if (/^https?:\/\//i.test(abs)) {
+    const now = Date.now();
+    const cached = DATA_URL_CACHE.get(abs);
+    if (cached && now - cached.ts < 5 * 60 * 1000) {
+      return { mimeType: cached.mimeType, base64: cached.base64 };
+    }
+
+    try {
+      const resp = await fetch(abs, { signal: AbortSignal.timeout(timeoutMs) });
+      if (resp.ok) {
+        const mimeType = resp.headers.get('content-type') || 'image/png';
+        const base64 = new Uint8Array(await resp.arrayBuffer()).toBase64();
+        DATA_URL_CACHE.set(abs, { ts: now, mimeType, base64 });
+        return { mimeType, base64 };
+      }
+    } catch {
+      /* fall through to entry-media（QQ CDN 等常需 get_image） */
+    }
   }
 
-  const now = Date.now();
-  const cached = DATA_URL_CACHE.get(abs);
-  if (cached && (now - cached.ts) < 5 * 60 * 1000) {
-    return { mimeType: cached.mimeType, base64: cached.base64 };
-  }
-
-  const resp = await fetch(abs, { signal: AbortSignal.timeout(timeoutMs) });
-  if (!resp.ok) return null;
-
-  const mimeType = resp.headers.get('content-type') || 'image/png';
-  const base64 = new Uint8Array(await resp.arrayBuffer()).toBase64();
-
-  DATA_URL_CACHE.set(abs, { ts: now, mimeType, base64 });
-  return { mimeType, base64 };
+  const api = resolveVisionSendApi({ sendApi });
+  const buf = await readImageBuffer({ file: raw, url: raw }, api, {
+    fetchTimeout: timeoutMs,
+    getImageTimeout: timeoutMs
+  });
+  return bufferToVisionPayload(buf);
 }
 
 /**
  * 在 OpenAI 风格 messages 上，把 user 消息中的 image_url.url 统一转成 data URL
  * @param {Array} messages - OpenAI Chat Completions 风格的 messages
  */
-export async function ensureMessagesImagesDataUrl(messages, { timeoutMs = 30000 } = {}) {
+export async function ensureMessagesImagesDataUrl(messages, { timeoutMs = 30000, sendApi } = {}) {
   if (!Array.isArray(messages)) return;
 
   for (const msg of messages) {
@@ -84,11 +110,10 @@ export async function ensureMessagesImagesDataUrl(messages, { timeoutMs = 30000 
     for (const part of msg.content) {
       if (!part || part.type !== 'image_url' || !part.image_url?.url) continue;
 
-      const info = await fetchAsBase64(part.image_url.url, { timeoutMs });
+      const info = await fetchAsBase64(part.image_url.url, { timeoutMs, sendApi });
       if (!info || !info.base64) continue;
 
       part.image_url.url = `data:${info.mimeType};base64,${info.base64}`;
     }
   }
 }
-

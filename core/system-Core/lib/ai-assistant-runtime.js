@@ -87,6 +87,33 @@ export async function shouldTriggerAI(e, config) {
   return false;
 }
 
+/** 从段里取 reply 目标消息 ID（不依赖 e.source；AGT OneBot 通常无 source） */
+function replyTargetIdFromEvent(e) {
+  const seg = Array.isArray(e?.message)
+    ? e.message.find((s) => s && s.type === 'reply')
+    : null;
+  const id = seg?.id ?? seg?.data?.id ?? e?.source?.message_id ?? e?.source?.id;
+  return id != null && String(id).trim() !== '' ? String(id).trim() : null;
+}
+
+function summarizeReplyRaw(reply) {
+  if (!reply) return '';
+  if (reply.raw_message) return String(reply.raw_message).replace(/\s+/g, ' ').trim();
+  if (!Array.isArray(reply.message)) return '';
+  return reply.message
+    .map((seg) => {
+      if (!seg || typeof seg !== 'object') return '';
+      if (seg.type === 'text') return seg.text || '';
+      if (seg.type === 'image' || seg.type === 'mface') return '[图片]';
+      if (seg.type === 'file') return `[文件:${seg.name || '未知'}]`;
+      if (seg.type === 'at') return `@${seg.qq || seg.user_id || ''}`;
+      return '';
+    })
+    .join('')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 export async function processMessageContent(e, config) {
   const fallback = e.msg || '';
   const message = e.message;
@@ -94,23 +121,32 @@ export async function processMessageContent(e, config) {
 
   try {
     let content = '';
-    if (e.source && typeof e.getReply === 'function') {
+    const replyId = replyTargetIdFromEvent(e);
+    // 轻量标记；完整「引用消息」块由 ChatStream.mergeMessageHistory 注入
+    if (replyId) content += `[回复:${replyId}] `;
+    if (replyId && typeof e.getReply === 'function') {
       try {
         const reply = await e.getReply();
-        if (reply) {
-          const name = reply.sender?.card || reply.sender?.nickname || '未知';
-          content += `[回复${name}的"${reply.raw_message || ''}"] `;
+        const raw = summarizeReplyRaw(reply).slice(0, 180);
+        if (raw) {
+          const name = reply?.sender?.card || reply?.sender?.nickname || '未知';
+          content += `${name}「${raw}」 `;
         }
       } catch { /* ignore */ }
     }
+
     for (const seg of message) {
+      if (!seg || seg.type === 'reply') continue;
       if (seg.type === 'text') content += seg.text || seg.data?.text || '';
       else if (seg.type === 'at') {
         const qq = seg.qq ?? seg.user_id ?? seg.data?.qq ?? seg.data?.user_id;
         if (qq != null && String(qq) !== String(e.self_id)) {
           content += `@${qq} `;
         }
-      } else if (seg.type === 'image') content += '[图片] ';
+      } else if (seg.type === 'image' || seg.type === 'mface') content += '[图片] ';
+      else if (seg.type === 'file') {
+        content += `[文件:${seg.name || seg.data?.name || '未知'}] `;
+      } else if (seg.type === 'face') content += '[表情] ';
     }
     if (config?.prefix) {
       content = content.replace(new RegExp(`^${config.prefix}`), '');

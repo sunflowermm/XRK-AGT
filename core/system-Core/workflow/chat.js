@@ -1,5 +1,6 @@
 import path from 'path';
 import fs from 'fs';
+import fsPromises from 'fs/promises';
 import AiWorkflow from '#infrastructure/ai-workflow/ai-workflow.js';
 import RuntimeUtil from '#utils/runtime-util.js';
 import { errorHandler, ErrorCodes } from '#utils/error-handler.js';
@@ -28,6 +29,7 @@ import {
   splitProtocolParts,
 } from '#utils/chat-reply-protocol.js';
 import { summarizeToolForHistory } from '#utils/mcp-tool-result-text.js';
+import { readImageBuffer } from '#utils/entry-media.js';
 
 const EMOTIONS_DIR = path.join(process.cwd(), 'resources/aiimages');
 const IMAGE_SEND_EXTS = new Set(['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp']);
@@ -334,6 +336,359 @@ export default class ChatStream extends AiWorkflow {
     return { absPath, displayName: path.basename(absPath) };
   }
 
+  /** 将相对路径解析到工作区内（禁止逃逸） */
+  _resolveWorkspaceWriteAbs(relPath) {
+    const rel = String(relPath ?? '').trim().replace(/\\/g, '/');
+    if (!rel) throw new Error('相对路径不能为空');
+    const root = path.resolve(this._chatWorkspaceAbs());
+    const absPath = path.resolve(root, rel);
+    const outside = path.relative(root, absPath);
+    if (outside.startsWith('..') || path.isAbsolute(outside)) {
+      throw new Error('路径超出工作区');
+    }
+    return absPath;
+  }
+
+  async _fetchMessageById(e, msgId) {
+    if (!e || !msgId) return null;
+    const id = String(msgId).trim();
+    if (!id) return null;
+
+    if (e.message_id != null && String(e.message_id) === id && Array.isArray(e.message)) {
+      return {
+        message_id: e.message_id,
+        message: e.message,
+        sender: e.sender,
+        time: e.time,
+        user_id: e.user_id,
+        raw_message: e.raw_message
+      };
+    }
+
+    const historyKey = ChatStream.getEventHistoryKey(e);
+    if (historyKey) {
+      const history = ChatStream.messageHistory.get(historyKey) || [];
+      const cached = history.find((m) => String(m.message_id || m.real_id) === id);
+      if (cached?._rawMessage && Array.isArray(cached._rawMessage) && cached._rawMessage.length > 0) {
+        return {
+          message_id: cached.message_id,
+          message: cached._rawMessage,
+          sender: { user_id: cached.user_id, nickname: cached.nickname },
+          time: cached.time,
+          raw_message: cached.message,
+          user_id: cached.user_id
+        };
+      }
+    }
+
+    if (e.bot?.sendApi) {
+      try {
+        const result = await e.bot.sendApi('get_msg', { message_id: id });
+        if (result?.data) return result.data;
+      } catch (err) {
+        RuntimeUtil.makeLog('debug', `[ChatStream] get_msg 失败 msgId=${id}: ${err?.message}`, 'ChatStream');
+      }
+    }
+    if (typeof e.getReply === 'function' && String(ChatStream.getReplySegmentId(e) || '') === id) {
+      try {
+        const reply = await e.getReply();
+        if (reply) return reply;
+      } catch {
+        /* ignore */
+      }
+    }
+
+    // 最后回退：仅有历史文本、无段数据（无法再下载媒体，但仍可供引用摘要）
+    if (historyKey) {
+      const history = ChatStream.messageHistory.get(historyKey) || [];
+      const cached = history.find((m) => String(m.message_id || m.real_id) === id);
+      if (cached) {
+        return {
+          message_id: cached.message_id,
+          message: cached._rawMessage || [],
+          sender: { user_id: cached.user_id, nickname: cached.nickname },
+          time: cached.time,
+          raw_message: cached.message,
+          user_id: cached.user_id
+        };
+      }
+    }
+    return null;
+  }
+
+  _extractMessageAssets(message) {
+    const assets = [];
+    if (!Array.isArray(message)) return assets;
+    for (const seg of message) {
+      if (!seg || typeof seg !== 'object') continue;
+      const data = seg.data || seg;
+      if (seg.type === 'image') {
+        assets.push({
+          type: 'image',
+          url: seg.url || data.url,
+          file: data.file || seg.file
+        });
+      } else if (seg.type === 'file') {
+        assets.push({
+          type: 'file',
+          name: data.name || seg.name,
+          url: data.url || seg.url,
+          file: data.file || seg.file
+        });
+      } else if (seg.type === 'mface') {
+        assets.push({
+          type: 'mface',
+          url: data.url || seg.url,
+          file: data.file || seg.file,
+          summary: data.summary
+        });
+      }
+    }
+    return assets;
+  }
+
+  _guessAssetExtension(asset) {
+    if (asset?.type === 'file' && asset.name) {
+      const ext = path.extname(asset.name);
+      if (ext) return ext;
+    }
+    if (asset?.url || asset?.file) {
+      const fromName = path.extname(String(asset.file || asset.url).split('?')[0]);
+      if (IMAGE_SEND_EXTS.has(fromName.toLowerCase())) return fromName.toLowerCase();
+    }
+    if (asset?.type === 'image' || asset?.type === 'mface') return '.png';
+    return '.bin';
+  }
+
+  /**
+   * 段 → 历史文本 + 媒体标记（图片/文件用标记；reply 保留 [回复:id]）
+   */
+  _segmentsToHistoryParts(segments) {
+    if (!Array.isArray(segments)) {
+      return { text: '', hasImage: false, hasFile: false, hasFace: false };
+    }
+    let hasImage = false;
+    let hasFile = false;
+    let hasFace = false;
+    const text = segments
+      .map((seg) => {
+        if (!seg || typeof seg !== 'object') return '';
+        switch (seg.type) {
+          case 'text':
+            return seg.text || '';
+          case 'image':
+          case 'mface':
+            hasImage = true;
+            return '[图片]';
+          case 'file':
+            hasFile = true;
+            return `[文件:${seg.name || seg.data?.name || '未知'}]`;
+          case 'face':
+            hasFace = true;
+            return '[表情]';
+          case 'at':
+            return `@${seg.qq || seg.user_id || ''}`;
+          case 'reply':
+            return `[回复:${seg.id || seg.data?.id || ''}]`;
+          default:
+            return '';
+        }
+      })
+      .join('')
+      .replace(/\s+/g, ' ')
+      .trim();
+    return { text, hasImage, hasFile, hasFace };
+  }
+
+  async _downloadMessageAssetToWorkspace(e, asset, relPath) {
+    const absPath = this._resolveWorkspaceWriteAbs(relPath);
+    await fsPromises.mkdir(path.dirname(absPath), { recursive: true });
+    const sendApi = e.bot?.sendApi ? (action, params) => e.bot.sendApi(action, params) : undefined;
+
+    if (asset.type === 'face') {
+      throw new Error('内置 QQ 表情（face）无法下载；请用 emotion 或让用户发图片/自定义表情包');
+    }
+
+    if ((asset.type === 'image' || asset.type === 'mface') && (asset.file || asset.url)) {
+      const buf = await readImageBuffer({ file: asset.file, url: asset.url }, sendApi);
+      if (buf?.length) {
+        await RuntimeUtil.writeFile(absPath, buf);
+        return absPath;
+      }
+    }
+
+    const candidates = [asset.file, asset.file_id, asset.id, asset.url, asset.path]
+      .map((x) => String(x ?? '').trim())
+      .filter(Boolean);
+
+    for (const ref of candidates) {
+      const local = ref.replace(/^file:\/\//i, '');
+      if (!/^https?:\/\//i.test(local) && (await RuntimeUtil.fileExists(local))) {
+        await fsPromises.copyFile(local, absPath);
+        return absPath;
+      }
+    }
+
+    if (sendApi) {
+      for (const fileRef of candidates) {
+        if (/^https?:\/\//i.test(fileRef)) continue;
+        for (const params of [{ file: fileRef }, { file_id: fileRef }]) {
+          try {
+            const result = await e.bot.sendApi('get_file', params);
+            const d = result?.data || {};
+            const local = d.file || d.path;
+            if (local && (await RuntimeUtil.fileExists(local))) {
+              await fsPromises.copyFile(local, absPath);
+              return absPath;
+            }
+            if (d.base64) {
+              const raw = String(d.base64).replace(/^base64:\/\//, '');
+              if (raw) {
+                await RuntimeUtil.writeFile(absPath, Buffer.from(raw, 'base64'));
+                return absPath;
+              }
+            }
+            if (d.url && /^https?:\/\//i.test(String(d.url))) {
+              const resp = await fetch(String(d.url), { signal: AbortSignal.timeout(60000) });
+              if (resp.ok) {
+                await RuntimeUtil.writeFile(absPath, Buffer.from(await resp.arrayBuffer()));
+                return absPath;
+              }
+            }
+          } catch {
+            /* try next */
+          }
+        }
+      }
+    }
+
+    for (const ref of candidates) {
+      if (!/^https?:\/\//i.test(ref)) continue;
+      try {
+        const resp = await fetch(ref, { signal: AbortSignal.timeout(60000) });
+        if (resp.ok) {
+          await RuntimeUtil.writeFile(absPath, Buffer.from(await resp.arrayBuffer()));
+          return absPath;
+        }
+      } catch {
+        /* try next */
+      }
+    }
+
+    throw new Error('无法获取可下载的资源（临时链可能已过期，或缺少本地文件）');
+  }
+
+  /** 解析本轮「回复/引用」目标，供 [当前消息] 强调 */
+  async _resolveInboundReplyContext(e) {
+    const replyId = ChatStream.getReplySegmentId(e);
+    if (replyId == null && e?.source?.id == null && e?.source?.message_id == null) return null;
+
+    let replyMsg = null;
+    if (typeof e.getReply === 'function') {
+      try {
+        replyMsg = await e.getReply();
+      } catch {
+        /* ignore */
+      }
+    }
+    const id = String(
+      replyMsg?.message_id || replyMsg?.id || replyId || e.source?.message_id || e.source?.id || ''
+    ).trim();
+    if (!id) return null;
+
+    if (!replyMsg || (!replyMsg.raw_message && !(replyMsg.message?.length))) {
+      replyMsg = (await this._fetchMessageById(e, id)) || replyMsg;
+    }
+
+    const parts = this._segmentsToHistoryParts(
+      Array.isArray(replyMsg?.message) ? replyMsg.message : []
+    );
+    let summary = parts.text || String(replyMsg?.raw_message || '').replace(/\s+/g, ' ').trim();
+    if (!summary) {
+      if (parts.hasImage) summary = '[图片]';
+      else if (parts.hasFile) summary = '[文件]';
+      else summary = '(无文本)';
+    }
+    if (summary.length > 200) summary = `${summary.slice(0, 200)}…`;
+
+    const uid = replyMsg?.sender?.user_id ?? replyMsg?.user_id ?? '';
+    const nickname =
+      replyMsg?.sender?.card || replyMsg?.sender?.nickname || replyMsg?.nickname || '未知';
+    const line = `${nickname}${uid !== '' ? `(${uid})` : ''}[ID:${id}]: ${summary}`;
+    return {
+      replyId: id,
+      line,
+      hasImage: parts.hasImage,
+      hasFile: parts.hasFile
+    };
+  }
+
+  /** 去掉 question 里已拼过的回复装饰，避免与 [引用消息] 块重复 */
+  static stripInboundReplyDecorators(text) {
+    let s = String(text ?? '');
+    s = s.replace(/^\[回复:\d+\]\s*/u, '');
+    s = s.replace(/^\[回复[^\]]*的"[^"]*"\]\s*/u, '');
+    // processMessageContent：`[回复:id] 昵称「摘要」 `
+    s = s.replace(/^\[回复:[^\]]+\]\s+[^\n「]*「[^」]*」\s*/u, '');
+    return s.trim();
+  }
+
+  /**
+   * 组装 [当前消息] 文本行（含引用强调）
+   * @returns {Promise<{ text: string, images: string[], replyImages: string[] }|null>}
+   */
+  async _buildCurrentMessagePayload(e, userMessage) {
+    if (!e || !userMessage) return null;
+    const currentMsgId = ChatStream.resolveEventMessageId(e) || '未知';
+    const currentUserNickname = e.sender?.card || e.sender?.nickname || e.user?.name || '用户';
+    const rawContent =
+      typeof userMessage.content === 'string'
+        ? userMessage.content
+        : (userMessage.content?.text ?? '');
+    const body = ChatStream.stripInboundReplyDecorators(rawContent);
+    const images =
+      typeof userMessage.content === 'object' && userMessage.content
+        ? userMessage.content.images || []
+        : [];
+    const replyImages =
+      typeof userMessage.content === 'object' && userMessage.content
+        ? userMessage.content.replyImages || []
+        : [];
+    const hasMedia = images.length > 0 || replyImages.length > 0;
+    const replyCtx = await this._resolveInboundReplyContext(e);
+    const inboundParts = this._segmentsToHistoryParts(Array.isArray(e.message) ? e.message : []);
+
+    const lineBody = body || (hasMedia || inboundParts.hasImage || inboundParts.hasFile ? '[附图]' : replyCtx ? '' : '');
+    if (!lineBody && !hasMedia && !replyCtx && !inboundParts.hasFile) return null;
+
+    const tags = [
+      hasMedia || replyCtx?.hasImage || inboundParts.hasImage ? '[含图片]' : '',
+      replyCtx?.hasFile || inboundParts.hasFile ? '[含文件]' : ''
+    ]
+      .filter(Boolean)
+      .join('');
+    const tagPrefix = tags ? `${tags} ` : '';
+    const replyMark = replyCtx ? `[回复:${replyCtx.replyId}]` : '';
+
+    const lines = ['[当前消息]'];
+    if (replyCtx) {
+      lines.push(`[引用消息] ${replyCtx.line}`);
+    }
+    if (currentMsgId !== '未知') {
+      lines.push(
+        `${tagPrefix}${currentUserNickname}(${e.user_id})[ID:${currentMsgId}]${replyMark}: ${lineBody || '(仅引用/媒体)'}`
+      );
+    } else {
+      lines.push(`${tagPrefix}${lineBody || '(仅引用/媒体)'}`);
+    }
+
+    return {
+      text: lines.join('\n'),
+      images,
+      replyImages
+    };
+  }
+
   /**
    * 注册所有功能
    * 
@@ -472,6 +827,64 @@ export default class ChatStream extends AiWorkflow {
         });
       },
       enabled: true,
+    });
+
+    this.registerMCPTool('saveMessageAsset', {
+      description:
+        '将消息中的图片/文件/自定义表情包下载到 Agent 工作区 downloads/。messageId 必填（见 [ID:xxx] 或 [引用消息]）；index 默认 0（文件与图片同一列表）；saveAs 可选相对路径。成功后：图用 send_image，其它用 send_file。勿口头声称已保存。',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          messageId: { type: 'string', description: '消息 ID（可保存引用目标或当前消息）' },
+          index: { type: 'number', description: '可下载资源序号，默认 0' },
+          saveAs: { type: 'string', description: '工作区内相对路径，默认 downloads/qq/{msgId}_{index}.ext' }
+        },
+        required: ['messageId']
+      },
+      handler: async (args = {}, context = {}) => {
+        const e = context.e;
+        if (!e) return { success: false, error: '事件对象不存在' };
+        const msgId = String(args.messageId ?? '').trim();
+        if (!msgId) return { success: false, error: '消息ID不能为空' };
+        const index = Math.max(parseInt(args.index, 10) || 0, 0);
+        const messageData = await this._fetchMessageById(e, msgId);
+        if (!messageData) {
+          return { success: false, error: '无法获取消息，可能已过期' };
+        }
+        const segments = Array.isArray(messageData.message) ? messageData.message : [];
+        const assets = this._extractMessageAssets(segments).filter(
+          (a) => a.type === 'image' || a.type === 'file' || a.type === 'mface'
+        );
+        if (assets.length === 0) {
+          return { success: false, error: '该消息没有可下载的图片/文件/表情包' };
+        }
+        if (index >= assets.length) {
+          return { success: false, error: `index 超出范围，共 ${assets.length} 个可下载资源` };
+        }
+        const asset = assets[index];
+        const ext = this._guessAssetExtension(asset);
+        const defaultName = asset.name || `qq_${msgId}_${index}${ext}`;
+        const relPath =
+          String(args.saveAs ?? '').trim() || path.posix.join('downloads', 'qq', defaultName);
+        try {
+          const absPath = await this._downloadMessageAssetToWorkspace(e, asset, relPath);
+          const data = {
+            messageId: msgId,
+            index,
+            type: asset.type,
+            workspacePath: relPath,
+            absolutePath: absPath
+          };
+          const hint =
+            asset.type === 'image' || asset.type === 'mface'
+              ? `已保存到 ${relPath}。发图用 send_image；内置表情包用 emotion。`
+              : `已保存到 ${relPath}。当前会话发文件用 send_file；私聊传文件用 relayPrivateFile。`;
+          return { success: true, data, raw: hint };
+        } catch (err) {
+          return { success: false, error: err.message };
+        }
+      },
+      enabled: true
     });
 
     this.registerMCPTool('relayPrivate', {
@@ -1441,6 +1854,18 @@ export default class ChatStream extends AiWorkflow {
         if (msgId) {
           const one = history.find((m) => String(m.message_id || m.real_id) === msgId);
           if (!one) return { success: false, error: '本地历史无此消息，可能已过期' };
+          let assets = [];
+          const messageData = await this._fetchMessageById(e, msgId);
+          if (messageData?.message) {
+            assets = this._extractMessageAssets(messageData.message)
+              .filter((a) => a.type === 'image' || a.type === 'file' || a.type === 'mface')
+              .map((a, index) => ({
+                index,
+                type: a.type,
+                name: a.name || undefined,
+                downloadable: true
+              }));
+          }
           const data = {
             message_id: one.message_id,
             user_id: one.user_id,
@@ -1448,7 +1873,11 @@ export default class ChatStream extends AiWorkflow {
             message: one.message,
             time: one.time,
             isBot: one.isBot === true,
-            isTool: one.isTool === true
+            isTool: one.isTool === true,
+            hasImage: !!one.hasImage,
+            hasFile: !!one.hasFile,
+            downloadable: !!(one.hasImage || one.hasFile || assets.length),
+            assets
           };
           return {
             success: true,
@@ -1468,7 +1897,10 @@ export default class ChatStream extends AiWorkflow {
             message: stripLegacyToolUsagePrefix(m.message || ''),
             time: m.time,
             isBot: m.isBot === true,
-            isTool: m.isTool === true
+            isTool: m.isTool === true,
+            hasImage: !!m.hasImage,
+            hasFile: !!m.hasFile,
+            downloadable: !!(m.hasImage || m.hasFile)
           }))
         };
         return {
@@ -1819,27 +2251,36 @@ export default class ChatStream extends AiWorkflow {
     if (!historyKey) return;
     try {
       let message = '';
-      if (e.raw_message) message = e.raw_message;
-      else if (e.msg) message = e.msg;
-      else if (e.message) {
-        if (typeof e.message === 'string') message = e.message;
-        else if (Array.isArray(e.message)) {
-          message = e.message.map(seg => {
-            if (!seg || typeof seg !== 'object') return '';
-            switch (seg.type) {
-              case 'text': return seg.text || '';
-              case 'image': return '[图片]';
-              case 'at': return `@${seg.qq || seg.user_id || ''}`;
-              case 'reply': return `[回复:${seg.id || ''}]`;
-              default: return '';
-            }
-          }).join('');
+      let hasImage = !!(Array.isArray(e.img) && e.img.length > 0);
+      let hasFile = false;
+      let hasFace = false;
+      let rawSegments = null;
+
+      if (Array.isArray(e.message)) {
+        rawSegments = e.message;
+        const parts = this._segmentsToHistoryParts(e.message);
+        message = parts.text;
+        hasImage = hasImage || parts.hasImage;
+        hasFile = parts.hasFile;
+        hasFace = parts.hasFace;
+        if (!message && e.raw_message) {
+          message = String(e.raw_message)
+            .replace(/\[CQ:(?:image|file|mface|face)[^\]]*\]/gi, '')
+            .trim();
         }
-      } else if (e.content) message = typeof e.content === 'string' ? e.content : (e.content?.text ?? '');
+      } else if (e.raw_message) {
+        message = e.raw_message;
+      } else if (e.msg) {
+        message = e.msg;
+      } else if (e.message && typeof e.message === 'string') {
+        message = e.message;
+      } else if (e.content) {
+        message = typeof e.content === 'string' ? e.content : (e.content?.text ?? '');
+      }
 
       const userId = e.user_id ?? e.userId ?? e.user?.id ?? e.sender?.user_id ?? null;
       const nickname = e.sender?.card || e.sender?.nickname || e.user?.name || e.user?.nickname || e.from?.name || '未知';
-      let messageId = e.message_id ?? e.real_id ?? e.messageId ?? e.id ?? e.source?.id ?? ChatStream.getReplySegmentId(e);
+      let messageId = e.message_id ?? e.real_id ?? e.messageId ?? e.id;
       if (!messageId) {
         messageId = `temp_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
         RuntimeUtil.makeLog('debug', `消息ID缺失，使用临时ID: ${messageId}`, 'ChatStream');
@@ -1853,7 +2294,11 @@ export default class ChatStream extends AiWorkflow {
         message,
         message_id: messageId,
         time: e.time || Date.now(),
-        platform: e.isDevice ? 'device' : 'onebot'
+        platform: e.isDevice ? 'device' : 'onebot',
+        hasImage,
+        hasFile,
+        hasFace,
+        ...(rawSegments ? { _rawMessage: rawSegments } : {})
       };
 
       if (!ChatStream.messageHistory.has(historyKey)) ChatStream.messageHistory.set(historyKey, []);
@@ -1923,6 +2368,7 @@ export default class ChatStream extends AiWorkflow {
       '## 对用户说话（须调 MCP，勿用文字假装）',
       '- **reply**：当前会话。`|` 分句 · `[回复:ID]` · 群聊 `[at:QQ]`',
       '- **poke** / **emotion** / **send_image** / **send_file** / **emojiReaction**：戳一戳、表情、图文件、表情回应',
+      '- **saveMessageAsset**：按消息 ID 把图/文件/自定义表情落到工作区 `downloads/`；成功拿到 `workspacePath` 后再 `send_image`/`send_file`',
       '- **relayPrivate***：向好友私聊传话（正文不在群里露出）',
       '',
       '## 群管 / 查询 / 好友（多面能力）',
@@ -1933,8 +2379,14 @@ export default class ChatStream extends AiWorkflow {
       '- **tools.***：工作区 read / grep / search_replace / write / run',
       '- 禁止 `@QQ`/`@昵称`；用户已能看见后勿重复 reply；只答 `[当前消息]`',
       '',
+      '## 图片与文件',
+      '- `[当前消息]` 下若有 `[引用消息]`，表示用户在回复那条；讨论/保存应针对引用目标或当前附图',
+      '- `[当前消息]` 附图本轮已多模态可见，勿声称「看不见图」',
+      '- 历史行 `[含图片]`/`[含文件]` 仅表示该消息曾带媒体；落盘须 **saveMessageAsset(messageId)**，禁止口头「已保存」',
+      '- **send_image** / **send_file** 只能发工作区内已有路径，不能凭空 invent 文件名',
+      '',
       '## 记录',
-      '- `昵称(QQ)[ID:xxx]` 为消息 ID，引用写 `[回复:xxx]`',
+      '- `昵称(QQ)[ID:xxx]` 为消息 ID；引用写 `[回复:xxx]`；下载媒体用同一 ID',
       '',
       '## 工作区与 skills',
       '- 「Workspace context」含 AGENTS / rules / **skills**（按 location 用 tools.read 加载）',
@@ -1984,6 +2436,9 @@ export default class ChatStream extends AiWorkflow {
           continue;
         }
         if (seg.type === 'image') {
+          // 跳过 QQ 商店表情贴纸（sub_type===1），避免无意义视觉噪声
+          const subType = seg.sub_type ?? seg.data?.sub_type;
+          if (subType === 1 || subType === '1') continue;
           const ref = seg.file || seg.url || seg.data?.file || seg.data?.url;
           if (!ref) continue;
           if (inReplyRegion) {
@@ -2084,13 +2539,14 @@ export default class ChatStream extends AiWorkflow {
    */
   static getReplySegmentId(e) {
     const seg = e?.message && Array.isArray(e.message) ? e.message.find(s => s && s.type === 'reply') : null;
-    return seg?.id ?? seg?.data?.id ?? null;
+    const id = seg?.id ?? seg?.data?.id ?? e?.source?.message_id ?? e?.source?.id;
+    return id != null && String(id).trim() !== '' ? String(id).trim() : null;
   }
 
-  /** 当前触发消息的消息 ID（[当前消息] 行里的 ID） */
+  /** 当前触发消息的消息 ID（[当前消息] 行里的 ID；勿回落到被回复消息 ID） */
   static resolveEventMessageId(e) {
     if (!e) return null;
-    const id = e.message_id ?? e.real_id ?? e.messageId ?? e.id ?? e.source?.id ?? ChatStream.getReplySegmentId(e);
+    const id = e.message_id ?? e.real_id ?? e.messageId ?? e.id;
     const s = id != null ? String(id).trim() : '';
     return s || null;
   }
@@ -2140,28 +2596,12 @@ export default class ChatStream extends AiWorkflow {
 
         const sender = msg.sender || {};
         const segments = Array.isArray(msg.message) ? msg.message : [];
-
-        let text = '';
-        if (segments.length > 0) {
-          text = segments.map(seg => {
-            if (!seg || typeof seg !== 'object') return '';
-            switch (seg.type) {
-              case 'text':
-                return seg.text || '';
-              case 'image':
-                return '[图片]';
-              case 'face':
-                return '[表情]';
-              case 'reply':
-                return `[回复:${seg.id || ''}]`;
-              case 'at':
-                return `@${seg.qq || seg.user_id || ''}`;
-              default:
-                return '';
-            }
-          }).join('');
-        } else {
-          text = msg.raw_message || '';
+        const parts = this._segmentsToHistoryParts(segments);
+        let text = parts.text;
+        if (!text) {
+          text = msg.raw_message
+            ? String(msg.raw_message).replace(/\[CQ:(?:image|file|mface|face)[^\]]*\]/gi, '').trim()
+            : '';
         }
 
         const nickname = sender.card || sender.nickname || msg.nickname || '未知';
@@ -2173,7 +2613,11 @@ export default class ChatStream extends AiWorkflow {
           message_id: idStr,
           time: msg.time || Date.now(),
           platform: e.isDevice ? 'device' : 'onebot',
-          isBot: e.self_id != null && uid != null && String(uid) === String(e.self_id)
+          isBot: e.self_id != null && uid != null && String(uid) === String(e.self_id),
+          hasImage: parts.hasImage,
+          hasFile: parts.hasFile,
+          hasFace: parts.hasFace,
+          ...(segments.length ? { _rawMessage: segments } : {})
         });
       }
 
@@ -2217,16 +2661,25 @@ export default class ChatStream extends AiWorkflow {
       msg.isTool === true ||
       (selfId != null && msg.user_id != null && String(msg.user_id) === selfId);
 
+    const tags = [
+      msg.hasImage ? '[含图片]' : '',
+      msg.hasFile ? '[含文件]' : '',
+      msg.hasFace ? '[含表情]' : ''
+    ]
+      .filter(Boolean)
+      .join(' ');
+    const tagPrefix = tags ? `${tags} ` : '';
+
     if (isBot && msg.isTool) {
       const label = msg.toolName ? String(msg.toolName) : '工具';
-      return `【我·工具·${label}】${raw}`;
+      return `${tagPrefix}【我·工具·${label}】${raw}`;
     }
     if (isBot) {
-      return `【我】${raw}`;
+      return `${tagPrefix}【我】${raw}`;
     }
     const userId = msg.user_id || msg.userId || '未知';
     const nickname = msg.nickname || '未知用户';
-    return `${nickname}(${userId})[ID:${msgId}]: ${raw}`;
+    return `${tagPrefix}${nickname}(${userId})[ID:${msgId}]: ${raw}`;
   }
 
   /**
@@ -2267,96 +2720,77 @@ export default class ChatStream extends AiWorkflow {
 
   async mergeMessageHistory(messages, e) {
     if (!e || messages.length < 2) return messages;
-    const source = this.getHistorySource(e);
-    if (!source) return messages;
 
-    await this.syncHistoryFromAdapter(e);
-
-    const { historyKey } = source;
-    const history = ChatStream.messageHistory.get(historyKey) || [];
     const userMessage = messages[messages.length - 1];
-    const isGlobalTrigger = e.isGroup === true && (userMessage.content?.isGlobalTrigger || false);
+    const isGlobalTrigger =
+      e.isGroup === true &&
+      (typeof userMessage.content === 'object' && userMessage.content?.isGlobalTrigger === true);
 
+    const source = this.getHistorySource(e);
     const mergedMessages = [messages[0]];
-    const currentMsgId = e.message_id || e.real_id || e.messageId || e.id || e.source?.id || '未知';
-    const currentUserNickname = e.sender?.card || e.sender?.nickname || e.user?.name || '用户';
-    const currentContent = typeof userMessage.content === 'string'
-      ? userMessage.content
-      : (userMessage.content?.text ?? '');
 
-    const filteredHistory = history.filter(msg =>
-      String(msg.message_id) !== String(currentMsgId)
-    );
-    const uniqueHistory = [];
-    const seenIds = new Set();
-    for (let i = filteredHistory.length - 1; i >= 0; i--) {
-      const msg = filteredHistory[i];
-      const msgId = msg.message_id || msg.real_id;
-      if (msgId && !seenIds.has(String(msgId))) {
-        seenIds.add(String(msgId));
-        uniqueHistory.unshift(msg);
+    if (source) {
+      await this.syncHistoryFromAdapter(e);
+      const { historyKey } = source;
+      const history = ChatStream.messageHistory.get(historyKey) || [];
+      const currentMsgId = ChatStream.resolveEventMessageId(e) || '未知';
+
+      const filteredHistory = history.filter(
+        (msg) => String(msg.message_id) !== String(currentMsgId)
+      );
+      const uniqueHistory = [];
+      const seenIds = new Set();
+      for (let i = filteredHistory.length - 1; i >= 0; i--) {
+        const msg = filteredHistory[i];
+        const msgId = msg.message_id || msg.real_id;
+        if (msgId && !seenIds.has(String(msgId))) {
+          seenIds.add(String(msgId));
+          uniqueHistory.unshift(msg);
+        }
+      }
+
+      const sectionLabel = String(historyKey).startsWith('device_') ? '[近期对话]' : '[群聊记录]';
+      const historyLimit = isGlobalTrigger ? 20 : 15;
+      const recentMessages = uniqueHistory.slice(-historyLimit);
+      const historyFooter = isGlobalTrigger
+        ? ''
+        : '\n\n（说明：以上从上到下由早到晚；【我·工具】= 该步已完成；【我】= 你已回复；**只回应下方 `[当前消息]`**；有 `[引用消息]` 时先认清用户在回谁。）';
+
+      if (recentMessages.length > 0) {
+        if (isGlobalTrigger) {
+          mergedMessages.push({
+            role: 'user',
+            content:
+              `${sectionLabel}\n${recentMessages.map((m) => this._formatHistoryMessage(m, e)).join('\n')}` +
+              '\n\n你闲来无事点开群聊，看到这些发言。请像群里真人一样接一两句：对准气氛或某条发言；勿全文总结、勿逐条点评、勿重复【我】已说过的话。'
+          });
+        } else {
+          mergedMessages.push({
+            role: 'user',
+            content:
+              `${sectionLabel}\n${recentMessages.map((m) => this._formatHistoryMessage(m, e)).join('\n')}` +
+              historyFooter
+          });
+        }
       }
     }
 
-    const sectionLabel = String(historyKey).startsWith('device_') ? '[近期对话]' : '[群聊记录]';
-    const historyLimit = isGlobalTrigger ? 20 : 15;
-    const recentMessages = uniqueHistory.slice(-historyLimit);
-    const historyFooter = isGlobalTrigger
-      ? ''
-      : '\n\n（说明：以上从上到下由早到晚；【我·工具】= 该步已完成；【我】= 你已回复；**只回应下方 `[当前消息]`**。）';
-
-    if (isGlobalTrigger) {
-      if (recentMessages.length > 0) {
-        mergedMessages.push({
-          role: 'user',
-          content:
-            `${sectionLabel}\n${recentMessages.map((m) => this._formatHistoryMessage(m, e)).join('\n')}` +
-            '\n\n你闲来无事点开群聊，看到这些发言。请像群里真人一样接一两句：对准气氛或某条发言；勿全文总结、勿逐条点评、勿重复【我】已说过的话。'
-        });
-      }
-    } else {
-      if (recentMessages.length > 0) {
-        mergedMessages.push({
-          role: 'user',
-          content:
-            `${sectionLabel}\n${recentMessages.map((m) => this._formatHistoryMessage(m, e)).join('\n')}` +
-            historyFooter
-        });
-      }
-
-      if (!currentContent) {
-        // 无文本时仍可能有多模态附图，交给下方结构
-      }
-      if (typeof userMessage.content === 'object' && userMessage.content !== null) {
-        const content = userMessage.content;
-        const hasMedia =
-          ((content.images || []).length > 0) || ((content.replyImages || []).length > 0);
-        const lineBody =
-          (currentContent && String(currentContent).trim())
-            ? currentContent
-            : (hasMedia ? '[附图]' : '');
-        if (lineBody || hasMedia) {
-          const prefix =
-            currentMsgId !== '未知'
-              ? `[当前消息]\n${currentUserNickname}(${e.user_id})[ID:${currentMsgId}]: `
-              : '';
+    if (!isGlobalTrigger) {
+      const payload = await this._buildCurrentMessagePayload(e, userMessage);
+      if (payload) {
+        if (payload.images.length > 0 || payload.replyImages.length > 0) {
           mergedMessages.push({
             role: 'user',
             content: {
-              text: prefix
-                ? `${prefix}${content.text || content.content || lineBody}`
-                : (content.text || lineBody),
-              images: content.images || [],
-              replyImages: content.replyImages || []
+              text: payload.text,
+              images: payload.images,
+              replyImages: payload.replyImages
             }
           });
+        } else {
+          mergedMessages.push({ role: 'user', content: payload.text });
         }
-      } else if (currentContent && currentMsgId !== '未知') {
-        mergedMessages.push({
-          role: 'user',
-          content: `[当前消息]\n${currentUserNickname}(${e.user_id})[ID:${currentMsgId}]: ${currentContent}`
-        });
-      } else if (currentContent) {
+      } else if (typeof userMessage.content === 'string' && userMessage.content.trim()) {
         mergedMessages.push(userMessage);
       }
     }
@@ -2398,132 +2832,6 @@ export default class ChatStream extends AiWorkflow {
         return null;
       }
     });
-  }
-
-  /**
-   * 解析CQ码和表情包标记为segment数组，保持顺序
-   * @param {string} text - 包含CQ码和表情包标记的文本
-   * @param {Object} e - 事件对象
-   * @returns {Object} { replyId: string|null, segments: Array } - 回复ID和消息段数组
-   */
-  parseCQToSegments(text, e) {
-    const segments = [];
-    let replyId = null;
-    
-    // 先提取回复消息段（只取第一个）
-    const replyMatch = text.match(/\[CQ:reply,id=(\d+)\]/);
-    if (replyMatch) {
-      replyId = replyMatch[1];
-      // 从文本中移除回复CQ码
-      text = text.replace(/\[CQ:reply,id=\d+\]/g, '').trim();
-    }
-    
-    const emotionGroup = PARSEABLE_EMOTIONS.join('|');
-    const combinedPattern = new RegExp(`(\\[CQ:[^\\]]+\\]|\\[(${emotionGroup})\\])`, 'g');
-    const markers = [];
-    let match;
-    
-    // 收集所有标记及其位置
-    while ((match = combinedPattern.exec(text)) !== null) {
-      markers.push({
-        content: match[0],
-        index: match.index,
-        emotion: match[2] // 如果是表情包，这里会有值
-      });
-    }
-    
-    // 按照标记顺序解析
-    let currentIndex = 0;
-    for (const marker of markers) {
-      // 添加标记前的文本
-      if (marker.index > currentIndex) {
-        const textBefore = text.slice(currentIndex, marker.index);
-        if (textBefore.trim()) {
-          segments.push(textBefore);
-        }
-      }
-      
-      // 处理标记
-      if (marker.emotion) {
-        // 表情包标记
-        const image = this.getRandomEmotionImage(marker.emotion);
-        if (image) {
-          const seg = segment;
-          segments.push(seg.image(image));
-        }
-      } else if (marker.content.startsWith('[CQ:')) {
-        // CQ码
-        const cqMatch = marker.content.match(/\[CQ:(\w+)(?:,([^\]]+))?\]/);
-        if (cqMatch) {
-          const [, type, params] = cqMatch;
-          const paramObj = {};
-          const seg = segment;
-          
-          if (params) {
-            params.split(',').forEach(p => {
-              const [key, value] = p.split('=');
-              if (key && value) {
-                paramObj[key.trim()] = value.trim();
-              }
-            });
-          }
-          
-          switch (type) {
-            case 'at':
-              if (paramObj.qq) {
-                // 验证QQ号是否在群聊记录中（如果是群聊）
-                const atHistoryKey = ChatStream.getEventHistoryKey(e);
-                if (atHistoryKey) {
-                  const history = ChatStream.messageHistory.get(atHistoryKey) || [];
-                  const userExists = history.some(msg => 
-                    String(msg.user_id) === String(paramObj.qq)
-                  );
-                  
-                  if (userExists || e.isMaster) {
-                    segments.push(seg.at(paramObj.qq));
-                  }
-                } else {
-                  // 私聊直接添加
-                  segments.push(seg.at(paramObj.qq));
-                }
-              }
-              break;
-            case 'image':
-              if (paramObj.file) {
-                segments.push(seg.image(paramObj.file));
-              }
-              break;
-            // poke等其他不支持整合的CQ码：当前忽略或由下游按需扩展
-          }
-        }
-      }
-      
-      currentIndex = marker.index + marker.content.length;
-    }
-    
-    // 添加最后剩余的文本（如果没有标记，currentIndex为0，会添加整个文本）
-    if (currentIndex < text.length) {
-      const textAfter = text.slice(currentIndex);
-      if (textAfter.trim()) {
-        segments.push(textAfter);
-      }
-    }
-    
-    // 合并相邻的文本段，避免重复
-    const mergedSegments = [];
-    for (let i = 0; i < segments.length; i++) {
-      const current = segments[i];
-      const last = mergedSegments[mergedSegments.length - 1];
-      
-      // 如果当前段和上一段都是文本字符串，合并它们
-      if (typeof current === 'string' && typeof last === 'string') {
-        mergedSegments[mergedSegments.length - 1] = last + current;
-      } else {
-        mergedSegments.push(current);
-      }
-    }
-    
-    return { replyId, segments: mergedSegments };
   }
 
   /**
