@@ -109,4 +109,5 @@ commonconfig/**
 *.map
 
 !www/
+!www/**
 
