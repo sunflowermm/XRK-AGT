@@ -10,7 +10,7 @@
 
 ## 必读（优先 `.cursor/rules/`）
 
-- `xrk-project.mdc` — 架构、放码位置、配置模板归属（含 **www ≠ Node 26**）
+- `xrk-project.mdc` — 架构、放码位置、配置模板归属（含 **www ≠ Node 26**）；**娱乐/个人插件不进底层、不加 system-Core 白名单**
 - `xrk-dev-requirements.mdc` — 全局裸名、HttpResponse、Core www、Node 26（详见 `docs/coding-style.md`）
 
 ## 技能与文档
