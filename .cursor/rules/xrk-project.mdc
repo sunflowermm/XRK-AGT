@@ -19,14 +19,10 @@ alwaysApply: true
 - **充分利用底层**：Core 只继承基类、填 schema/实现接口；缺能力扩 `src/`；浏览器兼容先改 `web-compat.js` 再同步产品**内联**。
 - **导入路径**：**无** package.json 的 core 使用根包 `#` 别名（`#infrastructure/*`、`#utils/*`）；**有** package.json 的 core **不得**使用 `#`（子包无该别名），须用相对路径引用根目录下 `src/`（如 `../../../src/infrastructure/...`）。
 
-### system-Core 白名单 vs 娱乐 / 个人插件（必遵）
+### system-Core 白名单 vs 娱乐插件
 
-- **`core/system-Core/`** 只放 **框架示例外设 / 通道增强 / 运维与通用助手**（Enhancer、Tasker、HTTP、chat·memory·tools 等工作流等）。入库靠 **`core/system-Core/.gitignore` 白名单**（`plugin/**` / `workflow/**` 先忽略再 `!` 点名），**勿**为娱乐插件加 `!`。
-- **娱乐、玩梗、游戏工具、个人脚本**（如远行商人 `lkwg`、merchant 工作流、「谁艾特我」等）= **个人娱乐插件**：
-  - **没资格进底层**：禁止写入 `src/`、禁止进 `config/default_config/`、禁止往 system-Core **白名单**加行。
-  - 可本地放在 `system-Core/plugin|workflow/` 跑（被 `plugin/**` / `workflow/**` 忽略即可），或放独立 `core/<本地Core>/`（根 `core/*` 已忽略）；**配置写插件顶部常量**，勿扩 agt.yaml / commonconfig。
-  - **默认不提交**；已误入库的从白名单拿掉并用 `git rm --cached` 停跟踪，提交删除须用户明确要求。
-- Agent 接到此类需求时：**改本地娱乐插件即可**，禁止「顺手」白名单化或塞进 Runtime。
+- `system-Core` 白名单只收框架示例外设 / 通道 / 运维助手；入库靠 `.gitignore` 点名 `!`，**勿**为娱乐插件加 `!`。
+- 娱乐/玩梗/游戏工具：不进 `src/`、不进 `config/default_config/`、不加白名单；本地忽略即可跑；配置写插件顶部；**默认不提交**。
 
 ## 技术栈与版本
 
