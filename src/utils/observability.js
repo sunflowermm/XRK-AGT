@@ -1,7 +1,7 @@
 /**
- * 轻量可观测性：请求关联 ID + ALS 上下文 + 计时 span + 就绪聚合。
- * 不引入 OpenTelemetry SDK；与现有 RuntimeUtil.makeLog / HTTP 头对齐。
- * Prometheus 文本可由 formatPrometheusMetrics 导出。
+ * 轻量可观测性：请求关联 ID + ALS 上下文 + span + 就绪聚合。
+ * 不引入 OpenTelemetry SDK；与 RuntimeUtil.makeLog / HTTP 头对齐。
+ * Prometheus 文本由 formatPrometheusMetrics 导出。
  */
 import { AsyncLocalStorage } from 'node:async_hooks';
 import RuntimeUtil from '#utils/runtime-util.js';
@@ -96,9 +96,7 @@ export async function probeSubserverHealth(opts = {}) {
 
     const ids = Object.keys(SUBSERVER_RUNTIME_CATALOG).filter((id) => {
       const entry = runtimes[id];
-      if (entry && entry.enabled === false) return false;
-      // 未显式配置时仍探默认端口（本机未启动 → unavailable，不 unhealthy）
-      return true;
+      return !(entry && entry.enabled === false);
     });
 
     await Promise.all(
@@ -160,13 +158,21 @@ export async function buildReadinessSnapshot(opts = {}) {
   const services = {};
   let overall = 'healthy';
 
+  // Redis / SQLite：Runtime 硬依赖，失败 → unhealthy
   try {
     const { getDatabaseManager } = await import('#infrastructure/database/index.js');
-    const redisOk = await getDatabaseManager().checkRedis();
+    const dm = getDatabaseManager();
+    const redisOk = await dm.checkRedis();
     services.redis = redisOk ? 'operational' : 'down';
     if (!redisOk) overall = 'unhealthy';
+
+    const sqliteOk =
+      typeof dm.checkSqlite === 'function' ? dm.checkSqlite() : false;
+    services.sqlite = sqliteOk ? 'operational' : 'down';
+    if (!sqliteOk) overall = 'unhealthy';
   } catch {
     services.redis = 'down';
+    services.sqlite = 'down';
     overall = 'unhealthy';
   }
 
@@ -217,6 +223,20 @@ export async function buildReadinessSnapshot(opts = {}) {
     if (sub.status === 'degraded' && overall === 'healthy') overall = 'degraded';
   }
 
+  // 可选多模存储探活：仅展示；全挂不会单独 unhealthy；部分可用 → soft degraded
+  try {
+    const { probePersistenceProviders } = await import(
+      '#infrastructure/database/persistence-registry.js'
+    );
+    const persistence = await probePersistenceProviders();
+    services.persistence = persistence;
+    if (persistence.status === 'degraded' && overall === 'healthy') {
+      overall = 'degraded';
+    }
+  } catch {
+    services.persistence = { status: 'idle', stores: {} };
+  }
+
   return {
     status: overall,
     timestamp: Date.now(),
@@ -254,11 +274,24 @@ export function formatPrometheusMetrics(metrics) {
   num('xrk_workflow_traces_failed', wf.failed, 'Workflow execution traces failed');
   num('xrk_workflow_avg_duration_ms', metrics.workflow?.avgDurationMs, 'Workflow avg duration ms');
 
+  const http = metrics.http || {};
+  const lat = http.latencyMs || {};
+  num('xrk_http_requests_total', http.total, 'HTTP requests observed total', 'counter');
+  num('xrk_http_requests_failed', http.fail, 'HTTP requests failed (status>=500 or client abort)', 'counter');
+  num('xrk_http_error_rate', http.errorRate, 'HTTP error rate (all-time window)');
+  num('xrk_http_sliding_error_rate', http.slidingErrorRate, 'HTTP error rate (sliding window)');
+  num('xrk_http_rps', http.rps, 'HTTP requests per second (since metrics start)');
+  num('xrk_http_latency_ms_avg', lat.avg, 'HTTP latency average ms');
+  num('xrk_http_latency_ms_p50', lat.p50, 'HTTP latency p50 ms (R-7)');
+  num('xrk_http_latency_ms_p95', lat.p95, 'HTTP latency p95 ms (R-7)');
+  num('xrk_http_latency_ms_p99', lat.p99, 'HTTP latency p99 ms (R-7)');
+  num('xrk_http_latency_ms_max', lat.max, 'HTTP latency max ms');
+
   return `${lines.join('\n')}\n`;
 }
 
 /**
- * @param {{ getWebSocketStats?: () => object, getTraceSummary?: () => object, httpPort?: number, httpsPort?: number, actualPort?: number, actualHttpsPort?: number, proxyEnabled?: boolean, workflow?: object }} [runtime]
+ * @param {{ getWebSocketStats?: () => object, getTraceSummary?: () => object, httpPort?: number, httpsPort?: number, actualPort?: number, actualHttpsPort?: number, proxyEnabled?: boolean, workflow?: object, http?: object }} [runtime]
  */
 export function buildProcessMetrics(runtime = {}) {
   const memUsage = process.memoryUsage();
@@ -285,6 +318,8 @@ export function buildProcessMetrics(runtime = {}) {
     },
     websocket: typeof runtime.getWebSocketStats === 'function' ? runtime.getWebSocketStats() : null,
     workflow,
+    /** 入站 HTTP 延迟直方图摘要（水库采样）；未注入时为 null */
+    http: runtime.http ?? null,
     server: {
       httpPort: runtime.httpPort,
       httpsPort: runtime.httpsPort,

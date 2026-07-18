@@ -24,15 +24,21 @@
 /** 单条 user 消息默认最多附图（引用+当前合计）；可由 llm.visionMaxImages 覆盖 */
 export const DEFAULT_VISION_MAX_IMAGES = 10;
 
-/** 解码日志/CQ/表单里常见的 HTML 实体，避免 `&amp;` 导致 fetch 失败 */
+/** 解码日志/CQ/表单里常见的 HTML 实体，避免 `&amp;` 导致 fetch 失败（幂等，可解多层编码） */
 export function decodeHtmlEntitiesInUrl(url) {
-  return String(url ?? '')
-    .replace(/&amp;/gi, '&')
-    .replace(/&lt;/gi, '<')
-    .replace(/&gt;/gi, '>')
-    .replace(/&quot;/gi, '"')
-    .replace(/&#39;/g, "'")
-    .trim();
+  let s = String(url ?? '').trim();
+  if (!s) return '';
+  for (let i = 0; i < 5; i++) {
+    const next = s
+      .replace(/&amp;/gi, '&')
+      .replace(/&lt;/gi, '<')
+      .replace(/&gt;/gi, '>')
+      .replace(/&quot;/gi, '"')
+      .replace(/&#39;/g, "'");
+    if (next === s) break;
+    s = next;
+  }
+  return s;
 }
 
 /**

@@ -38,4 +38,11 @@ describe('token-estimate 属性', () => {
     const b = ' with english words';
     assert.ok(estimateTokensMixed(a + b) >= estimateTokensMixed(a));
   });
+
+  it('mixed：URL/长 hex 按密度单独计量且 >0', () => {
+    const url = 'see https://example.com/a/b/c?x=1&y=2 for docs';
+    const hex = 'id ' + 'a'.repeat(32);
+    assert.ok(estimateTokensMixed(url) >= 4);
+    assert.ok(estimateTokensMixed(hex) >= 4);
+  });
 });

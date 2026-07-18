@@ -61,10 +61,12 @@ describe('module-import-error 分类', () => {
 });
 
 describe('Runtime database 导出契约', () => {
-  it('仅暴露 Redis，不导出 getMongoDb', () => {
+  it('暴露 Redis + SQLite，不导出 getMongoDb', () => {
     assert.equal(typeof database.getRedis, 'function');
+    assert.equal(typeof database.getSqlite, 'function');
     assert.equal(typeof database.getDatabaseManager, 'function');
     assert.equal(typeof database.initDatabases, 'function');
+    assert.equal(typeof database.withSqliteTransaction, 'function');
     assert.equal('getMongoDb' in database, false);
     assert.equal(database.getMongoDb, undefined);
   });

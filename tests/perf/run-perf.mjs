@@ -11,6 +11,7 @@
  *   bench      固定请求数基准
  *   chaos      故障注入（--chaos-mode client|server）
  *   smoke      自举短跑（CI 可门禁）
+ *   gate       自举：短 load + 短 soak + 校验 /metrics.http（cigate）
  *
  * 常用 options:
  *   --base-url http://127.0.0.1:8080
@@ -88,10 +89,11 @@ function parseArgs(argv) {
 function printHelp() {
   console.log(`XRK-AGT 生产级性能 / 韧性测试
 
-Modes: load | stress | soak | bench | chaos | smoke
+Modes: load | stress | soak | bench | chaos | smoke | gate
 
 Examples:
   node tests/perf/run-perf.mjs smoke
+  node tests/perf/run-perf.mjs gate --profile cigate
   node tests/perf/run-perf.mjs load --profile local --self
   node tests/perf/run-perf.mjs load --self --target health --concurrency 100 --duration 30s
   node tests/perf/run-perf.mjs stress --base-url http://127.0.0.1:8080 --target health --max-concurrency 200
@@ -157,7 +159,12 @@ async function main() {
   let self = null;
   let baseUrl = String(args['base-url'] || process.env.XRK_PERF_BASE_URL || '');
   try {
-    if (args.self || mode === 'smoke' || (mode === 'chaos' && String(args['chaos-mode'] || '') === 'server')) {
+    if (
+      args.self ||
+      mode === 'smoke' ||
+      mode === 'gate' ||
+      (mode === 'chaos' && String(args['chaos-mode'] || '') === 'server')
+    ) {
       console.log('[perf] starting self-server…');
       const chaosEnv =
         mode === 'chaos' && String(args['chaos-mode'] || '') === 'server'
@@ -212,15 +219,99 @@ async function main() {
       } else {
         console.log('[perf] SMOKE PASSED');
       }
+    } else if (mode === 'gate') {
+      // 短负载 + 短浸泡 + 服务端 /metrics.http（证明 Runtime 在记延迟）
+      const loadHist = await runDurationLoad({
+        buildRequest: () => buildRequest(baseUrl, TARGETS.health, { apiKey }),
+        concurrency: Number(args.concurrency || 16),
+        durationMs: parseDuration(args.duration || args['load-duration'], 6_000),
+        rampMs: 400,
+      });
+      const loadSummary = loadHist.summary();
+      const loadGate = evaluateSlo(loadSummary, {
+        maxP99Ms: slo.maxP99Ms ?? 800,
+        maxErrorRate: slo.maxErrorRate ?? 0.05,
+        minRps: slo.minRps ?? 20,
+      });
+
+      const soakHist = await runDurationLoad({
+        buildRequest: () => buildRequest(baseUrl, TARGETS.health, { apiKey }),
+        concurrency: Number(args['soak-concurrency'] || 8),
+        durationMs: parseDuration(args['soak-duration'], 8_000),
+        rampMs: 300,
+        reservoirSize: 2_000,
+        slidingWindow: 200,
+      });
+      const soakSummary = soakHist.summary();
+      const soakGate = evaluateSlo(soakSummary, {
+        maxP99Ms: slo.maxP99Ms ?? 800,
+        maxErrorRate: slo.maxErrorRate ?? 0.05,
+      });
+
+      let metricsHttp = null;
+      let metricsOk = false;
+      try {
+        const res = await fetch(`${baseUrl.replace(/\/$/, '')}/metrics`);
+        const body = await res.json();
+        metricsHttp = body?.data?.http ?? body?.http ?? null;
+        metricsOk =
+          metricsHttp != null &&
+          Number(metricsHttp.total) > 0 &&
+          metricsHttp.latencyMs != null &&
+          Number.isFinite(Number(metricsHttp.latencyMs.p99));
+      } catch (err) {
+        console.error('[perf] metrics fetch failed:', err instanceof Error ? err.message : err);
+      }
+
+      const ok = loadGate.ok && soakGate.ok && metricsOk;
+      report = {
+        ...report,
+        load: { summary: loadSummary, slo: loadGate },
+        soak: { summary: soakSummary, slo: soakGate, reservoir: soakSummary.reservoir },
+        metricsHttp,
+        metricsOk,
+      };
+      printSummary('gate', {
+        load: { rps: loadSummary.rps, p99: loadSummary.latencyMs.p99, err: loadSummary.errorRate },
+        soak: {
+          rps: soakSummary.rps,
+          p99: soakSummary.latencyMs.p99,
+          err: soakSummary.errorRate,
+          reservoir: soakSummary.reservoir,
+        },
+        metricsHttp: metricsHttp
+          ? {
+              total: metricsHttp.total,
+              p99: metricsHttp.latencyMs?.p99,
+              rps: metricsHttp.rps,
+            }
+          : null,
+        loadGate,
+        soakGate,
+        metricsOk,
+      });
+      if (!ok) {
+        const reasons = [];
+        if (!loadGate.ok) reasons.push(`load: ${loadGate.violations.join('; ')}`);
+        if (!soakGate.ok) reasons.push(`soak: ${soakGate.violations.join('; ')}`);
+        if (!metricsOk) reasons.push('metrics.http missing or empty');
+        console.error('[perf] GATE FAILED:', reasons.join(' | '));
+        process.exitCode = 1;
+      } else {
+        console.log('[perf] GATE PASSED (load + soak + /metrics.http)');
+      }
     } else if (mode === 'load' || mode === 'soak') {
       const defaults = mode === 'soak'
         ? { concurrency: 20, duration: '10m' }
         : { concurrency: 50, duration: '30s' };
+      const durationMs = parseDuration(args.duration, parseDuration(defaults.duration, 30_000));
       const hist = await runDurationLoad({
         buildRequest: build,
         concurrency: Number(args.concurrency || defaults.concurrency),
-        durationMs: parseDuration(args.duration, parseDuration(defaults.duration, 30_000)),
+        durationMs,
         rampMs: parseDuration(args.ramp, mode === 'soak' ? 5_000 : 2_000),
+        reservoirSize: mode === 'soak' ? Number(args['reservoir-size'] || 10_000) : undefined,
+        slidingWindow: mode === 'soak' ? 500 : undefined,
         onTick: (h) => {
           const s = h.summary();
           process.stdout.write(

@@ -62,10 +62,27 @@ async function once(spec) {
  *   durationMs: number,
  *   rampMs?: number,
  *   onTick?: (hist: LatencyHistogram) => void,
+ *   reservoirSize?: number|null,
+ *   slidingWindow?: number,
  * }} opts
  */
 export async function runDurationLoad(opts) {
-  const hist = new LatencyHistogram();
+  const longRun = (opts.durationMs || 0) >= 60_000;
+  /** null = 强制全量；未传则长跑默认水库 */
+  let reservoirSize = opts.reservoirSize;
+  if (reservoirSize === undefined) {
+    reservoirSize = longRun ? 10_000 : null;
+  }
+  const histOpts = {};
+  if (reservoirSize != null && reservoirSize > 0) {
+    histOpts.reservoirSize = reservoirSize;
+  }
+  if (opts.slidingWindow != null) {
+    histOpts.slidingWindow = opts.slidingWindow;
+  } else if (longRun) {
+    histOpts.slidingWindow = 500;
+  }
+  const hist = new LatencyHistogram(histOpts);
   hist.begin();
   const endAt = Date.now() + opts.durationMs;
   const rampMs = opts.rampMs ?? 0;
@@ -92,7 +109,6 @@ export async function runDurationLoad(opts) {
   await Promise.all(workers);
   active = false;
   clearInterval(ticker);
-  // 等残留
   while (inFlight > 0) {
     await new Promise((r) => setTimeout(r, 10));
   }

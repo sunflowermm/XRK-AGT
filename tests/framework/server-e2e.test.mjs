@@ -106,15 +106,19 @@ describe('HTTP 端到端（真实启动 AgentRuntime）', () => {
   });
 
   it('GET /metrics JSON 与 Prometheus', async () => {
+    await fetch(`http://127.0.0.1:${port}/health`);
     const jsonRes = await fetch(`http://127.0.0.1:${port}/metrics`);
     assert.equal(jsonRes.status, 200);
     const metrics = await jsonRes.json();
     assert.ok(metrics.memory?.heapUsed >= 0);
+    assert.ok(metrics.http?.total >= 1, '入站延迟应已聚合');
+    assert.ok(Number.isFinite(metrics.http?.latencyMs?.p99));
 
     const promRes = await fetch(`http://127.0.0.1:${port}/metrics?format=prometheus`);
     assert.equal(promRes.status, 200);
     const text = await promRes.text();
     assert.match(text, /xrk_nodejs_heap_used_bytes/);
+    assert.match(text, /xrk_http_latency_ms_p99/);
   });
 
   it('GET /api/health 就绪面（200 或 503）', async () => {

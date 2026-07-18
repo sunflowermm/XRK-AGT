@@ -1,16 +1,16 @@
 import crypto from 'crypto';
 
 /**
- * 文本相似度计算（基于Jaccard相似度和编辑距离）
- * 使用轻量级算法，适合实时场景
+ * 文本相似度（Jaccard n-gram + Levenshtein）
+ * 轻量实时场景用，非语义向量模型。
  */
-class TextSimilarity {
+export class TextSimilarity {
   /**
-   * 计算Jaccard相似度（基于字符n-gram）
-   * @param {string} text1 - 文本1
-   * @param {string} text2 - 文本2
-   * @param {number} n - n-gram大小，默认2
-   * @returns {number} 相似度 0-1
+   * Jaccard 相似度（字符 n-gram）
+   * @param {string} text1
+   * @param {string} text2
+   * @param {number} [n=2]
+   * @returns {number} 0–1
    */
   static jaccardSimilarity(text1, text2, n = 2) {
     if (!text1 || !text2) return 0;
@@ -34,38 +34,47 @@ class TextSimilarity {
   }
 
   /**
-   * 计算编辑距离（Levenshtein距离）
-   * @param {string} text1 - 文本1
-   * @param {string} text2 - 文本2
-   * @returns {number} 编辑距离
+   * Levenshtein 编辑距离（两行滚动 DP，O(min(m,n)) 额外内存）
+   * @param {string} text1
+   * @param {string} text2
+   * @returns {number}
    */
   static levenshteinDistance(text1, text2) {
     if (!text1) return text2 ? text2.length : 0;
     if (!text2) return text1.length;
     if (text1 === text2) return 0;
 
-    const m = text1.length;
-    const n = text2.length;
-    const dp = Array(m + 1).fill(null).map(() => Array(n + 1).fill(0));
-
-    for (let i = 0; i <= m; i++) dp[i][0] = i;
-    for (let j = 0; j <= n; j++) dp[0][j] = j;
-
-    for (let i = 1; i <= m; i++) {
-      for (let j = 1; j <= n; j++) {
-        if (text1[i - 1] === text2[j - 1]) {
-          dp[i][j] = dp[i - 1][j - 1];
-        } else {
-          dp[i][j] = Math.min(
-            dp[i - 1][j] + 1,     // 删除
-            dp[i][j - 1] + 1,     // 插入
-            dp[i - 1][j - 1] + 1  // 替换
-          );
-        }
-      }
+    // 较短串放 a → 滚动数组更短
+    let a = text1;
+    let b = text2;
+    if (a.length > b.length) {
+      const t = a;
+      a = b;
+      b = t;
     }
+    const m = a.length;
+    const n = b.length;
+    /** @type {Uint32Array} */
+    let prev = new Uint32Array(m + 1);
+    /** @type {Uint32Array} */
+    let curr = new Uint32Array(m + 1);
+    for (let i = 0; i <= m; i++) prev[i] = i;
 
-    return dp[m][n];
+    for (let j = 1; j <= n; j++) {
+      curr[0] = j;
+      const bj = b.charCodeAt(j - 1);
+      for (let i = 1; i <= m; i++) {
+        const cost = a.charCodeAt(i - 1) === bj ? 0 : 1;
+        const del = prev[i] + 1;
+        const ins = curr[i - 1] + 1;
+        const sub = prev[i - 1] + cost;
+        curr[i] = del < ins ? (del < sub ? del : sub) : ins < sub ? ins : sub;
+      }
+      const swap = prev;
+      prev = curr;
+      curr = swap;
+    }
+    return prev[m];
   }
 
   /**

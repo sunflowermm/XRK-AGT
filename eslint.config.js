@@ -69,7 +69,8 @@ export default [
         PluginBase: 'readonly',
         msgSegment: 'readonly',
         Renderer: 'readonly',
-        redis: 'readonly'
+        redis: 'readonly',
+        sqlite: 'readonly'
       }
     },
     rules: {

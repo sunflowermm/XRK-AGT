@@ -14,6 +14,7 @@ import {
   resolveRequestId,
   enterRequestContext,
 } from '#utils/observability.js';
+import { createHttpRequestMetricsMiddleware } from '#utils/http-request-metrics.js';
 import { attachChaosMiddleware } from '#infrastructure/http/runtime-chaos.js';
 import * as runtimeObs from '#infrastructure/http/runtime-observability.js';
 import {
@@ -55,6 +56,10 @@ export async function initializeMiddlewareAndRoutes(runtime) {
     next();
   });
 
+  // 入站 HTTP 延迟聚合（水库采样）→ /metrics.http；与请求日志开关无关
+  runtime.express.use(createHttpRequestMetricsMiddleware());
+
+  // 默认关闭；XRK_CHAOS_ENABLED=1 时注入延迟/503
   attachChaosMiddleware(runtime.express);
 
   if (runtimeConfig.server.compression.enabled !== false) {

@@ -13,11 +13,13 @@ describe('runtime-chaos 服务端注入', () => {
       er: process.env.XRK_CHAOS_ERROR_RATE,
       lat: process.env.XRK_CHAOS_LATENCY_MS,
       paths: process.env.XRK_CHAOS_PATHS,
+      seed: process.env.XRK_CHAOS_SEED,
     };
     process.env.XRK_CHAOS_ENABLED = '1';
     process.env.XRK_CHAOS_ERROR_RATE = '1';
     process.env.XRK_CHAOS_LATENCY_MS = '0';
     process.env.XRK_CHAOS_PATHS = '/health';
+    process.env.XRK_CHAOS_SEED = 'unit-chaos';
     assert.equal(chaosEnabled(), true);
 
     /** @type {((req: any, res: any, next: any) => any)[]} */
@@ -63,6 +65,7 @@ describe('runtime-chaos 服务端注入', () => {
       XRK_CHAOS_ERROR_RATE: prev.er,
       XRK_CHAOS_LATENCY_MS: prev.lat,
       XRK_CHAOS_PATHS: prev.paths,
+      XRK_CHAOS_SEED: prev.seed,
     })) {
       if (v == null) delete process.env[k];
       else process.env[k] = v;

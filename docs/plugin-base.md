@@ -339,6 +339,7 @@ export default class MyPlugin extends PluginBase {
 | 子 AgentRuntime | `e.bot`、`AgentRuntime[self_id]` |
 | 全局 AgentRuntime | 全局 `AgentRuntime` |
 | Redis | 全局 `redis`（启动后由 [database.md](database.md) 初始化） |
+| SQLite | 全局 `sqlite`（`node:sqlite` · DatabaseSync，与 Redis 同级） |
 | 其它数据库 | 由业务 Core 自行封装（如本地 `mongodb-Core`），非 Runtime 内置 |
 | 配置 | 经 HTTP / `ConfigBase`，勿在插件内直接写 YAML 路径 |
 
@@ -350,7 +351,7 @@ export default class MyPlugin extends PluginBase {
 - [事件系统标准化文档](事件系统标准化文档.md) — 事件命名与字段
 - [ai-workflow.md](ai-workflow.md) — 工作流与 MCP
 - [框架可扩展性指南](框架可扩展性指南.md) — 七大扩展点
-- [database.md](database.md) — Redis 配置与访问
+- [database.md](database.md) — Redis / SQLite 配置与访问
 
 ---
 

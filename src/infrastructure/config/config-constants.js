@@ -8,7 +8,7 @@
  */
 
 // 全局配置列表（不随端口变化，存储在server_bots/根目录）
-export const GLOBAL_CONFIGS = ['agt', 'device', 'monitor', 'notice', 'redis'];
+export const GLOBAL_CONFIGS = ['agt', 'device', 'monitor', 'notice', 'redis', 'sqlite'];
 
 // 服务器配置列表（随端口变化，存储在server_bots/{port}/）
 export const SERVER_CONFIGS = ['server', 'chatbot', 'group', 'ai-workflow'];

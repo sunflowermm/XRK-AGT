@@ -1,8 +1,11 @@
-# Redis（框架内置数据库）
+# Runtime 数据库（Redis + SQLite）
 
-> **代码**：`src/infrastructure/redis.js` · `src/infrastructure/database/index.js`  
-> **本机拉起**：`scripts/ensure-redis.mjs`（`start.bat` / `start.sh` / 连接重试共用）  
-> Redis 为 Runtime **必需**；Mongo / Postgres / Vector 等由业务 Core 自行引入。
+> **代码**：`src/infrastructure/redis.js` · `src/infrastructure/sqlite.js` · `src/infrastructure/database/index.js`  
+> **配置模板**：`config/default_config/redis.yaml` · `config/default_config/sqlite.yaml`  
+> Runtime **必需**：Redis（热数据 / 会话）+ SQLite（嵌入式落盘，Node 内置 `node:sqlite`）。  
+> Mongo / Postgres / Qdrant 仍由可选业务 Core 引入（soft-skip）。
+
+官方参考：[Node.js SQLite（node:sqlite）](https://nodejs.org/api/sqlite.html)（`DatabaseSync`，同步 API，封装 SQLite3 C API）。
 
 ---
 
@@ -17,14 +20,20 @@
 
 ---
 
-## 用途
+## 用途分工
 
 | 存储 | 归属 | 典型用途 |
 |------|------|----------|
-| **Redis** | Runtime 内置 | `AGT:restart:` / `AGT:shutdown:`、插件计数与会话、HTTP 控制面 |
-| 其它 | 业务 Core | MongoDB 等，非 Runtime |
+| **Redis** | Runtime | `AGT:restart:` / 插件计数 / 会话热缓存 / HTTP 控制面 |
+| **SQLite** | Runtime（`node:sqlite`） | 本地持久表、掉电可恢复状态、单机查询；**不替代** Redis |
+| Mongo / PG / Qdrant | 可选 Core | 文档 / 关系 / 向量；soft-skip |
 
-业务侧优先裸名 **`redis`** 或 `getRedis()`。
+业务侧：
+
+- Redis：裸名 **`redis`** 或 `getRedis()`
+- SQLite：裸名 **`sqlite`** 或 `getSqlite()` / `withSqliteTransaction`
+
+**禁止**再引入 npm `sqlite3` / `sqlite` / `sequelize` 做 Runtime 嵌入库（Node ≥26 已内置）。
 
 ---
 
@@ -35,115 +44,122 @@ sequenceDiagram
     participant Start as start.bat / start.sh
     participant Ensure as ensure-redis.mjs
     participant IM as InitManager
+    participant DM as DatabaseManager
     participant R as redis.js
+    participant S as sqlite.js
 
-    Start->>Ensure: 探测 127.0.0.1:6379（必要时本机拉起）
+    Start->>Ensure: 探测 Redis（必要时本机拉起）
     Ensure-->>Start: OK / 中止
     Start->>IM: node app.js
-    IM->>R: redisInit / connectWithRetry
-    Note over R: 失败且 host 为本机时再调 ensureRedisReady
-    R-->>IM: setRuntimeGlobal redis
+    IM->>DM: initDatabases()
+    DM->>R: redisInit（fail-fast）
+    R-->>DM: setRuntimeGlobal redis
+    DM->>S: sqliteInit（fail-fast · node:sqlite）
+    S-->>DM: setRuntimeGlobal sqlite
 ```
 
-- **入口探测**：`start.bat` / `start.sh` → `node scripts/ensure-redis.mjs`（缺文件或不可达则中止）。
-- **运行时重试**：`redis.js` 在 `connectWithRetry` 失败且 `host` 为回环地址时，**同一模块** `ensureRedisReady` 再试；远程 host 不拉起本机进程。
-- **关闭**：`ProcessManager.cleanup()` → `closeDatabases()`。
-
----
-
-## 本机探测与拉起（`scripts/ensure-redis.mjs`）
-
-| 步骤 | 行为 |
-|------|------|
-| 1. 探测 | Node `net` TCP（**不依赖** PowerShell / WSL / redis-cli） |
-| 2. Windows 服务 | `Memurai` → `Redis`（MSI 常见服务名）；坏掉的 ImagePath 静默跳过 |
-| 3. 可执行文件 | `%ProgramFiles%\Redis\redis-server.exe`、Memurai、`PATH` |
-| 4. Unix | `redis-server --daemonize yes`（须在 `PATH`） |
-
-环境变量：`XRK_REDIS_HOST`（默认 `127.0.0.1`）、`XRK_REDIS_PORT`（默认 `6379`）。
-
-薄包装 `scripts/ensure-redis.cmd` 仅转调 Node，便于手动双击；**逻辑只在 `.mjs`**。勿再整目录忽略 `scripts/`（gitignore 已白名单上述文件）。
-
-**推荐**：Windows 用 **Memurai Developer**（服务开机自启）。MSI「Redis for Windows」亦可。勿用 WSL Redis（localhost 转发易断）。Docker 见 [docker.md](docker.md)。
-
----
-
-## 配置
-
-| 配置 | 默认模板 | 运行时（全局） |
-|------|----------|----------------|
-| Redis | `config/default_config/redis.yaml` | `data/server_bots/redis.yaml` |
-
-字段：`host`、`port`、`db`（0–15）、`username`、`password`、`options.connectTimeout`。  
-CommonConfig schema：`core/system-Core/commonconfig/system.js`。
-
-```javascript
-import runtimeConfig from '#infrastructure/config/config.js'
-const { host, port } = runtimeConfig.redis
-```
-
-连接 URL 由 `buildRedisUrl` 生成；Docker 下 `normalizeHost` 可将 `127.0.0.1` 映射为服务名 `redis`。
+- Redis：入口 `ensure-redis.mjs` + 运行时重试（见下节）。
+- SQLite：打开 `filePath`（默认 `data/runtime/xrk_agt.db`），可选 WAL / foreign_keys / busy timeout。
+- 关闭：`ProcessManager.cleanup()` → `closeDatabases()`（先 Redis 后 SQLite）。
 
 | 变量 | 作用 |
 |------|------|
-| `XRK_FAST_START=1` | 减少连接重试 / 缩短超时（冒烟） |
-
-连接失败记 error 并阻断启动（`finalizeDbConnectionFailure`）。
+| `XRK_FAST_START=1` | Redis 少重试 / 短超时 |
+| `XRK_SQLITE_MEMORY=1` | 强制 `:memory:`（测试） |
 
 ---
 
-## 业务使用
+## Redis
+
+### 本机探测与拉起（`scripts/ensure-redis.mjs`）
+
+| 步骤 | 行为 |
+|------|------|
+| 1. 探测 | Node `net` TCP |
+| 2. Windows 服务 | `Memurai` → `Redis` |
+| 3. 可执行文件 | Redis / Memurai / `PATH` |
+| 4. Unix | `redis-server --daemonize yes` |
+
+`XRK_REDIS_HOST`（默认 `127.0.0.1`）、`XRK_REDIS_PORT`（默认 `6379`）。
+
+### 配置
+
+| 配置 | 默认模板 | 运行时 |
+|------|----------|--------|
+| Redis | `config/default_config/redis.yaml` | `data/server_bots/redis.yaml` |
+
+字段：`host`、`port`、`db`、`username`、`password`、`options.connectTimeout`。  
+Schema：`core/system-Core/commonconfig/system.js`（全局段 `redis`）。
 
 ```javascript
 if (redis?.isOpen) await redis.set('my:key', 'value')
-```
-
-```javascript
 import { getRedis } from '#infrastructure/database/index.js'
 ```
 
+---
+
+## SQLite（node:sqlite）
+
+### 配置三件套
+
+| 件 | 路径 |
+|----|------|
+| 默认模板 | `config/default_config/sqlite.yaml` |
+| 运行时 | `data/server_bots/sqlite.yaml` |
+| Schema | `core/system-Core/commonconfig/system/system-sqlite.js` |
+
+字段：`enabled`、`filePath`、`memory`、`walMode`、`busyTimeoutMs`、`foreignKeys`。  
+`enabled: false` → 启动失败（与 Redis 同为 Runtime 基础能力，勿随意关）。
+
+### 业务使用
+
 ```javascript
-import getDatabaseManager from '#infrastructure/database/index.js'
-const redisOk = await getDatabaseManager().checkRedis()
+// 裸名（启动后）
+sqlite.prepare('SELECT 1 AS ok').get()
+
+import { getSqlite, withSqliteTransaction } from '#infrastructure/database/index.js'
+const db = getSqlite()
+db.exec(`CREATE TABLE IF NOT EXISTS demo (id INTEGER PRIMARY KEY, v TEXT)`)
+withSqliteTransaction((tx) => {
+  tx.prepare('INSERT INTO demo (v) VALUES (?)').run('x')
+})
 ```
 
----
+`DatabaseSync` API 均为**同步**（`exec` / `prepare` / `get` / `all` / `run`）；勿包一层无意义的 Promise。详见 Node 文档。
 
-## 本地与 Docker
+框架内置表：`_xrk_runtime_meta`、`_xrk_runtime_kv`；业务可用 `sqliteKvGet/Set/Del(namespace, key)` 做本地标记（**不是** Redis 替代）。
 
-| 场景 | host | 说明 |
-|------|------|------|
-| 本机 | `127.0.0.1:6379` | `ensure-redis.mjs` 负责探测/拉起 |
-| docker-compose | 服务名 `redis` | 卷 `redis-data`；不跑本机服务拉起 |
+### 就绪面
 
----
-
-## 连接实现要点
-
-- 重试：`connectWithRetry`（`db-connect-utils.js`）
-- URL 脱敏：`maskConnectionUrl`
-- 健康检查：客户端就绪后定时 `ping`
-
-勿在 Core 重复造连接池。
+`GET /api/health` → `services.redis` 与 `services.sqlite` 任一 `down` → `unhealthy`（503）。
 
 ---
 
-## 其它数据库（业务 Core）
+## 其它数据库（业务 Core）· 多模 SPI
 
-Mongo / Postgres / Qdrant 由 `core/<产品>/` 引入，**不在** Runtime `database/index.js` 初始化。可选 Core 在依赖未装时 bootstrap **软失败**（不阻断 AGT）。
+Mongo / Postgres / Qdrant 由 `core/<db>-Core/` 自管连接，**不**进 `DatabaseManager`。  
+通过 `registerPersistenceProvider` 注册探活 → `/api/health.services.persistence`（可选全挂 **不会** 单独打成 `unhealthy`）。
+
+| 范围 | 保证 |
+|------|------|
+| Redis 内 / SQLite 内 | 各自语义（SQLite 用 `withSqliteTransaction`） |
+| 跨引擎 | **仅最终一致**；无跨库 UoW（`PERSISTENCE_POLICY`） |
 
 ---
 
 ## FAQ
 
 **可以不装 Redis 吗？**  
-不可以。本机安装（Memurai / MSI / redis-server）或 `docker compose` 起 `redis`。
+不可以。
+
+**可以不用 SQLite 吗？**  
+不建议。Runtime 把它与 Redis 同级初始化；测试可用 `XRK_SQLITE_MEMORY=1`。
+
+**为何不用 npm sqlite3？**  
+Node 26 提供 `node:sqlite`，零原生编译、与引擎版本对齐。旧 npm 包已从根依赖移除。
 
 **配置改了要不要重启？**  
 要。连接仅在启动期建立。
-
-**和 `runtimeConfig.db`？**  
-历史字段；框架内置连接以 **`redis.yaml`** 为准。
 
 ---
 
@@ -151,4 +167,4 @@ Mongo / Postgres / Qdrant 由 `core/<产品>/` 引入，**不在** Runtime `data
 
 - [startup.md](startup.md) · [docker.md](docker.md) · [app-dev.md](app-dev.md) · [config-base.md](config-base.md)
 
-*最后更新：2026-07-14*
+*最后更新：2026-07-18*

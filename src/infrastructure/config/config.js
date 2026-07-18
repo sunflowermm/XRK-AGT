@@ -169,6 +169,7 @@ class RuntimeConfig {
   get monitor() { return this.getGlobalConfig('monitor'); }
   get notice() { return this.getGlobalConfig('notice'); }
   get redis() { return this.getGlobalConfig('redis'); }
+  get sqlite() { return this.getGlobalConfig('sqlite'); }
   // ai-workflow 为随端口配置（server_bots/{port}/ai-workflow.yaml）
   get aiWorkflow() { return this.getServerConfig('ai-workflow'); }
   /** 子服务端连接（host/port/timeout/runtimes）；AgentRuntime.callSubserver 读取 */

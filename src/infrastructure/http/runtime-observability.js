@@ -8,6 +8,7 @@ import {
   buildProcessMetrics,
   formatPrometheusMetrics,
 } from '#utils/observability.js';
+import { getHttpRequestMetricsSummary } from '#utils/http-request-metrics.js';
 
 /**
  * @param {object} runtime AgentRuntime
@@ -73,6 +74,7 @@ export function handleMetrics(runtime, req, res) {
     actualPort: runtime.actualPort,
     actualHttpsPort: runtime.actualHttpsPort,
     proxyEnabled: runtime.proxyEnabled,
+    http: getHttpRequestMetricsSummary(),
   });
 
   const wantProm =

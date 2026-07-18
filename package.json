@@ -36,24 +36,18 @@
     "@mozilla/readability": "^0.6.0",
     "art-template": "^4.13.2",
     "chalk": "^5.4.1",
-    "cheerio": "^1.2.0",
     "chokidar": "^5.0.0",
     "compression": "^1.8.1",
-    "docx": "^9.5.1",
-    "exceljs": "^4.4.0",
     "express": "^4.22.1",
     "express-rate-limit": "^8.1.0",
-    "figures": "^6.1.0",
     "file-type": "^21.3.0",
     "glob": "^13.0.0",
     "helmet": "^8.1.0",
     "http-proxy-middleware": "^3.0.5",
-    "image-size": "^2.0.2",
     "inquirer": "^8.2.5",
     "linkedom": "^0.18.12",
     "lodash": "^4.17.21",
     "md5": "^2.3.0",
-    "mime": "^4.0.7",
     "moment": "^2.30.1",
     "multer": "^2.0.2",
     "node-schedule": "^2.1.1",
@@ -64,9 +58,6 @@
     "redis": "^5.10.0",
     "rotating-file-stream": "^3.2.7",
     "screenshot-desktop": "^1.15.0",
-    "sequelize": "^6.37.5",
-    "sqlite": "^5.1.1",
-    "sqlite3": "^5.1.7",
     "systeminformation": "^5.30.6",
     "ulid": "^3.0.2",
     "uuid": "^13.0.0",
@@ -74,12 +65,7 @@
     "yaml": "^2.7.0"
   },
   "devDependencies": {
-    "eslint": "^9.18.0",
-    "eslint-config-standard": "^17.1.0",
-    "eslint-plugin-import": "^2.31.0",
-    "eslint-plugin-n": "^17.15.1",
-    "eslint-plugin-promise": "^7.2.1",
-    "express-art-template": "^1.0.1"
+    "eslint": "^9.18.0"
   },
   "scripts": {
     "start": "node app.js",
@@ -102,10 +88,12 @@
     "docker:status": "node src/utils/docker-stack.mjs status",
     "docker:fresh": "node src/utils/docker-stack.mjs fresh",
     "test:fast": "node tests/run.mjs fast",
+    "test:smoke": "node tests/run.mjs smoke",
     "test:integration": "node tests/run.mjs integration",
     "test:e2e": "node tests/run.mjs e2e",
     "test:perf": "node tests/perf/run-perf.mjs",
     "test:perf:smoke": "node tests/perf/run-perf.mjs smoke",
+    "test:perf:gate": "node tests/perf/run-perf.mjs gate --profile cigate",
     "test:load": "node tests/perf/run-perf.mjs load",
     "test:stress": "node tests/perf/run-perf.mjs stress",
     "test:soak": "node tests/perf/run-perf.mjs soak",
@@ -114,9 +102,7 @@
   },
   "pnpm": {
     "onlyBuiltDependencies": [
-      "classic-level",
-      "sqlite3",
-      "log4js"
+      "puppeteer"
     ]
   }
 }

@@ -42,4 +42,10 @@ export const PROFILES = {
     target: 'mixed',
     slo: { maxP99Ms: 200, maxErrorRate: 0.01 },
   },
+  /** CI / 本机短门禁：自举 + 短负载 + 短浸泡 + 校验 /metrics.http */
+  cigate: {
+    mode: 'gate',
+    target: 'health',
+    slo: { maxP99Ms: 800, maxErrorRate: 0.05, minRps: 20 },
+  },
 };

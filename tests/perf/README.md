@@ -8,6 +8,9 @@
 # CI 可门禁：自举短跑 /health
 pnpm test:perf:smoke
 
+# CI 短门禁：自举 load + soak + 校验 /metrics.http（需 Redis）
+pnpm test:perf:gate
+
 # 负载（30s / 50 并发，自举）
 pnpm test:load -- --self --target health --concurrency 100 --duration 30s
 
