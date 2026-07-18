@@ -18,6 +18,23 @@ let globalDb = null;
 /** @type {string|null} */
 let globalDbPath = null;
 
+/** @returns {import('node:sqlite').DatabaseSync|null} */
+function resolveDb() {
+  const fromGlobal = globalThis.sqlite;
+  if (fromGlobal?.isOpen) {
+    if (globalDb !== fromGlobal) globalDb = fromGlobal;
+    return fromGlobal;
+  }
+  return globalDb?.isOpen ? globalDb : null;
+}
+
+/** @returns {import('node:sqlite').DatabaseSync} */
+function requireDb() {
+  const db = resolveDb();
+  if (!db) throw new Error('[SQLite] 未初始化');
+  return db;
+}
+
 /**
  * 解析 SQLite 文件路径
  * @param {Record<string, unknown>} [cfg] runtimeConfig.sqlite
@@ -123,8 +140,7 @@ function ensureRuntimeSchema(db) {
  * @param {string|null|undefined} value
  */
 export function sqliteKvSet(namespace, key, value) {
-  const db = globalDb;
-  if (!db?.isOpen) throw new Error('[SQLite] 未初始化');
+  const db = requireDb();
   const ns = String(namespace || '').trim();
   const k = String(key || '').trim();
   if (!ns || !k) throw new TypeError('sqliteKvSet 需要 namespace 与 key');
@@ -146,9 +162,7 @@ export function sqliteKvSet(namespace, key, value) {
  * @returns {string|null}
  */
 export function sqliteKvGet(namespace, key) {
-  const db = globalDb;
-  if (!db?.isOpen) throw new Error('[SQLite] 未初始化');
-  const row = db
+  const row = requireDb()
     .prepare(`SELECT value FROM _xrk_runtime_kv WHERE namespace = ? AND key = ? LIMIT 1`)
     .get(String(namespace), String(key));
   return row?.value ?? null;
@@ -159,17 +173,14 @@ export function sqliteKvGet(namespace, key) {
  * @param {string} key
  */
 export function sqliteKvDel(namespace, key) {
-  const db = globalDb;
-  if (!db?.isOpen) throw new Error('[SQLite] 未初始化');
-  db.prepare(`DELETE FROM _xrk_runtime_kv WHERE namespace = ? AND key = ?`).run(
-    String(namespace),
-    String(key)
-  );
+  requireDb()
+    .prepare(`DELETE FROM _xrk_runtime_kv WHERE namespace = ? AND key = ?`)
+    .run(String(namespace), String(key));
 }
 
 /** @returns {import('node:sqlite').DatabaseSync|null} */
 export function getSqliteClient() {
-  return globalDb;
+  return resolveDb();
 }
 
 /** @returns {string|null} */
@@ -179,8 +190,8 @@ export function getSqlitePath() {
 
 /** @returns {boolean} */
 export function checkSqlite() {
-  const db = globalDb;
-  if (!db?.isOpen) return false;
+  const db = resolveDb();
+  if (!db) return false;
   try {
     return db.prepare('SELECT 1 AS ok').get()?.ok === 1;
   } catch {
@@ -195,8 +206,7 @@ export function checkSqlite() {
  * @returns {T}
  */
 export function withSqliteTransaction(fn) {
-  const db = globalDb;
-  if (!db?.isOpen) throw new Error('[SQLite] 未初始化');
+  const db = requireDb();
   db.exec('BEGIN IMMEDIATE');
   try {
     const result = fn(db);
@@ -217,16 +227,20 @@ export function withSqliteTransaction(fn) {
  * @returns {import('node:sqlite').StatementSync}
  */
 export function sqlitePrepare(sql) {
-  const db = globalDb;
-  if (!db?.isOpen) throw new Error('[SQLite] 未初始化');
-  return db.prepare(sql);
+  return requireDb().prepare(sql);
 }
 
 /** 关闭连接并清空全局挂载 */
 export function closeSqlite() {
-  if (!globalDb) return;
+  const db = resolveDb();
+  if (!db) {
+    globalDb = null;
+    globalDbPath = null;
+    setRuntimeGlobal('sqlite', null);
+    return;
+  }
   try {
-    if (globalDb.isOpen) globalDb.close();
+    if (db.isOpen) db.close();
   } catch {
     /* ignore */
   }
