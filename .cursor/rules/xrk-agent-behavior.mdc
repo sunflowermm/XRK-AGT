@@ -11,6 +11,7 @@ alwaysApply: true
 
 - 业务：`core/<core名>/`（plugin / http / stream / tasker / events / commonconfig / www）
 - **Core 边界**：业务在 `core/`；Core 开发者**禁止**改 `src/`（Runtime）。框架开发者维护 `src/infrastructure/`、`src/utils/`、`src/factory/`。
+- **娱乐 / 个人插件**（远行商人、谁艾特我、玩梗指令等）：**不进底层、不加 system-Core 白名单、默认不提交**；配置写插件顶部。详见 `xrk-project.mdc`「system-Core 白名单 vs 娱乐插件」。
 - 配置：独立 Core 用 `core/<名>/default/` + `commonconfig/` + `data/<产品>/`；勿把业务 yaml 放进 `config/default_config/`
 - 写 Core / 碰 Node API：读 `xrk-node-runtime`；HTTP 用 `HttpResponse`；全局对象用裸名（见 `xrk-dev-requirements.mdc`）
 - 写 / 审 `core/*/www`：读 **`xrk-www-compat`**（浏览器 ≠ Node 26；`/xrk`→`./web-compat.js`，产品页只内联）

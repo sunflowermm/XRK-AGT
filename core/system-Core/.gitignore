@@ -1,6 +1,8 @@
 *
 !.gitignore
 !README.md
+# 仅白名单入库：框架示例外设 / 通道增强 / 运维与通用助手。
+# 娱乐·个人插件（远行商人、谁艾特我等）勿加 ! 行，本地可跑但不进主仓。
 
 !plugin
 plugin/**
@@ -67,7 +69,6 @@ workflow/**
 !workflow/database.js
 !workflow/web.js
 !workflow/browser.js
-!workflow/merchant.js
 
 !commonconfig
 commonconfig/**
