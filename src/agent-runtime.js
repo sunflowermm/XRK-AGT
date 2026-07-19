@@ -1105,21 +1105,67 @@ export default class AgentRuntime extends EventEmitter {
     return Promise.all(messages.map(({ message }) => send(message)));
   }
 
+  /** stdin 等调试 bot：任意群号都能 pickGroup，不等于真有该群 */
+  _isStdinBot(id, bot) {
+    return (
+      id === 'stdin' ||
+      bot?.tasker_type === 'stdin' ||
+      bot?.tasker?.id === 'stdin' ||
+      /stdin|标准输入/i.test(String(bot?.tasker?.name || ''))
+    );
+  }
+
+  _botHasGroup(bot, groupId) {
+    const gl = bot?.gl;
+    if (!gl || typeof gl.has !== 'function') return false;
+    if (gl.has(groupId) || gl.has(String(groupId))) return true;
+    const n = Number(groupId);
+    return Number.isFinite(n) && gl.has(n);
+  }
+
   /**
-   * 选择一个用于发送消息的 AgentRuntime 实例
-   * - 优先使用显式传入的 botId
-   * - 否则使用 this.uin[0] / 第一个已连接的 AgentRuntime
+   * 按群号选 bot：谁 gl 里有该群就用谁；stdin 永不参与群路由
+   * gl 未加载时，退回具备 tasker.sendGroupMsg 的非 stdin bot
+   */
+  _resolveBotForGroup(groupId) {
+    const ids = Array.isArray(this.uin) ? [...this.uin] : Object.keys(this.bots || {});
+    /** @type {object[]} */
+    const owned = [];
+    /** @type {object[]} */
+    const canSend = [];
+
+    for (const id of ids) {
+      if (id == null || id === '') continue;
+      const bot = this.bots?.[id];
+      if (!bot || this._isStdinBot(id, bot)) continue;
+      if (this._botHasGroup(bot, groupId)) owned.push(bot);
+      if (typeof bot.tasker?.sendGroupMsg === 'function') canSend.push(bot);
+    }
+
+    return (
+      owned.find((b) => typeof b.tasker?.sendGroupMsg === 'function') ||
+      owned[0] ||
+      canSend[0] ||
+      null
+    );
+  }
+
+  /**
+   * 选择用于发送的 bot（无目标上下文时）
+   * - 优先显式 botId
+   * - 默认跳过 stdin（uin[0] 常为标准输入）
    */
   _getBotForSend(botId = null) {
-    if (botId && this.bots && this.bots[botId]) {
+    if (botId && this.bots?.[botId]) {
       return this.bots[botId];
     }
 
-    const candidateId = this.uin?.[0] || Object.keys(this.bots || {})[0];
-    if (candidateId && this.bots && this.bots[candidateId]) {
-      return this.bots[candidateId];
+    const ids = Array.isArray(this.uin) ? [...this.uin] : [];
+    for (const id of ids) {
+      if (id == null || id === '') continue;
+      const bot = this.bots?.[id];
+      if (bot && !this._isStdinBot(id, bot)) return bot;
     }
-
     return null;
   }
 
@@ -1136,13 +1182,12 @@ export default class AgentRuntime extends EventEmitter {
   }
 
   /**
-   * 选取群聊（兼容 OneBot / GSUID / QBQBot 等适配器）
-   * - 当未指定 botId 时，自动选择一个可用的 AgentRuntime
+   * 选取群聊：未指定 botId 时按群号归属解析（stdin 不会因假 pickGroup 抢走）
    */
   pickGroup(group_id, botId = null) {
-    const bot = this._getBotForSend(botId);
+    const bot = (botId && this.bots?.[botId]) || this._resolveBotForGroup(group_id);
     if (!bot || typeof bot.pickGroup !== 'function') {
-      throw new Error('当前没有可用的机器人，或不支持群消息发送');
+      throw new Error(`没有机器人可访问群 ${group_id}`);
     }
     return bot.pickGroup(group_id);
   }
@@ -1182,16 +1227,16 @@ export default class AgentRuntime extends EventEmitter {
   }
 
   /**
-   * 发送群消息（供 HTTP 接口等统一调用）
-   * @param {string} botId 机器人 UIN/self_id
+   * 发送群消息：未指定 botId 时按群号归属选 bot（谁有该群用谁）
+   * @param {string|null} botId 机器人 UIN/self_id；null 则按 groupId 解析
    * @param {string|number} groupId 群号 / 目标 ID
    * @param {any} msg 消息内容（字符串或消息数组）
    * @returns {Promise<{message_id: string}>}
    */
   async sendGroupMsg(botId, groupId, msg) {
-    const bot = this._getBotForSend(botId);
+    const bot = (botId && this.bots?.[botId]) || this._resolveBotForGroup(groupId);
     if (!bot) {
-      throw new Error(`机器人不存在或未连接: ${botId || 'default'}`);
+      throw new Error(`没有机器人可发送到群 ${groupId}`);
     }
 
     // 优先走各 tasker 提供的 sendGroupMsg 能力
@@ -1204,7 +1249,7 @@ export default class AgentRuntime extends EventEmitter {
       return await bot.tasker.sendGroupMsg(data, msg);
     }
 
-    // 兼容：通过 pickGroup().sendMsg 发送
+    // 兼容：通过 pickGroup().sendMsg 发送（stdin 等假实现不会在未指定 botId 时被选中）
     if (typeof bot.pickGroup === 'function') {
       const group = bot.pickGroup(groupId);
       if (group && typeof group.sendMsg === 'function') {
