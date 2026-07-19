@@ -389,8 +389,8 @@ const stream = await this.getWorkflow('desktop');
 ### 7. browser 工作流（受控浏览器）
 
 **文件**: `core/system-Core/workflow/browser.js`  
-**实现库**：`src/infrastructure/crawl/`（`PlaywrightAgentSession`、`crawl-config.buildBrowserRuntime`、`createLocalFontScreenshotHelper`；SSRF 与 `web_fetch` 同源）  
-**配置**：`ai-workflow.crawl.browser` + **`renderer.playwright`**（`data/server_bots/{port}/renderers/playwright/config.yaml`，见 commonconfig `renderer` 段）
+**实现库**：`src/infrastructure/crawl/`（`PlaywrightAgentSession`、`buildBrowserRuntime` → `toPlaywrightAgentLaunchOptions` / `launchOptionsFromBrowserRuntime`、`createLocalFontScreenshotHelper`；崩溃软关闭与 `using` 整轮重试；SSRF 与 `web_fetch` 同源）  
+**配置**：`ai-workflow.crawl.browser` + **`renderer.playwright`**（`data/server_bots/{port}/renderers/playwright/config.yaml`，见 commonconfig `renderer` 段）。业务启动浏览器须走 launch helper，勿手抄字段。  
 **配置**：浏览器工作流参数以 `core/system-Core/workflow/browser.js` 及其实现代码为准。  
 **MCP 工具**（受控浏览器）：`browser_status`、`browser_start`、`browser_goto`、`browser_tabs`、`browser_tab_*`、`browser_snapshot`、`browser_act`（click|type|wait|evaluate|batch）、`browser_console`、`browser_network`、`browser_dialog_*`、`browser_observed_state`、`browser_page_text`、`browser_screenshot`、`browser_close`。薄包装 `browser_click/type/wait/evaluate` 已移除，统一走 `browser_act`。  
 

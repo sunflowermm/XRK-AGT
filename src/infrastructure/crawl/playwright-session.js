@@ -33,20 +33,42 @@ import {
 } from './act-policy.js';
 import { DEFAULT_DEVICE_SCALE_FACTOR } from './page-screenshot-enhance.js';
 import { connectPlaywrightBrowser, launchPlaywrightBrowser } from '#utils/playwright-puppeteer-compat.js';
+import { isPlaywrightCrashError, softClosePlaywright, softClosePlaywrightTree } from './playwright-crash.js';
+import RuntimeUtil from '#utils/runtime-util.js';
 
 const BROWSER_TYPES = /** @type {const} */ (['chromium', 'firefox', 'webkit']);
+const DEFAULT_USING_CRASH_RETRIES = 1;
+const DEFAULT_NAVIGATION_TIMEOUT_MS = 60_000;
+const DEFAULT_CLOSE_TIMEOUT_MS = 8_000;
 
 /**
  * @typedef {Object} PlaywrightAgentLaunchOptions
  * @property {'chromium'|'firefox'|'webkit'} [browserType]
  * @property {boolean} [headless]
  * @property {string} [executablePath]
+ * @property {string} [wsEndpoint]
  * @property {number} [launchTimeoutMs]
  * @property {string[]} [launchArgs]
  * @property {Record<string, string>} [extraHTTPHeaders]
  * @property {number} [deviceScaleFactor]
  * @property {{ width: number, height: number }} [viewport]
+ * @property {number} [navigationTimeoutMs] 会话默认导航超时（来自 buildBrowserRuntime）
+ * @property {object} [ssrfPolicy] 会话默认 SSRF 策略
+ * @property {number} [closeTimeoutMs] soft close 超时
+ * @property {number} [pageCrashRetries] withPageCrashRetry 默认次数
+ * @property {number} [opTimeoutMs] capture 等可选整段超时；未设则不限
  */
+
+/**
+ * @typedef {Object} PlaywrightAgentUsingOptions
+ * @property {number} [crashRetries=1] 整轮回调遇 Target/Page crashed 时换新浏览器重试次数
+ */
+
+function clampInt(raw, min, max, fallback) {
+  const n = Math.floor(Number(raw));
+  if (!Number.isFinite(n)) return fallback;
+  return Math.min(max, Math.max(min, n));
+}
 
 function clampSnapshotTimeoutMs(raw) {
   const n = Math.floor(Number(raw) || ACT_DEFAULT_SNAPSHOT_TIMEOUT_MS);
@@ -58,15 +80,48 @@ export class PlaywrightAgentSession {
    * @param {import('playwright').Browser} browser
    * @param {import('playwright').BrowserContext} context
    * @param {import('playwright').Page} page
+   * @param {PlaywrightAgentLaunchOptions} [launchOptions]
    */
-  constructor(browser, context, page) {
+  constructor(browser, context, page, launchOptions = {}) {
     this.browser = browser;
     this.context = context;
     this.page = page;
+    /** @type {PlaywrightAgentLaunchOptions} */
+    this.launchOptions = launchOptions;
+    this.navigationTimeoutMs = clampInt(
+      launchOptions.navigationTimeoutMs,
+      1_000,
+      180_000,
+      DEFAULT_NAVIGATION_TIMEOUT_MS
+    );
+    this.ssrfPolicy =
+      launchOptions.ssrfPolicy && typeof launchOptions.ssrfPolicy === 'object'
+        ? { ...launchOptions.ssrfPolicy }
+        : {};
+    this.closeTimeoutMs = clampInt(
+      launchOptions.closeTimeoutMs,
+      500,
+      60_000,
+      DEFAULT_CLOSE_TIMEOUT_MS
+    );
+    this.pageCrashRetries = clampInt(launchOptions.pageCrashRetries, 0, 3, 1);
+    const opRaw = launchOptions.opTimeoutMs;
+    this.opTimeoutMs =
+      opRaw == null || opRaw === 0
+        ? null
+        : clampInt(opRaw, 5_000, 600_000, null);
     /** @type {Record<string, { role: string, name?: string, nth?: number }>} */
     this.roleRefs = {};
     /** @type {{ prepare?: (page: import('playwright').Page) => Promise<void>, apply: (page: import('playwright').Page) => Promise<void>, capture: (page: import('playwright').Page, selector?: string) => Promise<Buffer> } | null} */
     this.screenshotHelper = null;
+    this.#applyPageDefaults(page);
+  }
+
+  /** @param {import('playwright').Page} page */
+  #applyPageDefaults(page) {
+    ensurePageState(page);
+    page.setDefaultNavigationTimeout(this.navigationTimeoutMs);
+    page.setDefaultTimeout(Math.max(this.navigationTimeoutMs, 30_000));
   }
 
   /** @param {ReturnType<import('./page-screenshot-enhance.js').createLocalFontScreenshotHelper>} helper */
@@ -116,33 +171,120 @@ export class PlaywrightAgentSession {
     }
     const context = await browser.newContext(contextOptions);
     const page = await context.newPage();
-    ensurePageState(page);
-    return new PlaywrightAgentSession(browser, context, page);
+    return new PlaywrightAgentSession(browser, context, page, { ...options });
+  }
+
+  /**
+   * 当前页目标崩溃后换新 Page（保留 browser/context 与截图 helper；不降 DPR）
+   * @returns {Promise<import('playwright').Page>}
+   */
+  async recreatePage() {
+    const old = this.page;
+    this.roleRefs = {};
+    if (old) await softClosePlaywright(old, Math.min(5_000, this.closeTimeoutMs));
+    if (!this.context) throw new Error('PlaywrightAgentSession.recreatePage: context 已关闭');
+    const page = await this.context.newPage();
+    this.#applyPageDefaults(page);
+    this.page = page;
+    if (this.screenshotHelper?.prepare) await this.screenshotHelper.prepare(page);
+    return page;
+  }
+
+  /**
+   * @template T
+   * @param {() => Promise<T>} op
+   * @param {{ timeoutMs?: number, label?: string }} [opts]
+   */
+  async withOpTimeout(op, opts = {}) {
+    const raw = opts.timeoutMs ?? this.opTimeoutMs;
+    if (raw == null || raw === 0) return op();
+    const ms = clampInt(raw, 1_000, 600_000, 0);
+    const label = opts.label || 'op';
+    if (!ms) return op();
+    let timer;
+    try {
+      return await Promise.race([
+        op(),
+        new Promise((_, reject) => {
+          timer = setTimeout(() => reject(new Error(`Playwright ${label} 超时 ${ms}ms`)), ms);
+        })
+      ]);
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
+  }
+
+  /**
+   * @template T
+   * @param {() => Promise<T>} op
+   * @param {{ retries?: number, label?: string }} [opts]
+   */
+  async withPageCrashRetry(op, opts = {}) {
+    const retries = clampInt(opts.retries ?? this.pageCrashRetries, 0, 3, 1);
+    const label = opts.label || 'op';
+    let lastErr;
+    for (let attempt = 0; attempt <= retries; attempt++) {
+      try {
+        return await op();
+      } catch (err) {
+        lastErr = err;
+        if (!isPlaywrightCrashError(err) || attempt >= retries) throw err;
+        RuntimeUtil.makeLog(
+          'warn',
+          `Playwright ${label} 目标崩溃，重建 page 后重试 (${attempt + 1}/${retries})：${Error.isError(err) ? err.message : err}`,
+          'PlaywrightSession'
+        );
+        await this.recreatePage();
+      }
+    }
+    throw lastErr;
   }
 
   async guardAfterInteraction(previousUrl, ssrfPolicy = {}) {
     await this.page.waitForTimeout(INTERACTION_NAVIGATION_GRACE_MS).catch(() => {});
+    const policy = ssrfPolicy && Object.keys(ssrfPolicy).length ? ssrfPolicy : this.ssrfPolicy;
     if (didCrossDocumentUrlChange(this.page, previousUrl)) {
-      await assertBrowserNavigationResultAllowedForPage(this.page, ssrfPolicy);
+      await assertBrowserNavigationResultAllowedForPage(this.page, policy);
     }
   }
 
   async goto(url, navOptions = {}) {
-    const { waitUntil = 'load', timeoutMs = 60_000, skipSsrfCheck = false, ssrfPolicy } = navOptions;
+    return this.withPageCrashRetry(() => this.#gotoOnce(url, navOptions), {
+      retries: this.pageCrashRetries,
+      label: 'goto'
+    });
+  }
+
+  /**
+   * @param {string} url
+   * @param {{ waitUntil?: string, timeoutMs?: number, skipSsrfCheck?: boolean, ssrfPolicy?: object }} [navOptions]
+   */
+  async #gotoOnce(url, navOptions = {}) {
+    const waitUntil = navOptions.waitUntil || 'load';
+    const timeoutMs = clampInt(
+      navOptions.timeoutMs ?? this.navigationTimeoutMs,
+      1_000,
+      180_000,
+      this.navigationTimeoutMs
+    );
+    const skipSsrfCheck = navOptions.skipSsrfCheck === true;
+    const ssrfPolicy =
+      navOptions.ssrfPolicy && typeof navOptions.ssrfPolicy === 'object'
+        ? navOptions.ssrfPolicy
+        : this.ssrfPolicy;
+
     if (skipSsrfCheck) {
       await this.page.goto(url, { waitUntil, timeout: timeoutMs });
       return;
     }
     await gotoWithNavigationGuard(this.page, url, {
       timeoutMs,
-      ssrfPolicy: ssrfPolicy ?? {},
+      waitUntil,
+      ssrfPolicy,
       onBlocked: async () => {
-        await this.page.close().catch(() => {});
+        await softClosePlaywright(this.page, Math.min(3_000, this.closeTimeoutMs));
       }
     });
-    if (waitUntil !== 'load') {
-      await this.page.waitForLoadState(waitUntil, { timeout: timeoutMs }).catch(() => {});
-    }
   }
 
   async listTabs() {
@@ -162,10 +304,14 @@ export class PlaywrightAgentSession {
 
   async newTab(url = 'about:blank', opts = {}) {
     const page = await this.context.newPage();
-    ensurePageState(page);
+    this.#applyPageDefaults(page);
     this.page = page;
     if (url && url !== 'about:blank') {
-      await this.goto(url, { ssrfPolicy: opts.ssrfPolicy ?? {}, timeoutMs: opts.timeoutMs });
+      await this.goto(url, {
+        ssrfPolicy: opts.ssrfPolicy ?? this.ssrfPolicy,
+        timeoutMs: opts.timeoutMs ?? this.navigationTimeoutMs,
+        waitUntil: opts.waitUntil
+      });
     }
     return { index: this.context.pages().indexOf(page), url: page.url() };
   }
@@ -177,10 +323,11 @@ export class PlaywrightAgentSession {
     if (idx < 0 || idx >= pages.length) throw new Error('Tab index out of range');
     const target = pages[idx];
     const wasActive = target === this.page;
-    await target.close();
+    await softClosePlaywright(target, this.closeTimeoutMs);
     if (wasActive) {
       const remaining = this.context.pages();
       this.page = remaining[Math.min(idx, remaining.length - 1)] ?? remaining[0];
+      if (this.page) this.#applyPageDefaults(this.page);
     }
     return { closedIndex: idx, activeUrl: this.url() };
   }
@@ -235,28 +382,44 @@ export class PlaywrightAgentSession {
     return this.page.screenshot({ fullPage: false, type: 'png', ...opts });
   }
 
-  async captureRegion(selector = '.content', opts) {
-    if (this.screenshotHelper) {
-      await this.screenshotHelper.apply(this.page);
-      return this.screenshotHelper.capture(this.page, selector);
-    }
-    const shotOpts = { type: 'png', animations: 'disabled', caret: 'hide', scale: 'device', ...opts };
-    return this.page.locator(selector).first().screenshot(shotOpts);
+  async captureRegion(selector = '.content', opts = {}) {
+    const { timeoutMs, ...shotRest } = opts;
+    const run = async () => {
+      if (this.screenshotHelper) {
+        await this.screenshotHelper.apply(this.page);
+        return this.screenshotHelper.capture(this.page, selector);
+      }
+      const shotOpts = {
+        type: 'png',
+        animations: 'disabled',
+        caret: 'hide',
+        scale: 'device',
+        ...shotRest
+      };
+      return this.page.locator(selector).first().screenshot(shotOpts);
+    };
+    return this.withOpTimeout(run, {
+      timeoutMs,
+      label: 'captureRegion'
+    });
   }
 
   async gotoAndCapture(url, options = {}) {
-    const {
-      selector = '.content',
-      waitUntil = 'load',
-      timeoutMs = 60_000,
-      settleMs = 0,
-      skipSsrfCheck = false,
-      ssrfPolicy
-    } = options;
-    if (this.screenshotHelper?.prepare) await this.screenshotHelper.prepare(this.page);
-    await this.goto(url, { waitUntil, timeoutMs, skipSsrfCheck, ssrfPolicy });
-    if (settleMs > 0) await new Promise((r) => setTimeout(r, settleMs));
-    return this.captureRegion(selector);
+    // 整段重试：崩溃后 recreatePage 须重新 goto，不能只重截空白页
+    return this.withPageCrashRetry(async () => {
+      const {
+        selector = '.content',
+        waitUntil = 'load',
+        timeoutMs,
+        settleMs = 0,
+        skipSsrfCheck = false,
+        ssrfPolicy
+      } = options;
+      if (this.screenshotHelper?.prepare) await this.screenshotHelper.prepare(this.page);
+      await this.#gotoOnce(url, { waitUntil, timeoutMs, skipSsrfCheck, ssrfPolicy });
+      if (settleMs > 0) await new Promise((r) => setTimeout(r, settleMs));
+      return this.captureRegion(selector, { timeoutMs: options.captureTimeoutMs });
+    }, { label: 'gotoAndCapture' });
   }
 
   async regionText(selector = '.content') {
@@ -607,13 +770,31 @@ export class PlaywrightAgentSession {
   }
 
   /** @template T */
-  static async using(options, fn) {
-    const session = await PlaywrightAgentSession.launch(options);
-    try {
-      return await fn(session);
-    } finally {
-      await session.close();
+  static async using(options, fn, usingOpts = {}) {
+    const crashRetries = Math.max(
+      0,
+      Math.min(3, Math.floor(Number(usingOpts.crashRetries ?? DEFAULT_USING_CRASH_RETRIES)))
+    );
+    /** @type {unknown} */
+    let lastErr;
+    for (let attempt = 0; attempt <= crashRetries; attempt++) {
+      const session = await PlaywrightAgentSession.launch(options);
+      try {
+        return await fn(session);
+      } catch (err) {
+        lastErr = err;
+        const canRetry = isPlaywrightCrashError(err) && attempt < crashRetries;
+        if (!canRetry) throw err;
+        RuntimeUtil.makeLog(
+          'warn',
+          `Playwright using 目标崩溃，换新浏览器重试 (${attempt + 1}/${crashRetries})：${Error.isError(err) ? err.message : err}`,
+          'PlaywrightSession'
+        );
+      } finally {
+        await session.close();
+      }
     }
+    throw lastErr;
   }
 
   url() {
@@ -621,7 +802,12 @@ export class PlaywrightAgentSession {
   }
 
   async close() {
-    if (this.context) await this.context.close();
-    if (this.browser) await this.browser.close();
+    await softClosePlaywrightTree(
+      { page: this.page, context: this.context, browser: this.browser },
+      this.closeTimeoutMs ?? DEFAULT_CLOSE_TIMEOUT_MS
+    );
+    this.page = null;
+    this.context = null;
+    this.browser = null;
   }
 }

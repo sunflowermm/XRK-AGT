@@ -8,6 +8,7 @@ import {
   PlaywrightAgentSession,
   SsrFBlockedError,
   buildBrowserRuntime,
+  toPlaywrightAgentLaunchOptions,
   createLocalFontScreenshotHelper
 } from '#infrastructure/crawl/index.js';
 
@@ -56,17 +57,7 @@ export default class BrowserStream extends AiWorkflow {
   async ensureSession() {
     if (this.session) return this.session;
     const rt = this.browserRuntime;
-    const launchOpts = {
-      browserType: rt.browserType,
-      headless: rt.headless,
-      wsEndpoint: rt.wsEndpoint,
-      executablePath: rt.executablePath,
-      launchTimeoutMs: rt.launchTimeoutMs,
-      launchArgs: rt.launchArgs,
-      deviceScaleFactor: rt.deviceScaleFactor,
-      viewport: rt.viewport
-    };
-    this.session = await PlaywrightAgentSession.launch(launchOpts);
+    this.session = await PlaywrightAgentSession.launch(toPlaywrightAgentLaunchOptions(rt));
     this.attachScreenshotHelperIfConfigured();
     RuntimeUtil.makeLog(
       'info',

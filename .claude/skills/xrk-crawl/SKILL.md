@@ -14,6 +14,8 @@ import {
   buildWebFetchRuntime,
   assertUrlSafeForFetch,
   PlaywrightAgentSession,
+  launchOptionsFromBrowserRuntime,
+  toPlaywrightAgentLaunchOptions,
   createLocalFontScreenshotHelper,
   DEFAULT_DEVICE_SCALE_FACTOR,
   DOM_TWEAK_LABEL_COLON_HALF,
@@ -31,12 +33,42 @@ import {
 | 开放域检索 | `runWebSearch` | `web-search-executor.js` + `web-search-registry.js` |
 | 零配置免费检索 | `runParallelFreeSearch` | `web-search-parallel-free.js` + `web-search-mcp-client.js` |
 | 浏览器运行时 | `buildBrowserRuntime` | `crawl-config.js`（ai-workflow.crawl + renderer.playwright） |
+| runtime → launch | `toPlaywrightAgentLaunchOptions` / `launchOptionsFromBrowserRuntime` | `crawl-config.js` |
 | MCP `web_fetch` / `web_search` | `workflow/web.js` | 内部用 crawl |
 | JS 渲染、交互、截图 | `PlaywrightAgentSession` | `playwright-session.js` |
 | MCP 受控浏览器 | `workflow/browser.js` | `browser_*` 工具 |
 | 截图字体/样式与线上一致 | `createLocalFontScreenshotHelper` | `page-screenshot-enhance.js` |
 
 **选型**：HTTP 能拿正文 → `runWebFetch`；要渲染或 PNG → Playwright。
+
+## Playwright 启动（必读）
+
+业务/插件**禁止**手抄 `executablePath` / `launchArgs` / 只挑部分字段。统一：
+
+```javascript
+// 推荐：配置链 + 业务覆盖（viewport / DPR）
+await PlaywrightAgentSession.using(
+  launchOptionsFromBrowserRuntime({ deviceScaleFactor: 3, viewport: { width: 520, height: 960 } }),
+  async (session) => { /* ... */ }
+)
+
+// 已有 runtime 对象时
+const rt = buildBrowserRuntime()
+await PlaywrightAgentSession.launch(toPlaywrightAgentLaunchOptions(rt))
+```
+
+映射会带上：`navigationTimeoutMs`、`ssrfPolicy`、`closeTimeoutMs`、`pageCrashRetries`、`opTimeoutMs`、系统浏览器路径、`launchArgs`。
+
+**稳定性（底层默认，插件勿再造）**：
+
+| 能力 | 说明 |
+|------|------|
+| `using(..., { crashRetries: 1 })` | 整轮 Target/Page crashed → 换新浏览器再跑 |
+| `goto` / `gotoAndCapture` | 页崩溃 → `recreatePage` 后重试（后者含重新导航） |
+| `session.close()` | `softClosePlaywrightTree`，超时不卡死 |
+| `waitUntil` | `gotoWithNavigationGuard` 透传，`domcontentloaded` 真正生效 |
+
+**反模式**：同一重型（高 DPR + 字体）会话连开多档位 `goto`；在插件里硬编码 Chrome 路径 / soft-close / 崩溃正则。
 
 ## SSRF
 
@@ -87,6 +119,8 @@ src/infrastructure/crawl/
 
 - 扩展写在 `src/infrastructure/crawl/` 内并在 `index.js` 导出，不要在 Core 内复制一份。
 - Core 业务只 import 门面，勿在 Core 写 SSRF/搜索驱动。
+- 勿 `launch({ browserType: rt.browserType, ... })` 手抄字段——会丢掉 nav 超时与 SSRF。
+- 探活用轻量 `launchOptionsFromBrowserRuntime()`；高清截图另开会话并尽量 **一次 goto**。
 
 ## Node 26
 

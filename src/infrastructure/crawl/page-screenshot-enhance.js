@@ -235,7 +235,7 @@ export function createLocalFontScreenshotHelper(options) {
     await waitFonts(page)
     await page.evaluate(() => {
       document.getAnimations?.().forEach((a) => a.cancel?.())
-    })
+    }).catch(() => {})
     await applyColonTweaks(page)
   }
 

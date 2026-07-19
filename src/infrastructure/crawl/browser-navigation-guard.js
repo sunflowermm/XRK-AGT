@@ -135,7 +135,12 @@ export async function assertBrowserNavigationResultAllowedForPage(page, ssrfPoli
  * @param {import('playwright').Page} page
  */
 export async function gotoWithNavigationGuard(page, url, opts = {}) {
-  const { timeoutMs = 60_000, ssrfPolicy = {}, onBlocked } = opts;
+  const {
+    timeoutMs = 60_000,
+    waitUntil = 'load',
+    ssrfPolicy = {},
+    onBlocked
+  } = opts;
   let blockedError = null;
 
   const handler = async (route, request) => {
@@ -166,7 +171,7 @@ export async function gotoWithNavigationGuard(page, url, opts = {}) {
 
   await page.route('**', handler);
   try {
-    const response = await page.goto(url, { timeout: timeoutMs });
+    const response = await page.goto(url, { timeout: timeoutMs, waitUntil });
     if (blockedError) throw blockedError;
     await assertBrowserNavigationResultAllowedForPage(page, ssrfPolicy);
     return response;

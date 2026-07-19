@@ -256,7 +256,13 @@ export function buildBrowserRuntime(overrides = {}) {
   );
   const browserType = BROWSER_TYPES.has(browserTypeRaw) ? browserTypeRaw : 'chromium';
 
-  const defaultLaunchArgs = ['--disable-gpu', '--no-sandbox', '--disable-dev-shm-usage'];
+  const defaultLaunchArgs = [
+    '--disable-gpu',
+    '--no-sandbox',
+    '--disable-dev-shm-usage',
+    '--disable-crash-reporter',
+    '--disable-breakpad',
+  ];
 
   return {
     browserType,
@@ -341,6 +347,70 @@ export function buildBrowserRuntime(overrides = {}) {
       [],
       overrides.screenshotFontFiles,
       section.screenshotFontFiles
-    )
+    ),
+    closeTimeoutMs: pickNumber(
+      8_000,
+      { min: 500, max: 60_000 },
+      overrides.closeTimeoutMs,
+      section.closeTimeoutMs
+    ),
+    pageCrashRetries: pickNumber(
+      1,
+      { min: 0, max: 3 },
+      overrides.pageCrashRetries,
+      section.pageCrashRetries
+    ),
+    opTimeoutMs: (() => {
+      const raw = overrides.opTimeoutMs ?? section.opTimeoutMs;
+      if (raw == null || raw === '' || raw === 0 || raw === false) return undefined;
+      return pickNumber(120_000, { min: 5_000, max: 600_000 }, raw);
+    })()
   };
+}
+
+/**
+ * 将 `buildBrowserRuntime()` 结果转为 `PlaywrightAgentSession.launch/using` 选项。
+ * 业务方应只调此函数（或 `launchOptionsFromBrowserRuntime`），勿手抄字段以免丢掉
+ * navigationTimeoutMs / ssrfPolicy / closeTimeoutMs 等。
+ *
+ * @param {ReturnType<typeof buildBrowserRuntime>|object} [runtime]
+ * @param {object} [overrides] 启动项覆盖（viewport / deviceScaleFactor 等）
+ */
+export function toPlaywrightAgentLaunchOptions(runtime = {}, overrides = {}) {
+  const rt = runtime && typeof runtime === 'object' ? runtime : {};
+  const o = overrides && typeof overrides === 'object' ? overrides : {};
+  const viewport = o.viewport ?? rt.viewport;
+  const ssrfPolicy = o.ssrfPolicy ?? rt.ssrfPolicy;
+
+  return {
+    browserType: o.browserType ?? rt.browserType ?? 'chromium',
+    headless: typeof o.headless === 'boolean' ? o.headless : (rt.headless ?? true),
+    wsEndpoint: o.wsEndpoint ?? rt.wsEndpoint,
+    executablePath: o.executablePath ?? rt.executablePath,
+    launchTimeoutMs: o.launchTimeoutMs ?? rt.launchTimeoutMs,
+    launchArgs: o.launchArgs ?? rt.launchArgs,
+    deviceScaleFactor: o.deviceScaleFactor ?? rt.deviceScaleFactor,
+    viewport:
+      viewport && typeof viewport === 'object'
+        ? {
+            width: viewport.width,
+            height: viewport.height
+          }
+        : undefined,
+    extraHTTPHeaders: o.extraHTTPHeaders,
+    navigationTimeoutMs: o.navigationTimeoutMs ?? rt.navigationTimeoutMs,
+    ssrfPolicy: ssrfPolicy && typeof ssrfPolicy === 'object' ? { ...ssrfPolicy } : undefined,
+    closeTimeoutMs: o.closeTimeoutMs ?? rt.closeTimeoutMs,
+    pageCrashRetries: o.pageCrashRetries ?? rt.pageCrashRetries,
+    opTimeoutMs: o.opTimeoutMs ?? rt.opTimeoutMs
+  };
+}
+
+/**
+ * `buildBrowserRuntime(runtimeOverrides)` → `toPlaywrightAgentLaunchOptions(..., launchOverrides)`
+ * @param {object} [runtimeOverrides] 传给 buildBrowserRuntime（含 viewport/deviceScaleFactor）
+ * @param {object} [launchOverrides] 仅启动项覆盖
+ */
+export function launchOptionsFromBrowserRuntime(runtimeOverrides = {}, launchOverrides = {}) {
+  return toPlaywrightAgentLaunchOptions(buildBrowserRuntime(runtimeOverrides), launchOverrides);
 }

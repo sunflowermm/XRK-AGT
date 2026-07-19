@@ -18,6 +18,7 @@ export {
   extractReadableContent
 } from './web-fetch-utils.js';
 export { PlaywrightAgentSession } from './playwright-session.js';
+export { isPlaywrightCrashError, softClosePlaywright, softClosePlaywrightTree } from './playwright-crash.js';
 export {
   createLocalFontScreenshotHelper,
   DEFAULT_DEVICE_SCALE_FACTOR,
@@ -58,6 +59,8 @@ export {
 export { gotoWithNavigationGuard, InvalidBrowserNavigationUrlError } from './browser-navigation-guard.js';
 export {
   buildBrowserRuntime,
+  toPlaywrightAgentLaunchOptions,
+  launchOptionsFromBrowserRuntime,
   resolveWebFetchRuntime,
   resolveWebSearchConfig,
   getCrawlConfigSection,
