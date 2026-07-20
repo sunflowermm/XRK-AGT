@@ -9,6 +9,7 @@ import { matchEventPattern as matchEventPatternFn } from '#utils/core-fs.js'
 import { EventNormalizer } from '#utils/event-normalizer.js'
 import RuntimeUtil from '#utils/runtime-util.js'
 import { msgSegment } from '#utils/msg-segment.js'
+import { extractMsgIds, scheduleMsgRecall } from '#utils/msg-recall.js'
 import moment from 'moment'
 
 export const dealMethods = {
@@ -148,7 +149,7 @@ export const dealMethods = {
           }
         }
 
-        let { recallMsg = 0, at = '' } = data
+        let { recallMsg = 0, at = '', recallUser = true } = data
         if (!Array.isArray(msg)) msg = [msg]
         msg = msg.map(m => {
           if (Buffer.isBuffer(m) || m instanceof Uint8Array) return msgSegment.image(m)
@@ -186,16 +187,16 @@ export const dealMethods = {
           }
         }
 
+        // recallMsg：秒；默认同时撤回用户原消息（主动复读等）；recallUser:false 只撤 bot
         const recallSeconds = Number(recallMsg)
-        if (recallSeconds > 0 && msgRes?.message_id) {
-          const target = e.isGroup ? e.group : e.friend
-          if (target?.recallMsg) {
-            setTimeout(() => {
-              Promise.resolve(target.recallMsg(msgRes.message_id)).catch(() => {})
-              if (e.message_id) {
-                Promise.resolve(target.recallMsg(e.message_id)).catch(() => {})
-              }
-            }, recallSeconds * 1000)
+        if (recallSeconds > 0) {
+          const ids = extractMsgIds(msgRes)
+          if (ids.length) {
+            scheduleMsgRecall(e, ids, {
+              delayMs: recallSeconds * 1000,
+              alsoRecall: recallUser !== false && e.message_id ? [e.message_id] : [],
+              logTag: 'ReplyRecall',
+            })
           }
         }
 

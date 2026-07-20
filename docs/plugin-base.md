@@ -122,6 +122,8 @@ classDiagram
 | `this.reply()` | 优先 `e.reply`，否则 `bot.sendMsg` / tasker |
 | `this.getWorkflow()` | 访问已加载的 `AiWorkflow` 工作流 |
 
+`e.reply(msg, quote, data)`：`data.recallMsg`（秒）走 `#utils/msg-recall`；默认兼撤用户原消息，`recallUser: false` 只撤 bot。多条需同时撤时用 `extractMsgIds` + `scheduleMsgRecall`。
+
 工作流 `process()` 内部通常已发送回复，插件侧**一般无需再 `reply()`**。
 
 ### 事件订阅约定（摘要）
