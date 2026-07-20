@@ -30,7 +30,6 @@ export const dealMethods = {
 
       this.setupReply(e)
       await Runtime.init(e)
-
       await this.runPlugins(e, true)
       const handled = await this.runPlugins(e, false)
 
