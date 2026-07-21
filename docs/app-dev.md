@@ -275,7 +275,7 @@ export default {
 
 浏览器页 **不等于** Node ≥26。校园 WebView 下勿裸用 `crypto.randomUUID` / `AbortSignal.timeout`；`HttpResponse.success` 对象拍平，勿默认读 `json.data`。
 
-权威模块：`web-compat.js`（仅 `/xrk` 相对导入）。产品页**只内联**同语义。根名 `shared` 保留。见 skill **`xrk-www-compat`**。
+权威模块：`web-compat.js`（仅 `/xrk` 相对导入）。产品页**只内联**同语义。根名 `shared` 保留。挂载两类规则见 **[www-mount.md](www-mount.md)**、skill **`xrk-www-compat`**。
 
 | 页面 | 实拍 |
 |------|------|

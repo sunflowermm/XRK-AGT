@@ -4,12 +4,14 @@ import RuntimeUtil from '#utils/runtime-util.js';
 import paths from '#utils/paths.js';
 import runtimeConfig from '#infrastructure/config/config.js';
 import { execFile } from '#utils/exec-async.js';
+import { shouldProxyFrontend, resolveWwwPublicMountPath } from '#infrastructure/http/www-app-resolve.js';
 
 /**
  * FrontendLauncher
- * 
- * 自动扫描 core/*-Core/www 下的 sign.json，
- * 启动前端开发服务，并为 HTTP 层提供配置数据。
+ *
+ * 只处理「前端工程」（目录内有有效 sign.json）且 shouldProxyFrontend 为真的应用：
+ * 拉起子进程并反代。普通静态与 signed+static 由 mountCoreWwwStatic 托管。
+ * 决策：www-app-resolve.js；说明：docs/www-mount.md。
  */
 class FrontendLauncher {
   /** @type {Map<string, { config: any, process?: import('child_process').ChildProcess, status: string, restarts: number, startedAt?: number }>} */
@@ -327,8 +329,9 @@ class FrontendLauncher {
         const raw = await RuntimeUtil.readFile(file, 'utf8');
         const json = JSON.parse(raw);
 
-        if (json && json.enabled === false) {
-          RuntimeUtil.makeLog('debug', `跳过禁用的前端 sign.json: ${file}`, 'Frontend');
+        // 与 mount-core-www 同一套决策：static / enabled:false 不拉进程
+        if (!shouldProxyFrontend(json)) {
+          RuntimeUtil.makeLog('debug', `跳过静态模式前端 sign.json: ${file}`, 'Frontend');
           continue;
         }
 
@@ -385,11 +388,7 @@ class FrontendLauncher {
             ? `/core/${coreName}/${id}`
             : `/${id}`);
 
-        const proxyCfg = json.proxy && typeof json.proxy === 'object' ? json.proxy : {};
-        const mountPath = proxyCfg.mount && String(proxyCfg.mount).trim()
-          ? String(proxyCfg.mount).trim()
-          : `/${id}`;
-
+        const mountPath = resolveWwwPublicMountPath(path.basename(dir), json);
         const env = (json.env && typeof json.env === 'object')
           ? json.env
           : {};

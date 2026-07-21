@@ -19,9 +19,15 @@
 | `sse-openai.js` | `writeSSEChunk`、`createOpenAIChunk` |
 | `hot-reload-base.js` | chokidar 热重载唯一入口（`src/` 内除本文件外禁止直接 chokidar） |
 | `core-fs.js` | `resolveCoreModuleKey` / `resolveQualifiedCoreModuleKey`（多 Core 防撞：`system-Core/admin`）；`scanFiles` |
-| `http/mount-core-www.js` | `mountCoreWwwStatic(app, staticOptions)`：挂载 `core/*/www` |
 | `string-array-utils.js` | 配置层字符串数组归一化 |
 
+www 挂载（`src/infrastructure/http/`；权威文档 [www-mount.md](www-mount.md)）：
+
+| 模块 | 用途 |
+|------|------|
+| `www-app-resolve.js` | 普通静态 vs 前端工程（sign）；URL / dist / proxy 决策 |
+| `mount-core-www.js` | 挂载两类 www；proxy 跳过静态 |
+| `frontend/launcher.js` | 仅拉起需反代的前端工程 |
 引导、信号、路径等其余 `src/utils/` 模块见 [runtime-surface.md](runtime-surface.md)、[coding-style.md](coding-style.md)。
 
 ## 全局引导
@@ -33,7 +39,7 @@
 ## Loader 标准模式
 
 1. 类字段存放 watcher / 缓存 Map（禁止在 constructor 里 new 可变容器）
-2. 扫描：`FileLoader.getCoreSubDirFiles(subDir)` 或 `paths.getCoreDirs()`
+2. 扫描：`FileLoader.getCoreSubDirFiles(subDir)` 或 `paths.getCoreDirs()`（**全量** `core/*` 目录；勿用 loader 子目录反推，否则仅有 `www` 的 Core 会漏挂静态）
 3. 加载：`FileLoader.importFresh(absPath)` + `forEachBatch(..., LOADER_BATCH_SIZE, ...)`
 4. 热重载：`this._hotReload = new HotReloadBase({ loggerName })`，`watch(true, { dirs|files, onAdd, onChange, onUnlink })`；销毁时 `_hotReload?.stop()`
 5. 模块 key 优先 `resolveQualifiedCoreModuleKey(file, dirs, subDir)`（如 `mongodb-Core/admin`），禁止仅 basename（多 Core 会互相覆盖）

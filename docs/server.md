@@ -13,7 +13,7 @@
 - [反向代理系统](#反向代理系统)
 - [WebSocket 支持](#websocket-支持)
 - [静态文件服务](#静态文件服务)
-- [前端工程接入（React/Vue 等）](#前端工程接入reactvue-等)
+- [www 挂载（普通静态 / 前端工程）](#www-挂载普通静态--前端工程)
 - [安全与中间件](#安全与中间件)
 - [平台 SDK 适配度](#平台-sdk-适配度)
 - [快速搭建指南](#快速搭建指南)
@@ -615,151 +615,55 @@ static:
 
 ### 开箱即用的Web控制台
 
-- **零配置**：`core/system-Core/www/xrk/` 目录自动提供Web控制台
-- **访问路径**：`/<目录名>`（如 `/xrk`）
+- **零配置**：`core/system-Core/www/xrk/`（**普通静态**，无 `sign.json`）
+- **访问路径**：`/xrk/`（等于文件夹名）
 - **功能完整**：API测试、配置管理、插件管理、设备管理等
 
 ---
 
-## 前端工程接入（React/Vue 等）
+## www 挂载（普通静态 / 前端工程）
 
-本章用于说明：**AGT 并不只支持“静态网页”**。只要你的前端最终表现为：
+`core/*/www/<子目录>/` 分两类，**规则不同**。完整说明、对照表与推荐 `sign.json`：**[www-mount.md](www-mount.md)**。
 
-- **静态资源**（HTML/CSS/JS/图片）或
-- **一个可被反向代理的 HTTP 服务**（例如 Vite/webpack dev server、Next/Nuxt SSR 服务）
+| 类型 | 判定 | URL | 磁盘 |
+|------|------|-----|------|
+| **普通静态** | 无有效 `sign.json` | 固定 `/${文件夹名}` | 目录本体 |
+| **前端工程** | 有有效 `sign.json` | `proxy.mount` → `mount` → `/${id}` | `dist/` 等，或 Launcher 反代 |
 
-就可以运行在 AGT 的 Server 体系内，并通过统一端口对外提供访问。
+代码：`www-app-resolve.js`（决策）· `mount-core-www.js`（挂静态）· `frontend/launcher.js`（只拉反代工程）。
 
-### 接入方式总览
+### 前端工程字段速查
 
-- **方式 A：静态资源（零依赖）**
-  - **适用**：纯静态站点、打包后的 SPA（`dist/` / `build/`）
-  - **做法**：把构建产物放到 `core/*-Core/www/<你的目录>/` 下，由静态文件服务直接托管
+| 字段 | 作用 |
+|------|------|
+| `proxy.mount` | 对外路径（静态与反代共用；Vite `base` 须一致） |
+| `serve` | `static` 挂产物；`proxy` 拉进程反代 |
+| `enabled` | `false` 时不反代（配合 `serve=static`） |
+| `staticRoot` / `outDir` | 产物相对目录 |
+| `command` / `args` / `port` | 仅反代需要 |
+| `build` / `prod` / `mode` / `devOnly` / `modes` | 可选；进程模式生产启动 |
 
-- **方式 B：开发态工程（自动拉起 dev server + 反向代理）**
-  - **适用**：React/Vue/Svelte 等 Vite 工程、webpack dev server、任意本地前端开发服务器
-  - **做法**：在 `core/*-Core/www/**/` 放置一个 `sign.json`，声明如何启动、端口、挂载路径；AGT 启动时会自动扫描并拉起该前端项目，然后把 `mount` 路径反代到对应端口
+规范示例：`Example-Core/www/frontend-example/`（URL `/example`）、`vibe-learn-Core/www/vibe-learn/`。
 
-- **方式 C：SSR/全栈前端（Next/Nuxt 等）**
-  - **适用**：Next.js / Nuxt / 自建 SSR
-  - **做法**：同样用 `sign.json` 拉起服务并反代；但需要额外配置框架的 `basePath` / `app.baseURL` / 资源前缀，确保在子路径挂载下资源不 404
+### 生产注意
 
-### `sign.json`（前端项目声明）说明
+- SPA：**优先** `serve=static` + CI/`pnpm build`，不要用 `pnpm dev` 接用户流量。
+- SSR：用 `serve=proxy` + 生产 `start`/`serve`；可选 `build`+`prod`（build 后台执行，失败则不启 prod）。
 
-放置位置：`core/*-Core/www/**/sign.json`
+### 框架适配（简表）
 
-核心字段（最小可用）：
+| 框架 | 开发反代 | 静态产物 | 备注 |
+|------|----------|----------|------|
+| React/Vue/Svelte（Vite） | ✅ | ✅ | 注意 `base` / router basename |
+| CRA / webpack | 🟡 | ✅ | 子路径资源前缀 |
+| Next / Nuxt（SSR） | 🟠 | 🟡 | `basePath` / `baseURL`；HMR WS 可能直连端口 |
+| 纯静态（无 sign） | — | ✅ | URL=文件夹名 |
 
-- **`enabled`**：是否启用该前端项目
-- **`id`**：前端项目 ID（也会用于默认挂载路径）
-- **`command` / `args`**：启动命令，例如 `pnpm dev`
-- **`port`**：dev server 监听端口
-- **`proxy.mount`**：挂载路径，例如 `/example`
+### 子路径与 HMR
 
-可选字段（推荐）：
+- React Router：`basename="/example"`；Vue：`createWebHistory('/example/')`。
+- Vite HMR 若出现 Direct websocket fallback，多为 WS 未走主服反代，一般不影响首屏；也可在 `vite.config` 里写死 `server.hmr` 端口直连。
 
-- **`cwd`**：启动工作目录（默认是 `sign.json` 所在目录）
-- **`env`**：注入给子进程的环境变量
-- **`autoRestart`**：异常退出时是否自动重启
-
-补充字段（推荐，用于区分开发/生产行为；所有行为以 `sign.json` 为准，不依赖额外全局配置）：
-
-- **`mode`**：启动模式：`auto` / `dev` / `prod`（默认 `auto`；`auto` 会在存在 `build/prod` 时优先走生产启动）
-- **`devOnly`**：仅在开发模式启动（当解析为 prod 时会自动跳过）
-- **`modes`**：声明允许启动的模式，例如 `["dev"]` / `["prod"]` / `["dev","prod"]`
-- **`build`**：生产环境启动前先执行构建命令（后台异步，不阻塞主服务启动）
-- **`prod`**：生产环境使用的启动命令（建议为 `start`/`serve`，不要用 `dev`）
-- **`buildOnStart`**：是否在启动时执行 `build`（默认 true；当未提供 `build` 时无效）
-
-示例：
-
-```json
-{
-  "id": "example",
-  "name": "Example-Core 前端开发示例",
-  "enabled": true,
-  "mode": "dev",
-  "command": "pnpm",
-  "args": ["dev"],
-  "devOnly": true,
-  "modes": ["dev"],
-  "build": { "command": "pnpm", "args": ["build"] },
-  "prod": { "command": "pnpm", "args": ["start"] },
-  "port": 4173,
-  "proxy": { "mount": "/example" },
-  "env": { "BROWSER": "none" },
-  "autoRestart": true
-}
-```
-
-### Example-Core 的生产模式示例（Vite）
-
-示例目录：`core/Example-Core/www/frontend-example/`
-
-- 开发模式：`sign.json` 顶层 `command/args`（例如 `pnpm dev`）
-- 生产模式：在 `sign.json` 里声明 `build` + `prod`（Vite 推荐用 `preview` 作为生产演示），并确保服务端口与 `sign.json.port` 一致
-
-
-### 生产环境的推荐做法（重要）
-
-- **生产环境不要用 dev server 承接真实用户流量**（例如 `pnpm dev` / Vite HMR 等）。dev server 的目标是“开发体验”，并不保证生产稳定性、缓存策略与资源优化。
-- 推荐生产形态：
-  - **方式 A（最推荐）**：前端在 CI/CD 中 `build`，把产物放入 `core/*-Core/www/<你的目录>/`，由 AGT 静态服务托管（配合 `server.yaml` 的缓存/压缩/安全配置）。
-  - **方式 C（SSR）**：若确需 SSR，建议在生产环境用 `start`/`serve` 类命令启动服务，并通过反向代理接入（不要用 `dev`）。\n+\n+如果你希望 **AGT 在生产环境启动时自动后台 build 并启动服务**，可以在 `sign.json` 中声明 `build` 与 `prod`：\n+\n+```json\n+{\n+  \"id\": \"example\",\n+  \"enabled\": true,\n+  \"port\": 4173,\n+  \"proxy\": { \"mount\": \"/example\" },\n+  \"build\": { \"command\": \"pnpm\", \"args\": [\"build\"] },\n+  \"prod\": { \"command\": \"pnpm\", \"args\": [\"start\"] }\n+}\n+```\n+\n+注意：\n+\n+- build 在后台子进程执行，不会阻塞主服务启动；\n+- 反向代理会按 `port` 预先注册，前端服务启动完成后即可正常访问；\n+- 若 build 失败，将不会启动 `prod` 服务，日志会提示失败原因。
-
-### 前端框架适配程度（推荐组合）
-
-> 适配程度含义：**✅ 无痛** / **🟡 需少量配置** / **🟠 需较多配置**。
-
-| 框架/类型 | 开发态（dev server + 反代） | 生产态（构建产物托管） | 备注 |
-|---|---|---|---|
-| **React（Vite）** | ✅ | ✅ | 推荐；路由需注意 `basename` |
-| **Vue（Vite）** | ✅ | ✅ | 推荐；Vue Router 需注意 `history base` |
-| **Svelte（Vite）** | ✅ | ✅ | 推荐；同类 Vite 工程通用 |
-| **React（CRA / webpack）** | 🟡 | ✅ | 子路径挂载时要处理资源路径与路由 base |
-| **Next.js（SSR）** | 🟠 | 🟡 | 需要 `basePath/assetPrefix`；HMR WS 可能绕过主服务直连 dev 端口 |
-| **Nuxt（SSR）** | 🟠 | 🟡 | 需要配置 baseURL 与静态资源前缀 |
-| **纯静态站** | 不需要 | ✅ | 放到 `www/` 目录即可 |
-
-### 子路径挂载的路由与资源路径建议
-
-当你把前端挂载到 `/example` 这类**非根路径**时，常见需要调整：
-
-- **前端路由 base**
-  - React Router：设置 `basename="/example"`
-  - Vue Router：设置 `history: createWebHistory('/example/')`
-  - Next：`basePath: '/example'`
-  - Nuxt：`app: { baseURL: '/example/' }`
-
-- **静态资源 base**
-  - Vite：一般保持默认即可；如果遇到资源路径问题，再考虑 `base`（取决于你的构建方式与路由策略）
-
-### 关于 Vite HMR 的 WebSocket “fallback” 提示
-
-你可能会看到类似：
-
-> `[vite] Direct websocket connection fallback ...`
-
-这通常表示：**HMR 的 WebSocket 无法通过主服务的反代链路建立**，Vite 会回退为直接连接 dev server 端口。它一般不影响页面显示。
-
-如需消除该提示/稳定 HMR，可选方案：
-
-- **方案 1（最简单）**：忽略提示（开发体验基本正常）
-- **方案 2**：直接打开 dev server 地址（如 `http://127.0.0.1:4173`）开发
-- **方案 3（Vite 配置）**：在 `vite.config.*` 中显式指定 HMR 端口，让客户端直接连 dev server：
-
-```js
-export default {
-  server: {
-    hmr: {
-      protocol: 'ws',
-      host: '127.0.0.1',
-      port: 4173,
-      clientPort: 4173
-    }
-  }
-}
-```
 
 ## 安全与中间件
 

@@ -61,13 +61,21 @@ function invalidateCoreCache() {
   _warmupPromise = null;
 }
 
+/**
+ * 列举 `core/` 下全部 Core 目录（含仅有 www、无 plugin/http 的产品 Core）。
+ * 勿用 Loader 子目录反推列表，否则会漏挂静态前端。
+ */
+async function listAllCoreDirs() {
+  const entries = await fs.readdir(_core, { withFileTypes: true });
+  return entries
+    .filter((entry) => entry.isDirectory() && !entry.name.startsWith('.'))
+    .map((entry) => path.join(_core, entry.name))
+    .sort();
+}
+
 async function getCoreDirs() {
   if (_coreDirsCache) return _coreDirsCache;
-
-  const entries = await fs.readdir(_core, { withFileTypes: true });
-  _coreDirsCache = entries
-    .filter((entry) => entry.isDirectory() && !entry.name.startsWith('.'))
-    .map((entry) => path.join(_core, entry.name));
+  _coreDirsCache = await listAllCoreDirs();
   return _coreDirsCache;
 }
 
@@ -84,22 +92,17 @@ async function warmupCoreLayout(subDirNames = DEFAULT_LOADER_SUBDIRS) {
 
   if (!_warmupPromise) {
     _warmupPromise = (async () => {
+      // Core 全量列表与 Loader 子目录扫描解耦：先保证 getCoreDirs 完整
+      if (!_coreDirsCache) {
+        _coreDirsCache = await listAllCoreDirs();
+      }
+
       const discovered = await discoverAllCoreSubDirs(
         _root,
         _core,
         DEFAULT_LOADER_SUBDIRS,
         SUBSERVER_PLUGIN_CORE_SUBDIRS
       );
-
-      if (!_coreDirsCache) {
-        const coreDirs = new Set();
-        for (const dirs of Object.values(discovered)) {
-          for (const subPath of dirs) {
-            coreDirs.add(path.dirname(subPath));
-          }
-        }
-        _coreDirsCache = coreDirs.size > 0 ? [...coreDirs].sort() : await getCoreDirs();
-      }
 
       for (const name of DEFAULT_LOADER_SUBDIRS) {
         _coreSubDirsCache.set(name, discovered[name] ?? []);
