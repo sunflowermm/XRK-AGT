@@ -33,18 +33,15 @@ description: 编写或审查 core/*/www 静态页、校园 WebView 兼容、Http
 
 新能力：**先改** `web-compat.js`，再同步各产品内联份。
 
-## www 两类挂载（勿混）
+## www 两类 + 前端工程两种
 
-路径必须：`core/<core>/www/<应用名>/`。保留根名：`api`、`core`、`media`、`uploads`、`File`、**`shared`**。
+| | 判定 | 行为 |
+|--|------|------|
+| 普通静态 | 无 sign | URL=`/${文件夹名}`，挂目录本体 |
+| 前端工程① | `enabled: false` | **只 build、不启进程**，挂 dist |
+| 前端工程② | `enabled: true` | **启进程 + 反代** |
 
-| 类型 | 判定 | URL | 磁盘 |
-|------|------|-----|------|
-| **普通静态** | 无有效 `sign.json` | 固定 `/${文件夹名}` | 目录本体（不自动挂 dist） |
-| **前端工程** | 有有效 `sign.json` | `proxy.mount` → `mount` → `/${id}` | `staticRoot`/dist，或 Launcher 反代 |
-
-前端工程日常：`serve: "static"` + `enabled: false` + `staticRoot: "dist"`；HMR 再改 `serve: "proxy"` + `enabled: true`。Vite `base` = 对外 URL。
-
-规范：`Example-Core/www/frontend-example/`（→ `/example`）、`vibe-learn-Core/www/vibe-learn/`。
+详见 [docs/www-mount.md](../../../docs/www-mount.md)。Vite `base` = `proxy.mount`。
 
 ## 审查
 

@@ -1,89 +1,55 @@
-# Core www 挂载：普通静态 vs 前端工程
+# Core www 挂载
 
-> 代码权威：`src/infrastructure/http/www-app-resolve.js`、`mount-core-www.js`、`frontend/launcher.js`  
-> 浏览器兼容：skill **`xrk-www-compat`** · Server 总览：[server.md](server.md)
+> 代码：`www-app-resolve.js` · `www-static-build.js` · `mount-core-www.js` · `frontend/launcher.js`  
+> 浏览器兼容：skill **`xrk-www-compat`**
 
-`core/<Core>/www/<子目录>/` 下每个**一级子目录**都会参与挂载，但分两类，规则不同。
-
----
-
-## 一句话
-
-| 类型 | 怎么认 | 访问地址从哪来 | 磁盘挂什么 |
-|------|--------|----------------|------------|
-| **普通静态** | **没有**有效的 `sign.json` | **永远** `/${文件夹名}` | **永远**该文件夹本身 |
-| **前端工程（特殊）** | **有**有效的 `sign.json` | **`sign` 声明**（见下） | 产物目录（如 `dist/`），或改走反代 |
-
-不要把「文件夹名叫什么」和「浏览器打开什么」当成一回事——**只有前端工程允许二者不同**。
+`core/<Core>/www/<子目录>/` 每个一级子目录都会挂载。先分「有没有 sign」，有 sign 的前端工程再分两种运行方式。
 
 ---
 
-## 布局
+## 总览
 
 ```
-core/
-  system-Core/www/xrk/              ← 普通静态 → http://主机/xrk/
-  Example-Core/www/frontend-example/
-    sign.json                       ← 有 sign → 前端工程
-    package.json / vite.config.* / src/
-    dist/                           ← serve=static 时挂这里
-  vibe-learn-Core/www/vibe-learn/   ← 同上（仅有 www 的 Core 也会被扫到）
+www/<子目录>/
+├── 无 sign.json ──────────► 普通静态：URL = /文件夹名，挂目录本体
+└── 有 sign.json ──────────► 前端工程（特殊）
+        ├── enabled: false （或 serve: static）──► 只 build，不启进程，挂 dist
+        └── enabled: true  （或 serve: proxy） ──► 启进程 + 反向代理
 ```
 
-另：每个 Core 还有 **`/core/<Core名>/`** → 整个 `www/` 目录（方便直链调试，与对外短路径无关）。
+就这两种前端工程状态，没有第三种。
 
 ---
 
-## 普通静态
-
-**识别**：目录内无 `sign.json`，或 sign 损坏（损坏时按普通静态回退并打日志）。
+## 普通静态（无 sign）
 
 | 项 | 规则 |
 |----|------|
-| URL | `/` + 文件夹名，例如 `www/xrk` → `/xrk` |
-| 根目录 | 该文件夹本身（**不**自动改挂 `dist/`） |
-| 进程 | 不启 Vite / 不反代 |
-| 典型 | 控制台、落地页、纯 HTML/CSS/JS |
+| 例 | `system-Core/www/xrk` → `/xrk/` |
+| URL | 永远 `/${文件夹名}` |
+| 磁盘 | 目录本体（不探测 dist、不 build） |
+| 进程 | 无 |
 
-保留段不可占用：`api`、`core`、`media`、`uploads`、`File`、`shared`。
+保留段：`api`、`core`、`media`、`uploads`、`File`、`shared`。
+
+另：`/core/<Core名>/` 始终指向该 Core 的整个 `www/`（调试用）。
 
 ---
 
-## 前端工程（特殊挂载）
+## 前端工程（有 sign）— 仅两种
 
-**识别**：目录内存在可解析的 `sign.json`。
+对外 URL 两边相同，优先级：`proxy.mount` → `mount` → `/${id}` → `/${文件夹名}`。  
+Vite `base` 必须与该 URL 一致。
 
-这是「工程目录」：可含源码、`package.json`、构建产物；对外短路径与文件夹名可以不一致。
+### ① 静态：`enabled: false`（推荐日常 / 生产 SPA）
 
-### 对外 URL（静态与反代同一套）
+**build，但不启动**前端进程。
 
-优先级：
-
-1. `proxy.mount`（推荐，如 `"/example"`）
-2. 顶层 `mount`
-3. `"/" + id`
-4. 回退：`/` + 文件夹名
-
-例：目录 `frontend-example` + `"proxy": { "mount": "/example" }` → 打开 **`/example/`**，不是 `/frontend-example/`。
-
-Vite / Router 的 `base` **必须**与该 URL 一致。
-
-### 服务方式（互斥）
-
-| `serve` | `enabled` | 行为 |
-|---------|-----------|------|
-| `static` / `dist` | 任意 | **静态**：主服挂产物；**不**启进程 |
-| `proxy` / `dev` | 未关 | **反代**：跳过静态；`FrontendLauncher` 拉起 `command`/`args` |
-| （未写） | `false` | 静态 |
-| （未写） | `true` / 缺省 | 反代（兼容旧约定；新工程请写清 `serve`） |
-
-静态时产物根：
-
-1. `staticRoot` 或 `outDir`（相对本目录，禁止 `..` 逃逸）
-2. 依次试：`dist`、`build`、`out`、`.output/public`（须含 `index.html`）
-3. 都没有 → 暂挂源码目录并 **warn**（请先 build）
-
-### 推荐日常写法（Vite SPA）
+| 步骤 | 行为 |
+|------|------|
+| 1 | 若已有可用产物（如 `dist/index.html`）→ 直接挂，**不再 build** |
+| 2 | 若缺产物 → 执行 `sign.build`，未写则默认 `pnpm build` |
+| 3 | 主服 `express.static` 挂产物；**Launcher 不拉起** `command` |
 
 ```json
 {
@@ -91,53 +57,79 @@ Vite / Router 的 `base` **必须**与该 URL 一致。
   "enabled": false,
   "serve": "static",
   "staticRoot": "dist",
+  "build": { "command": "pnpm", "args": ["build"] },
   "command": "pnpm",
   "args": ["dev"],
   "port": 4173,
-  "proxy": { "mount": "/example" },
-  "env": { "BROWSER": "none" },
-  "autoRestart": true
+  "proxy": { "mount": "/example" }
 }
 ```
 
-- 改代码后在该目录 `pnpm build`；**重启主服不必再 build**。
-- 要 HMR：改为 `"serve": "proxy"`、`"enabled": true`，再重启主服。
+- `command` / `port` 在此模式下**不会用到**（留给切到反代时用）。
+- 不想自动 build：`"buildOnStart": false`（需自行保证 dist 存在）。
 
-规范目录：
+### ② 反代：`enabled: true`
 
-- `core/Example-Core/www/frontend-example/`
-- `core/vibe-learn-Core/www/vibe-learn/`
+**启动**前端进程，并由主服**反向代理**到 `proxy.mount`。
 
-### 反代时的其它字段
+| 步骤 | 行为 |
+|------|------|
+| 1 | `mountCoreWwwStatic` **跳过**该目录（不挂静态） |
+| 2 | `FrontendLauncher` 执行 `command`/`args`（如 `pnpm dev`），反代到 `port` |
 
-仅 `mode=proxy` 时需要：`command` / `args` / `port`；可选 `cwd`、`env`、`autoRestart`、`mode`/`devOnly`/`modes`、`build`/`prod`（见 [server.md](server.md) 补充字段）。生产流量不要用 `pnpm dev`。
+```json
+{
+  "id": "example",
+  "enabled": true,
+  "serve": "proxy",
+  "command": "pnpm",
+  "args": ["dev"],
+  "port": 4173,
+  "proxy": { "mount": "/example" }
+}
+```
+
+开发 HMR 用这个；生产流量不要用 `pnpm dev`。
+
+### 开关怎么认
+
+| 写法 | 走哪条 |
+|------|--------|
+| `enabled: false` 或 `serve: "static"` | ① 只 build 不启动 |
+| `enabled: true` 且非 static（含 `serve: "proxy"` / 未写 serve） | ② 启动 + 反代 |
 
 ---
 
-## 启动时谁干什么
+## 启动顺序
 
 ```
-bootstrap → paths.getCoreDirs()          # 全量 core/*（含仅有 www 的 Core）
-         → FrontendLauncher.start()      # 只注册「前端工程 + 需反代」
-         → mountCoreWwwStatic()          # 普通静态 + 前端工程静态；proxy 则跳过
+FrontendLauncher.start()   → 只处理 ② 反代工程
+mountCoreWwwStatic()       → 普通静态 + ①（缺 dist 则先 build 再挂）
 ```
-
-同名对外路径：先挂占用，后者 warn 跳过。
 
 ---
 
-## 对照表（防踩坑）
+## 规范示例
+
+| 目录 | URL |
+|------|-----|
+| `Example-Core/www/frontend-example/` | `/example` |
+| `vibe-learn-Core/www/vibe-learn/` | `/vibe-learn` |
+
+---
+
+## 踩坑
 
 | 误解 | 实际 |
 |------|------|
-| 文件夹叫 `frontend-example`，所以 URL 是 `/frontend-example` | 有 sign 时看 `proxy.mount`（常为 `/example`） |
-| 有 `dist/` 就会自动挂 dist | **仅前端工程（有 sign）**会探测 dist；普通静态只挂目录本体 |
-| 放了 `sign.json` 就一定起 Vite | `serve=static` / `enabled=false` 时只挂产物 |
-| 仅有 www、没有 plugin 的 Core 不会挂 | `getCoreDirs` 全量列举；会挂 |
+| `enabled: false` 什么都不干 | 会挂静态；缺 dist 时还会 build |
+| `enabled: false` 仍会起 Vite | 不会；只有 `enabled: true` 才启进程 |
+| 文件夹名 = URL | 有 sign 时看 `proxy.mount` |
+| 每次重启都重新 build | 否；有 dist 就跳过 |
 
 ---
 
-## 相关测试
+## 测试
 
-- `tests/framework/mount-core-www.test.mjs` — sign / 路径 / dist
-- `tests/framework/paths-core-dirs.test.mjs` — 仅 www 的 Core 不被 warmup 漏掉
+- `tests/framework/mount-core-www.test.mjs`
+- `tests/framework/paths-core-dirs.test.mjs`

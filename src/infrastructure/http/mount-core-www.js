@@ -3,8 +3,10 @@
  *
  * 两类子目录逻辑不同，决策在 `www-app-resolve.js`，说明见 `docs/www-mount.md`：
  *
- * 1. **普通静态**（无 sign）：`/${文件夹名}` → 目录本体（如 `/xrk`）
- * 2. **前端工程**（有 sign）：URL 由 `proxy.mount` 等决定；静态挂 dist，或跳过交给 Launcher 反代
+ * 1. **普通静态**（无 sign）：`/${文件夹名}` → 目录本体
+ * 2. **前端工程**（有 sign）只有两种：
+ *    - enabled=false → 缺 dist 则 build，挂产物，**不启进程**
+ *    - enabled=true  → 跳过静态，Launcher **启进程 + 反代**
  *
  * 另：`/core/<Core名>` 始终挂该 Core 的整个 `www/`（调试/直链用）。
  * 同名对外路径先到先得；保留段见 `RESERVED_ROOT_SEGMENTS`。
@@ -17,8 +19,10 @@ import paths from '#utils/paths.js';
 import { statDirs } from '#utils/core-fs.js';
 import {
   resolveWwwAppMount,
+  resolveWwwStaticRoot,
   wwwMountPathRootSegment,
 } from '#infrastructure/http/www-app-resolve.js';
+import { ensureSignedStaticArtifacts } from '#infrastructure/http/www-static-build.js';
 
 export {
   resolveWwwAppMount,
@@ -112,7 +116,23 @@ export async function mountCoreWwwStatic(app, staticOptions = {}) {
         continue;
       }
 
-      if (!decision.staticRoot) {
+      let staticRoot = decision.staticRoot;
+      let reason = decision.reason;
+      let warn = decision.warn;
+
+      // ① 静态模式：缺产物则 build（不启进程），再挂 dist
+      if (decision.kind === 'signed' && decision.sign) {
+        const after = await ensureSignedStaticArtifacts(subDirPath, decision.sign, mountPath);
+        staticRoot = after.root;
+        if (after.via !== '.') {
+          reason = `前端工程静态（只 build 不启动）→ ${after.via}`;
+          warn = after.warn;
+        } else {
+          warn = after.warn || warn;
+        }
+      }
+
+      if (!staticRoot) {
         RuntimeUtil.makeLog(
           'warn',
           `静态挂载无有效根目录，跳过: ${mountPath} (dir=${subDirName}, core: ${coreName})`,
@@ -121,15 +141,15 @@ export async function mountCoreWwwStatic(app, staticOptions = {}) {
         continue;
       }
 
-      app.use(mountPath, express.static(decision.staticRoot, staticOptions));
+      app.use(mountPath, express.static(staticRoot, staticOptions));
       mountedPaths.add(mountPath);
       RuntimeUtil.makeLog(
         'info',
-        `挂载${kindLabel}: ${mountPath} -> ${decision.staticRoot} (dir=${subDirName}, core: ${coreName}; ${decision.reason})`,
+        `挂载${kindLabel}: ${mountPath} -> ${staticRoot} (dir=${subDirName}, core: ${coreName}; ${reason})`,
         'AgentRuntime'
       );
-      if (decision.warn) {
-        RuntimeUtil.makeLog('warn', `${mountPath}: ${decision.warn}`, 'AgentRuntime');
+      if (warn) {
+        RuntimeUtil.makeLog('warn', `${mountPath}: ${warn}`, 'AgentRuntime');
       }
     }
   }

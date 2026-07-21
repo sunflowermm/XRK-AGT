@@ -9,9 +9,9 @@ import { shouldProxyFrontend, resolveWwwPublicMountPath } from '#infrastructure/
 /**
  * FrontendLauncher
  *
- * 只处理「前端工程」（目录内有有效 sign.json）且 shouldProxyFrontend 为真的应用：
- * 拉起子进程并反代。普通静态与 signed+static 由 mountCoreWwwStatic 托管。
- * 决策：www-app-resolve.js；说明：docs/www-mount.md。
+ * 只处理前端工程的「② 启进程 + 反代」（enabled=true / serve=proxy）。
+ * 「① 只 build 不启动」由 mountCoreWwwStatic + www-static-build 完成。
+ * 见 docs/www-mount.md。
  */
 class FrontendLauncher {
   /** @type {Map<string, { config: any, process?: import('child_process').ChildProcess, status: string, restarts: number, startedAt?: number }>} */

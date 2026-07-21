@@ -1,18 +1,21 @@
 /**
  * Core www 应用挂载决策（纯函数，可单测）
  *
- * ## 两类 www 子目录（勿混谈）
+ * ## 两类 www 子目录
  *
- * | 类型 | 判定 | 对外 URL | 磁盘根 | 谁服务 |
- * |------|------|----------|--------|--------|
- * | **普通静态** | 无有效 `sign.json` | 固定 `/${文件夹名}` | 目录本体 | 仅 `mountCoreWwwStatic` |
- * | **前端工程（特殊）** | 有有效 `sign.json` | `proxy.mount` → `mount` → `/${id}` | `staticRoot`/dist 等，或反代 | 静态挂 dist，或 Launcher 反代 |
+ * | 类型 | 判定 | 行为 |
+ * |------|------|------|
+ * | **普通静态** | 无有效 sign | URL=`/${文件夹名}`，挂目录本体 |
+ * | **前端工程** | 有有效 sign | 见下两种（仅此两种） |
+ *
+ * ### 前端工程仅两种
+ *
+ * | 开关 | 行为 |
+ * |------|------|
+ * | `enabled: false` / `serve: static` | **只 build、不启进程**，挂 dist（`www-static-build`） |
+ * | `enabled: true` / `serve: proxy` | **启进程 + 反代**（`FrontendLauncher`） |
  *
  * 权威说明：`docs/www-mount.md`。
- *
- * 调用方：
- * - `mount-core-www.js`：两类都扫；`mode=proxy` 时跳过静态
- * - `frontend/launcher.js`：只拉起「前端工程 + 需反代」
  */
 import path from 'node:path';
 import fsSync from 'node:fs';

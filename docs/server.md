@@ -628,9 +628,10 @@ static:
 | 类型 | 判定 | URL | 磁盘 |
 |------|------|-----|------|
 | **普通静态** | 无有效 `sign.json` | 固定 `/${文件夹名}` | 目录本体 |
-| **前端工程** | 有有效 `sign.json` | `proxy.mount` → `mount` → `/${id}` | `dist/` 等，或 Launcher 反代 |
+| **前端工程①** | `enabled: false` | `proxy.mount`… | **只 build 不启进程**，挂 dist |
+| **前端工程②** | `enabled: true` | 同上 | **启进程 + 反代** |
 
-代码：`www-app-resolve.js`（决策）· `mount-core-www.js`（挂静态）· `frontend/launcher.js`（只拉反代工程）。
+完整说明：**[www-mount.md](www-mount.md)**。代码：`www-app-resolve.js` · `www-static-build.js` · `mount-core-www.js` · `frontend/launcher.js`。
 
 ### 前端工程字段速查
 
