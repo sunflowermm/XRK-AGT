@@ -9,7 +9,7 @@ import { matchEventPattern as matchEventPatternFn } from '#utils/core-fs.js'
 import { EventNormalizer } from '#utils/event-normalizer.js'
 import RuntimeUtil from '#utils/runtime-util.js'
 import { msgSegment } from '#utils/msg-segment.js'
-import { extractMsgIds, scheduleMsgRecall } from '#utils/msg-recall.js'
+import { extractMsgIds, scheduleMsgRecall, trackSentMsgIds } from '#utils/msg-recall.js'
 import moment from 'moment'
 
 export const dealMethods = {
@@ -186,10 +186,13 @@ export const dealMethods = {
           }
         }
 
+        // 每次 reply 记账，供 createRecallBatch / 多条统一撤回（文字、链接、文件同一套）
+        const trackedIds = trackSentMsgIds(e, msgRes)
+
         // recallMsg：秒；默认同时撤回用户原消息（主动复读等）；recallUser:false 只撤 bot
         const recallSeconds = Number(recallMsg)
         if (recallSeconds > 0) {
-          const ids = extractMsgIds(msgRes)
+          const ids = trackedIds.length ? trackedIds : extractMsgIds(msgRes)
           if (ids.length) {
             scheduleMsgRecall(e, ids, {
               delayMs: recallSeconds * 1000,
