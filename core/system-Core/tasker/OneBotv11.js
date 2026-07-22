@@ -51,7 +51,12 @@ AgentRuntime.tasker.push(
       return cache.promise
         .then(data => {
           if (data.retcode !== 0 && data.retcode !== 1)
-            throw AgentRuntime.makeError(data.msg || data.wording, request, { error: data })
+            throw AgentRuntime.makeError(data.msg || data.wording || 'API 失败', 'ApiError', {
+              action,
+              echo: data.echo,
+              retcode: data.retcode,
+              error: data,
+            })
           return data.data
             ? new Proxy(data, {
               get: (target, prop) => target.data[prop] ?? target[prop],
@@ -220,10 +225,17 @@ AgentRuntime.tasker.push(
     }
 
     async recallMsg(data, message_id) {
-      AgentRuntime.makeLog("info", `撤回消息：${message_id}`, data.self_id)
+      // NapCat delete_msg：message_id 须为短整型（Number）；见官方 DeleteMsg
       if (!Array.isArray(message_id)) message_id = [message_id]
       const msgs = []
-      for (const id of message_id) {
+      for (const raw of message_id) {
+        const id = Number(raw)
+        if (!Number.isFinite(id)) {
+          AgentRuntime.makeLog("warn", `撤回跳过：非法 message_id=${raw}`, data.self_id)
+          msgs.push(null)
+          continue
+        }
+        AgentRuntime.makeLog("info", `撤回消息：${id}`, data.self_id)
         try {
           const result = await data.bot.sendApi("delete_msg", { message_id: id })
           msgs.push(result)

@@ -1,34 +1,30 @@
 /**
  * 消息定时撤回（模块级定时器）
  *
- * NapCat / OneBot11：
- * - send_msg 成功 → data.message_id
- * - delete_msg → { message_id }
+ * 首选：reply(msg, quote, { recallMsg: 秒 }) — loader-deal 发完即 schedule。
+ * 手工：scheduleMsgRecall(e, ids, { delayMs })（少数需要批量时）。
  *
- * 用法：
- * - reply(msg, quote, { recallMsg: 秒 })
- * - 多条：const from = (e._sentMsgIds ||= []).length
- *         await reply...
- *         scheduleMsgRecall(e, e._sentMsgIds.slice(from), { delayMs })
+ * NapCat：send_msg → data.message_id；delete_msg → { message_id }。
  */
 import { normalizeError } from '#utils/normalize-error.js'
 
 const _timers = new Set()
-const RECALL_GAP_MS = 120
+const RECALL_GAP_MS = 200
 
 /**
- * 从 send_msg / reply 返回值取 message_id（兼容 OneBot Proxy：data 字段透出）
  * @param {any} msgRes
- * @returns {Array<string|number>}
+ * @returns {number[]}
  */
 export function extractMsgIds(msgRes) {
   if (msgRes == null || msgRes === false) return []
 
   const out = []
   const seen = new Set()
-  const push = (id) => {
-    if (id == null || id === '') return
-    if (typeof id === 'object') return
+  const push = (raw) => {
+    if (raw == null || raw === '') return
+    if (typeof raw === 'object') return
+    const id = Number(raw)
+    if (!Number.isFinite(id)) return
     const key = String(id)
     if (seen.has(key)) return
     seen.add(key)
@@ -39,7 +35,6 @@ export function extractMsgIds(msgRes) {
     else push(v)
   }
 
-  // 官方：data.message_id；sendApi Proxy 下也可直接读 message_id
   take(msgRes.message_id)
   const data = msgRes.data
   if (Array.isArray(data)) {
@@ -53,13 +48,12 @@ export function extractMsgIds(msgRes) {
   return out
 }
 
-/** setupReply 记账 */
 export function rememberSentMsgIds(e, msgRes) {
   const ids = extractMsgIds(msgRes)
   if (!e || !ids.length) return ids
   const bucket = e._sentMsgIds ||= []
   for (const id of ids) {
-    if (!bucket.some((x) => String(x) === String(id))) bucket.push(id)
+    if (!bucket.some((x) => Number(x) === id)) bucket.push(id)
   }
   return ids
 }
@@ -79,11 +73,12 @@ export function scheduleMsgRecall(e, msgIds, opts = {}) {
   const seen = new Set()
   const ids = []
   for (const raw of [...(msgIds || []), ...extra]) {
-    if (raw == null || raw === '') continue
-    const key = String(raw)
+    const id = Number(raw)
+    if (!Number.isFinite(id)) continue
+    const key = String(id)
     if (seen.has(key)) continue
     seen.add(key)
-    ids.push(raw)
+    ids.push(id)
   }
 
   if (!e || !ids.length) return false

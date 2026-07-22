@@ -26,7 +26,6 @@ describe('extractMsgIds', () => {
     assert.deepEqual(extractMsgIds(proxied), [55])
     assert.deepEqual(extractMsgIds({ message_id: [1, 2, 2] }), [1, 2])
     assert.deepEqual(extractMsgIds(false), [])
-    // upload_group_file 只有 file_id，不可撤回
     assert.deepEqual(extractMsgIds({ data: { file_id: 'x' } }), [])
   })
 })
