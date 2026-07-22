@@ -1342,6 +1342,54 @@ export default class ChatStream extends AiWorkflow {
       enabled: true
     });
 
+    this.registerMCPTool('setGroupAvatar', {
+      description:
+        '将工作区内图片设为当前群头像。filePath 为工作区相对路径（如 downloads/xxx.png）。仅群聊；发言者须群主/管理员或主人；机器人须有群管权限。',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          filePath: {
+            type: 'string',
+            description: '工作区内图片路径（PNG/JPG/GIF/WEBP/BMP）',
+          },
+        },
+        required: ['filePath'],
+      },
+      handler: async (args = {}, context = {}) => {
+        const adminCheck = await this._requireGroupAdmin(context);
+        if (adminCheck) return adminCheck;
+
+        const e = context.e;
+        const speakerOk =
+          e.isMaster === true ||
+          e.sender?.role === 'owner' ||
+          e.sender?.role === 'admin' ||
+          e.member?.is_owner === true ||
+          e.member?.is_admin === true;
+        if (!speakerOk) {
+          return { success: false, error: '需要群主、管理员或主人才能设置群头像' };
+        }
+
+        if (typeof e.group?.setAvatar !== 'function') {
+          return { success: false, error: '当前环境不支持设置群头像' };
+        }
+
+        const resolved = this._resolveWorkspaceFile(context, args.filePath, { requireImage: true });
+        if (resolved.error) return { success: false, error: resolved.error };
+
+        return this._wrapHandler(async () => {
+          await e.group.setAvatar(resolved.absPath);
+          return {
+            success: true,
+            message: '设置群头像成功',
+            data: { filePath: String(args.filePath).trim(), group_id: e.group_id },
+            raw: actionAck(`你已将工作区图片「${resolved.displayName}」设为群 ${e.group_id} 的头像。`),
+          };
+        });
+      },
+      enabled: true,
+    });
+
     this.registerMCPTool('setAdmin', {
       description: '设置管理员',
       inputSchema: {
@@ -2413,7 +2461,7 @@ export default class ChatStream extends AiWorkflow {
       '- **relayPrivate***：向好友私聊传话（正文不在群里露出）',
       '',
       '## 群管 / 查询 / 好友（多面能力）',
-      '- 群管：mute/unmute、muteAll、setCard、kick、announce、recall、setEssence/listEssence、setGroupTodo 等（无权限如实说明）',
+      '- 群管：mute/unmute、muteAll、setCard、**setGroupAvatar**（工作区图片路径设群头像）、kick、announce、recall、setEssence/listEssence、setGroupTodo 等（无权限如实说明）',
       '- 查询：getGroupInfo / getMemberInfo / getGroupMembers / getBanList / listAnnouncements / **readChatRecord**',
       '- 好友：getFriendList / getFriendInfo；备注与删友（setFriendRemark / deleteFriend）仅主人',
       '- 申请：**handleRequest**（list/approve/deny）处理加好友/加群，仅主人',
@@ -2425,6 +2473,7 @@ export default class ChatStream extends AiWorkflow {
       '- `[当前消息]` 附图本轮已多模态可见，勿声称「看不见图」',
       '- 历史行 `[含图片]`/`[含文件]` 仅表示该消息曾带媒体；落盘须 **saveMessageAsset(messageId)**，禁止口头「已保存」',
       '- **send_image** / **send_file** 只能发工作区内已有路径，不能凭空 invent 文件名',
+      '- **setGroupAvatar**：工作区内图片路径设为当前群头像（先 saveMessageAsset 或已有文件）',
       '',
       '## 记录',
       '- `昵称(QQ)[ID:xxx]` 为消息 ID；引用写 `[回复:xxx]`；下载媒体用同一 ID',
