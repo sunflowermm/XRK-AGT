@@ -9,7 +9,7 @@ import { matchEventPattern as matchEventPatternFn } from '#utils/core-fs.js'
 import { EventNormalizer } from '#utils/event-normalizer.js'
 import RuntimeUtil from '#utils/runtime-util.js'
 import { msgSegment } from '#utils/msg-segment.js'
-import { extractMsgIds, scheduleMsgRecall, trackSentMsgIds } from '#utils/msg-recall.js'
+import { scheduleMsgRecall, rememberSentMsgIds } from '#utils/msg-recall.js'
 import moment from 'moment'
 
 export const dealMethods = {
@@ -186,20 +186,16 @@ export const dealMethods = {
           }
         }
 
-        // 每次 reply 记账，供 createRecallBatch / 多条统一撤回（文字、链接、文件同一套）
-        const trackedIds = trackSentMsgIds(e, msgRes)
+        const ids = rememberSentMsgIds(e, msgRes)
 
-        // recallMsg：秒；默认同时撤回用户原消息（主动复读等）；recallUser:false 只撤 bot
+        // recallMsg：秒；默认兼撤用户原消息；recallUser:false 只撤 bot
         const recallSeconds = Number(recallMsg)
-        if (recallSeconds > 0) {
-          const ids = trackedIds.length ? trackedIds : extractMsgIds(msgRes)
-          if (ids.length) {
-            scheduleMsgRecall(e, ids, {
-              delayMs: recallSeconds * 1000,
-              alsoRecall: recallUser !== false && e.message_id ? [e.message_id] : [],
-              logTag: 'ReplyRecall',
-            })
-          }
+        if (recallSeconds > 0 && ids.length) {
+          scheduleMsgRecall(e, ids, {
+            delayMs: recallSeconds * 1000,
+            alsoRecall: recallUser !== false && e.message_id ? [e.message_id] : [],
+            logTag: 'ReplyRecall',
+          })
         }
 
         this.count(e, 'send', msg)
