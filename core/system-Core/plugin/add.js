@@ -1065,7 +1065,13 @@ export class add extends PluginBase {
 
     let currentMessage
     try {
-      currentMessage = await this.transformSegments(this.e.message || [], 'store', { root: true })
+      const segs = this.e.message || []
+      const heavy = segs.some(
+        (s) => s && ['image', 'file', 'forward', 'video', 'record'].includes(s.type)
+      )
+      // 图片/转发需下载落盘，先回一句避免「卡住」感
+      if (heavy) await this.reply('收到，正在保存…')
+      currentMessage = await this.transformSegments(segs, 'store', { root: true })
     } catch (err) {
       logger.error(`添加词条内容失败: ${err.message}`, err)
       return this.reply(`添加失败：${err.message || '无法解析该消息（聊天记录可能已过期）'}`)

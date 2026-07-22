@@ -409,15 +409,15 @@ export const dealMethods = {
       const contexts = { ...plugin.getContext(), ...plugin.getContext(false, true) }
       if (!contexts || Object.keys(contexts).length === 0) continue
 
-      for (const fnc in contexts) {
-        if (typeof PluginBase[fnc] === 'function') {
-          try {
-            const ret = await plugin[fnc](contexts[fnc])
-            if (ret !== 'continue' && ret !== false) return true
-          } catch (error) {
-            errorHandler.handle(error, { context: 'handleContext', pluginName: plugin.name, fnc, code: ErrorCodes.PLUGIN_EXECUTION_FAILED }, true)
-            logger.error(`上下文方法 ${fnc} 执行错误`, error)
-          }
+      for (const fnc of Object.keys(contexts)) {
+        // 须查实例方法（如 addContext），不是 PluginBase 原型
+        if (typeof plugin[fnc] !== 'function') continue
+        try {
+          const ret = await plugin[fnc](contexts[fnc])
+          if (ret !== 'continue' && ret !== false) return true
+        } catch (error) {
+          errorHandler.handle(error, { context: 'handleContext', pluginName: plugin.name, fnc, code: ErrorCodes.PLUGIN_EXECUTION_FAILED }, true)
+          logger.error(`上下文方法 ${fnc} 执行错误`, error)
         }
       }
     }
