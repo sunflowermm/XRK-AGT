@@ -187,6 +187,9 @@ export const dealMethods = {
         }
 
         const ids = rememberSentMsgIds(e, msgRes)
+        if (msgRes && !ids.length && !msgRes.error) {
+          logger.debug('reply 未解析到 message_id（NapCat 应为 data.message_id）')
+        }
 
         // recallMsg：秒；默认兼撤用户原消息；recallUser:false 只撤 bot
         const recallSeconds = Number(recallMsg)

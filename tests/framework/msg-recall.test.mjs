@@ -1,5 +1,5 @@
 /**
- * msg-recall：extract / remember / schedule
+ * msg-recall：NapCat data.message_id / 记账 / 定时撤回
  */
 import { describe, it, mock, before } from 'node:test'
 import assert from 'node:assert/strict'
@@ -15,10 +15,9 @@ before(() => {
 })
 
 describe('extractMsgIds', () => {
-  it('直出 / data / Proxy / 数组', () => {
-    assert.deepEqual(extractMsgIds({ message_id: 11 }), [11])
+  it('NapCat send_msg：data.message_id 与 Proxy 透出', () => {
     assert.deepEqual(extractMsgIds({ data: { message_id: 22 } }), [22])
-    assert.deepEqual(extractMsgIds({ msg_id: '33', messageId: 44 }), ['33', 44])
+    assert.deepEqual(extractMsgIds({ message_id: 11 }), [11])
 
     const proxied = new Proxy(
       { retcode: 0, data: { message_id: 55 } },
@@ -26,7 +25,9 @@ describe('extractMsgIds', () => {
     )
     assert.deepEqual(extractMsgIds(proxied), [55])
     assert.deepEqual(extractMsgIds({ message_id: [1, 2, 2] }), [1, 2])
-    assert.deepEqual(extractMsgIds({ error: new Error('x') }), [])
+    assert.deepEqual(extractMsgIds(false), [])
+    // upload_group_file 只有 file_id，不可撤回
+    assert.deepEqual(extractMsgIds({ data: { file_id: 'x' } }), [])
   })
 })
 

@@ -1,12 +1,15 @@
 /**
- * 消息定时撤回（模块级定时器，不绑插件实例）
+ * 消息定时撤回（模块级定时器）
  *
- * - setupReply：每次 reply 把 id 写入 e._sentMsgIds
- * - 单条：reply(msg, quote, { recallMsg: 秒 })
- * - 多条一并撤：
- *     const from = (e._sentMsgIds ||= []).length
- *     await reply...
- *     scheduleMsgRecall(e, e._sentMsgIds.slice(from), { delayMs })
+ * NapCat / OneBot11：
+ * - send_msg 成功 → data.message_id
+ * - delete_msg → { message_id }
+ *
+ * 用法：
+ * - reply(msg, quote, { recallMsg: 秒 })
+ * - 多条：const from = (e._sentMsgIds ||= []).length
+ *         await reply...
+ *         scheduleMsgRecall(e, e._sentMsgIds.slice(from), { delayMs })
  */
 import { normalizeError } from '#utils/normalize-error.js'
 
@@ -14,25 +17,18 @@ const _timers = new Set()
 const RECALL_GAP_MS = 120
 
 /**
+ * 从 send_msg / reply 返回值取 message_id（兼容 OneBot Proxy：data 字段透出）
  * @param {any} msgRes
  * @returns {Array<string|number>}
  */
 export function extractMsgIds(msgRes) {
   if (msgRes == null || msgRes === false) return []
-  if (msgRes.error && msgRes.message_id == null && msgRes.msg_id == null && msgRes.data == null) {
-    return []
-  }
 
   const out = []
   const seen = new Set()
-  const push = (raw) => {
-    let id = raw
+  const push = (id) => {
     if (id == null || id === '') return
-    if (typeof id === 'object') {
-      id = id.message_id ?? id.msg_id ?? id.messageId
-      if (id == null || id === '' || typeof id === 'object') return
-    }
-    if (typeof id === 'bigint') id = String(id)
+    if (typeof id === 'object') return
     const key = String(id)
     if (seen.has(key)) return
     seen.add(key)
@@ -43,32 +39,24 @@ export function extractMsgIds(msgRes) {
     else push(v)
   }
 
+  // 官方：data.message_id；sendApi Proxy 下也可直接读 message_id
   take(msgRes.message_id)
-  take(msgRes.msg_id)
-  take(msgRes.messageId)
-
   const data = msgRes.data
   if (Array.isArray(data)) {
     for (const item of data) {
-      if (!item || typeof item !== 'object') continue
-      take(item.message_id)
-      take(item.msg_id)
-      take(item.messageId)
+      if (item && typeof item === 'object') take(item.message_id)
     }
   } else if (data && typeof data === 'object') {
     take(data.message_id)
-    take(data.msg_id)
-    take(data.messageId)
   }
 
   return out
 }
 
-/** @param {object} e @param {any} msgRes */
+/** setupReply 记账 */
 export function rememberSentMsgIds(e, msgRes) {
-  if (!e) return extractMsgIds(msgRes)
   const ids = extractMsgIds(msgRes)
-  if (!ids.length) return ids
+  if (!e || !ids.length) return ids
   const bucket = e._sentMsgIds ||= []
   for (const id of ids) {
     if (!bucket.some((x) => String(x) === String(id))) bucket.push(id)
@@ -98,10 +86,7 @@ export function scheduleMsgRecall(e, msgIds, opts = {}) {
     ids.push(raw)
   }
 
-  if (!ids.length || !e) {
-    if (e) logger.warn(`[${logTag}] 无法定时撤回：没有 message_id`)
-    return false
-  }
+  if (!e || !ids.length) return false
 
   const target = e.isGroup ? e.group : e.friend
   if (!target?.recallMsg) {

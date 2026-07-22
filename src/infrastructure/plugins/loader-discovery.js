@@ -272,14 +272,14 @@ export const discoveryMethods = {
    */
   async loadPlugin(file, PluginClass, skipInit = false) {
     try {
-      if (!PluginClass?.prototype) return null
+      if (typeof PluginClass !== 'function' || !PluginClass.prototype) return null
 
-      this.pluginCount++
       // @ts-ignore - PluginClass 可能是构造函数
       const plugin = new PluginClass()
+      // 模块里常有工具函数再导出；普通函数也有 .prototype，必须有插件名才登记
+      if (!plugin || typeof plugin.name !== 'string' || !plugin.name) return null
 
-      // 优化：减少debug日志输出，提升性能
-      // logger.debug(`加载插件实例 [${file.name}][${plugin.name}]`)
+      this.pluginCount++
 
       // 准备规则模板（同步操作）
       const ruleTemplates = this.prepareRuleTemplates(plugin.rule || [])

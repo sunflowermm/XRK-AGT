@@ -122,7 +122,9 @@ classDiagram
 | `this.reply()` | 优先 `e.reply`，否则 `bot.sendMsg` / tasker |
 | `this.getWorkflow()` | 访问已加载的 `AiWorkflow` 工作流 |
 
-`e.reply(msg, quote, data)`：每次发送的 `message_id` 写入 `e._sentMsgIds`。`data.recallMsg`（秒）定时撤回（默认兼撤用户消息，`recallUser: false` 只撤 bot）。多条一并撤：`const from = (e._sentMsgIds ||= []).length` → 发完 → `scheduleMsgRecall(e, e._sentMsgIds.slice(from), { delayMs })`。
+`e.reply(msg, quote, data)`：每次发送把 `message_id` 记入 `e._sentMsgIds`（NapCat：`data.message_id`）。`data.recallMsg`（秒）定时撤回。多条：`const from = (e._sentMsgIds ||= []).length` → 发完 → `scheduleMsgRecall(e, e._sentMsgIds.slice(from), { delayMs })`。
+
+插件模块**只 export 插件类**；勿把 `#utils/msg-recall` 等工具函数再 export，否则 loader 会当成插件类实例化。
 
 工作流 `process()` 内部通常已发送回复，插件侧**一般无需再 `reply()`**。
 
