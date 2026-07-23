@@ -4,6 +4,7 @@ import RuntimeUtil from '#utils/runtime-util.js';
 import paths from '#utils/paths.js';
 import runtimeConfig from '#infrastructure/config/config.js';
 import { execFile } from '#utils/exec-async.js';
+import { resolveCommandSpawn } from '#utils/command-spawn.js';
 import { shouldProxyFrontend, resolveWwwPublicMountPath } from '#infrastructure/http/www-app-resolve.js';
 
 /**
@@ -83,16 +84,14 @@ class FrontendLauncher {
     return this.#starting;
   }
 
-  /**
-   * 停止所有已启动的前端子进程（用于主服务关闭/重启释放资源）
-   */
   static #spawnChildProcess(cmd, args, { cwd, env }) {
-    const shell = process.platform === 'win32' && !/[\\/]/.test(cmd);
-    return spawn(cmd, args, {
+    // Windows 下 `pnpm`/`npm` 常为 .cmd，裸 spawn 会 ENOENT；统一走 command-spawn
+    const spawnSpec = resolveCommandSpawn(cmd, args, cwd);
+    return spawn(spawnSpec.command, spawnSpec.args, {
       cwd,
       env,
       stdio: ['ignore', 'pipe', 'pipe'],
-      shell,
+      shell: spawnSpec.shell,
       windowsHide: true,
     });
   }
@@ -199,6 +198,7 @@ class FrontendLauncher {
     }
   }
 
+  /** 停止所有已启动的前端子进程（用于主服务关闭/重启释放资源） */
   static async stopAll() {
     const apps = Array.from(this.#apps.values());
     for (const app of apps) {

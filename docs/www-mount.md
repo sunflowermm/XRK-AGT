@@ -43,13 +43,12 @@ Vite `base` 必须与该 URL 一致。
 
 ### ① 静态：`enabled: false`（推荐日常 / 生产 SPA）
 
-**build，但不启动**前端进程。
+**每次启动都 build**（默认），但不启动前端进程；编完再挂 dist。
 
 | 步骤 | 行为 |
 |------|------|
-| 1 | 若已有可用产物（如 `dist/index.html`）→ 直接挂，**不再 build** |
-| 2 | 若缺产物 → 执行 `sign.build`，未写则默认 `pnpm build` |
-| 3 | 主服 `express.static` 挂产物；**Launcher 不拉起** `command` |
+| 1 | 执行 `sign.build`（未写则默认 `pnpm build`）——**不论 dist 是否已存在** |
+| 2 | 主服 `express.static` 挂产物；**Launcher 不拉起** `command` |
 
 ```json
 {
@@ -66,7 +65,9 @@ Vite `base` 必须与该 URL 一致。
 ```
 
 - `command` / `port` 在此模式下**不会用到**（留给切到反代时用）。
-- 不想自动 build：`"buildOnStart": false`（需自行保证 dist 存在）。
+- 不想每次启动都编：`"buildOnStart": false`（自行保证 dist 正确；改源码易挂旧包）。
+- 代价：多开几个前端工程时，启动会串行多等几次 Vite build（通常数秒级）。
+- `pnpm`/`npm` 经 `#utils/command-spawn.js` 解析（Windows `.cmd`、PATH、`pnpm.cjs`、corepack、`npm exec pnpm`），避免葵子/精简 PATH 下 `spawn pnpm ENOENT`。
 
 ### ② 反代：`enabled: true`
 
