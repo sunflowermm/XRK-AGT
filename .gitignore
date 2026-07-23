@@ -1,6 +1,9 @@
 # 本地参考源码克隆（不入库）
 .vendor/
 
+# Strix 本机扫描产物（见 docs/security-strix.md）
+strix_runs/
+
 # Dependencies
 node_modules/
 .pnpm-store/

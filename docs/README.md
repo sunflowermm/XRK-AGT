@@ -90,6 +90,7 @@
 - **[Server 服务器架构文档](server.md)** - HTTP/HTTPS/WebSocket 服务、反向代理、静态文件服务等完整说明
 - **[www 挂载（普通静态 / 前端工程）](www-mount.md)** - `sign.json` 特殊挂载与无 sign 静态目录的规则（权威）
 - **[鉴权与认证（AUTH）](AUTH.md)** - 系统级 API Key、各层职责与推荐鉴权方式
+- **[Strix 安全扫描（外部 CI）](security-strix.md)** - 可选 usestrix/strix；不进 Runtime，仅自有目标
 - **[HTTP 业务层文档](http-business-layer.md)** - 重定向、CDN、反向代理增强、负载均衡等企业级功能
 - **[system-Core 特性文档](system-core.md)** - system-Core 内置模块完整说明，包含所有HTTP API、工作流、插件和Web控制台 ⭐
 
