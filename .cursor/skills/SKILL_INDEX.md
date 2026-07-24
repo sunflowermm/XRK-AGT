@@ -2,6 +2,7 @@
 
 ## 设计与前端
 
+- **`immersive-short-video`**：竖屏口播/科普成片；品红抠图；**seek 逐帧 + NVENC** 权威录屏（见 skill 内 `reference-capture.md`）。
 - `accessibility-compliance`：无障碍审查与 WCAG 2.2 落地。
 - `design-system-patterns`：Design Token、主题与组件体系设计。
 - `fronted-design`：前端页面与组件视觉实现。

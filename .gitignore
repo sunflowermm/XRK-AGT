@@ -49,6 +49,7 @@ Thumbs.db
 desktop.ini
 
 # 备份/临时（避免冗余文件进仓）
+tmp/
 *.bak
 *.orig
 *.tmp
