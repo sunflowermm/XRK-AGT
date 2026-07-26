@@ -5,7 +5,8 @@ alwaysApply: true
 
 # XRK Agent 补充
 
-> 需求对齐、编码思路、验证门控、skill 路由：**仅看** `~/.cursor/rules/senior-engineer.mdc`。
+> 需求对齐、编码思路、验证门控、skill 路由：**仅看** `~/.cursor/rules/senior-engineer.mdc`。  
+> 全局技能栈 / Ponytail / Hallmark / 代理 / PCB：**仅看** `~/.cursor/AGENTS.md`。
 
 ## 本仓库边界
 
@@ -14,7 +15,8 @@ alwaysApply: true
 - **娱乐插件**：不进底层、不加 system-Core 白名单、默认不提交；配置写插件顶部（见 `xrk-project.mdc`）。
 - 配置：独立 Core 用 `core/<名>/default/` + `commonconfig/` + `data/<产品>/`；勿把业务 yaml 放进 `config/default_config/`
 - 写 Core / 碰 Node API：读 `xrk-node-runtime`；HTTP 用 `HttpResponse`；全局对象用裸名（见 `xrk-dev-requirements.mdc`）
-- 写 / 审 `core/*/www`：读 **`xrk-www-compat`**（浏览器 ≠ Node 26；`/xrk`→`./web-compat.js`，产品页只内联）
+- 写 / 审 `core/*/www`：读 **`xrk-www-compat`**；落地页叠加全局 `hallmark`
+- 爬梯减复杂度：全局 `ponytail`；本仓优先复用 Loader / ConfigBase，不平行造轮子
 
 ## 本仓库 Skill 入口
 
@@ -26,6 +28,9 @@ alwaysApply: true
 | Core www / WebView | **`xrk-www-compat`**、`docs/app-dev.md` |
 | HTTP API / 响应形状 | `xrk-http-api`、`docs/http-api.md` |
 | 扩展点 | `xrk-infrastructure`、`docs/base-classes.md` |
+| 品红抠图 / 短视频 | `immersive-short-video`（系统约定见 `~/.cursor/AGENTS.md`） |
 | 索引 | `.cursor/skills/SKILL_INDEX.md` |
 
 改 `core/` 前先 Grep + 读对应 `xrk-*` skill；外部方案须说明如何接入 Loader、ConfigBase 等既有能力。
+
+文档 / 注释只写现行契约（见系统级 AGENTS「文档与注释」）。

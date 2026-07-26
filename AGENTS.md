@@ -1,33 +1,59 @@
-# AGENTS.md — XRK-AGT 开发助手
+# AGENTS.md — XRK-AGT（本仓库）
 
-本文件面向 **在本仓库内写代码、改 Core、排查框架** 的 AI（如 Cursor Agent）。
+面向在本仓库写代码、改 Core、排查框架的 AI。
 
-**项目定位**：融合智能体业务逻辑的**通用后端** — Runtime 在 `src/`，业务在 `core/`（勿在 `src/` 写业务）。
+**全局**技能栈、代理、PCB、Ponytail/Hallmark/Superpowers 安装与用法：见本机  
+`~/.cursor/AGENTS.md`（系统级）。**勿**把本机环境写进本文件。
 
-**开发首读**：[`docs/runtime-surface.md`](docs/runtime-surface.md) · [`docs/coding-style.md`](docs/coding-style.md) · [`docs/base-classes.md`](docs/base-classes.md)
+**项目定位**：通用后端 Runtime（`src/`）+ 业务 Core（`core/`）。业务不进 `src/`。
 
-**运行时对话 AgentRuntime** 的规则在 `data/ai-workspace/{id}/`（`AGENTS.md`、`SOUL.md`、`memory/` 等），由 `ai-workflow.agentWorkspace` 注入；仓库内 `agents/workspace/` 仅为首次引导模板。
+**首读**：[`docs/runtime-surface.md`](docs/runtime-surface.md) · [`docs/coding-style.md`](docs/coding-style.md) · [`docs/base-classes.md`](docs/base-classes.md)
 
-## 必读（优先 `.cursor/rules/`）
+运行时对话 Agent 的规则在 `data/ai-workspace/{id}/`；`agents/workspace/` 仅为引导模板。
 
-- `xrk-project.mdc` — 架构、放码、配置归属；娱乐插件不进底层 / 不加白名单
-- `xrk-dev-requirements.mdc` — 全局裸名、HttpResponse、Core www、Node 26（详见 `docs/coding-style.md`）
+## 本仓规则（`.cursor/rules/`）
 
-## 技能与文档
+| 规则 | 作用 |
+|------|------|
+| `xrk-project.mdc` | 架构、放码、配置归属；娱乐插件不进白名单 |
+| `xrk-dev-requirements.mdc` | 裸名全局对象、HttpResponse、Core www、Node 26 |
+| `xrk-agent-behavior.mdc` | 本仓边界与 skill 入口 |
+| `xrk-third-party-plugins.mdc` | 主仓 gitignore / 子服插件约定 |
 
-- 全局工程师准则：`~/.cursor/rules/senior-engineer.mdc`
-- 工程师 skill 源码（已 clone）：`~/.agents/skills-sources/`（superpowers、planning-with-files、awesome-cursorrules 等）
-- 其它 skill：`~/.agents/skills/`（不含与 skills-sources 重复的 obra/planning 副本）
-- 框架能力：`.cursor/skills/xrk-*/SKILL.md` · 索引 `SKILL_INDEX.md`
-  - 写 **www**：`xrk-www-compat`；写 **HTTP**：`xrk-http-api`；写 **Node API**：`xrk-node-runtime`
-- 文档导航：`docs/`、skill `xrk-docs`
-- 外部调研：`xrk-github-research`
-- XRK 边界补充：`.cursor/rules/xrk-agent-behavior.mdc`
+叠加全局：`~/.cursor/rules/ponytail.mdc` · `~/.cursor/rules/senior-engineer.mdc`。  
+本仓写码：爬梯后优先复用 Loader / ConfigBase / HttpResponse / `#utils/*`，不平行造轮子。
+
+## 放码与配置
+
+- 业务：`core/<core名>/`（plugin · http · workflow · tasker · events · commonconfig · www）
+- Runtime：`src/` — Core 开发者禁止改；框架维护者可改
+- 独立 Core：`core/<名>/default/` + `commonconfig/` + `data/<产品>/`；勿进 `config/default_config/`
+- HTTP：`HttpResponse`；全局：`AgentRuntime` / `msgSegment` 裸名
+
+## 本仓技能
+
+索引：[`.cursor/skills/SKILL_INDEX.md`](.cursor/skills/SKILL_INDEX.md)
+
+| 主题 | Skill |
+|------|-------|
+| Node 26 | `xrk-node-runtime` |
+| Core www | `xrk-www-compat` |
+| HTTP | `xrk-http-api` |
+| 扩展点 | `xrk-infrastructure` |
+| 配置 | `xrk-config` |
+| 架构 | `xrk-project-overview` |
+| 调研 | `xrk-github-research` |
+| 品红 / 短视频 | `immersive-short-video`（约定见系统级 AGENTS；脚本可在本 skill 或产品 Core） |
+
+改 `core/` 前：Grep + 读对应 `xrk-*`。外部方案须说明如何接入既有 Loader / ConfigBase。
+
+UI 落地页：全局 `hallmark` + 本仓 `xrk-www-compat`（浏览器 ≠ Node 26）。
+
+## 文档约定（本仓）
+
+只写现行契约。禁止变更旁白与踩坑叙事（细则见系统级 AGENTS）。  
+产品 Core 的 `core/<core>/AGENTS.md` 面向产品 Agent，与本文件分工不同。
 
 ## GitHub MCP（可选）
 
-在 `~/.cursor/mcp.json` 配置 GitHub MCP（模板见 `.cursor/mcp.json.example`，**勿把 PAT 提交进仓库**）。配置后重启 Cursor；验证：Settings → MCP Tools 出现 green dot。CLI 可 `gh auth login` 与 MCP 共用同一 PAT。
-
-## 产品 Core
-
-各 Core 若有 `core/<core>/AGENTS.md`，那是**产品 Agent** 的工作区说明（如李诗雅），与根目录本文件分工不同。
+模板：`.cursor/mcp.json.example`。PAT 只放本机 `~/.cursor/mcp.json`，勿提交。

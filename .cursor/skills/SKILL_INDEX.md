@@ -1,41 +1,24 @@
-# Skill 索引
+# Skill 索引（本仓库）
+
+**全局**技能（Ponytail / Superpowers / Hallmark / Caveman 等）：本机 `~/.cursor/AGENTS.md` · 目录 `~/.agents/skills/`。  
+本文件只列 **XRK-AGT 项目内** `.cursor/skills/`。
 
 ## 设计与前端
 
-- **`immersive-short-video`**：竖屏口播/科普成片；品红抠图；**seek 逐帧 + NVENC** 权威录屏（见 skill 内 `reference-capture.md`）。
-- `accessibility-compliance`：无障碍审查与 WCAG 2.2 落地。
-- `design-system-patterns`：Design Token、主题与组件体系设计。
-- `fronted-design`：前端页面与组件视觉实现。
-- `interaction-design`：交互动效、过渡与反馈设计。
-- `mobile-android-design`：Android/Material 3 界面规范。
-- `mobile-ios-design`：iOS/HIG 与 SwiftUI 界面规范。
-- `react-native-design`：React Native 跨端 UI 实现。
-- `responsive-design`：响应式与流式布局策略。
-- `ui-ux-pro-max`：产品级 UI/UX 全流程方案。
-- `visual-design-foundations`：字体、色彩、间距等视觉基础。
-- `web-component-design`：Web 组件架构与 API 设计。
+- **`immersive-short-video`**：竖屏口播/科普；品红抠图；seek 逐帧 + NVENC（见 skill 内 `reference-capture.md`）。跨项目约定见系统级 AGENTS。
+- `accessibility-compliance`：无障碍与 WCAG 2.2
+- `design-system-patterns`：Design Token、主题与组件体系
+- `fronted-design`：前端页面与组件视觉
+- `interaction-design`：交互动效与反馈
+- `mobile-android-design` / `mobile-ios-design` / `react-native-design`
+- `responsive-design` · `ui-ux-pro-max` · `visual-design-foundations` · `web-component-design`
 
 ## XRK 核心技能
 
-- **`xrk-node-runtime`**：Node 26 API 与禁止旧写法（**写 Core/src 前必读**）⭐ — 其它 XRK skill 的「Node 26」节均指向此 skill
-- `xrk-ai-workflow`：AiWorkflow、RAG、子服务回退相关能力。
-- `xrk-app-dev`：从应用视角理解启动与前后端协作。
-- **`xrk-www-compat`**：Core `www/` 浏览器兼容、`web-compat.js`、HttpResponse 前端解包；普通静态 vs 前端工程挂载见 `docs/www-mount.md`（**写 www 前必读**；环境 ≠ Node 26）⭐
-- `xrk-auth`：401、127 回环例外、API Key 鉴权问题。
-- `xrk-agent-runtime`：AgentRuntime 运行时、事件总线、HTTP/WS 启动流程。
-- `xrk-runtime-util`：日志、缓存、文件、网络等工具复用。
-- `xrk-config`：配置字段、schema 与消费代码一致性。
-- `xrk-docker`：Docker/Compose 部署与容器问题排查。
-- `xrk-docs`：文档导航与权威入口定位。
-- `xrk-github-research`：GitHub 搜成熟项目、读实现、论文/规范补课；架构选型与 unfamiliar 领域必用。
-- `xrk-http-api`：`core/*/http` 开发与排障。
-- `xrk-infrastructure`：加载器/基类/路径/错误处理等底层能力。
-- `xrk-llm`：LLM 提供商接入与配置一致性。
-- `xrk-mcp`：MCP 工具注册、分组与远程连接。
-- `xrk-plugins`：插件基类、加载与匹配机制。
-- `xrk-project-overview`：项目全局架构与目录速览。
-- `xrk-renderer`：渲染器、模板渲染、截图输出。
-- `xrk-subserver`：子服插件开发、主服 HTTP/CommonConfig/QQ 融合（见 `docs/subserver-plugin-development.md`）。
-- `xrk-system-core`：system-Core 模块能力与实现定位。
-- `xrk-tasker`：Tasker 协议适配层开发与理解。
-- `xrk-v3-api`：`/api/v3/chat/completions` 与流式能力。
+- **`xrk-node-runtime`**：Node 26 API 与禁止旧写法（写 Core/src 前必读）
+- **`xrk-www-compat`**：Core `www/` 浏览器兼容、`web-compat.js`、HttpResponse 前端解包（写 www 前必读）
+- `xrk-ai-workflow` · `xrk-app-dev` · `xrk-auth` · `xrk-agent-runtime` · `xrk-runtime-util`
+- `xrk-config` · `xrk-docker` · `xrk-docs` · `xrk-github-research`
+- `xrk-http-api` · `xrk-infrastructure` · `xrk-llm` · `xrk-mcp` · `xrk-plugins`
+- `xrk-project-overview` · `xrk-renderer` · `xrk-subserver` · `xrk-system-core`
+- `xrk-tasker` · `xrk-v3-api` · `xrk-coding-style` · `xrk-crawl`
