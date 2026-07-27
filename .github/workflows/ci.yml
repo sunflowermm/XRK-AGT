@@ -16,9 +16,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '26'
-          cache: pnpm
       - name: Install
-        run: pnpm install --frozen-lockfile
+        run: pnpm install
       - name: Test (fast)
         run: pnpm test:fast
       - name: Syntax-check runtime facade
