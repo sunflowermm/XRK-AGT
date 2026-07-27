@@ -318,6 +318,7 @@ export const aiWorkflowConfig = {
               includeRules: {
                 type: 'boolean',
                 label: '包含 rules',
+                description: '注入 agents/rules/**/*.{md,mdc}（≠ .cursor/rules）',
                 default: true,
                 component: 'Switch'
               },
@@ -411,7 +412,7 @@ export const aiWorkflowConfig = {
                 type: 'array',
                 label: '自定义技能目录',
                 description:
-                  '可填相对工作区路径或绝对路径；为空不注入 skills（示例：`.cursor/skills` 或 `C:/.../skills/standard`）',
+                  '可填相对项目根或绝对路径；为空则回退 agents/skills/standard（示例：`agents/skills/standard/core`）',
                 itemType: 'string',
                 default: [],
                 component: 'ArrayForm'

@@ -9,7 +9,7 @@ description: 需要快速定位「该看哪份文档/哪段代码/哪份配置�
 
 | 主题 | 文档 |
 |------|------|
-| **Node 26 运行时** | `docs/node-26-runtime.md`、skill `xrk-node-runtime`、`rules/node-26-core.mdc`（助手注入） |
+| **Node 26 运行时** | `docs/node-26-runtime.md`、skill `xrk-node-runtime`、`agents/rules/node-26-core.mdc`（助手注入） |
 | 扩展点 | `docs/框架可扩展性指南.md` |
 | LLM / v3 | `docs/factory.md`、`core/system-Core/http/ai.js` |
 | 工作流 | `docs/ai-workflow.md`（扫描 `core/*/workflow/*.js`） |

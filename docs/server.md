@@ -63,7 +63,7 @@
 
 ### 5. 开箱即用的静态文件服务
 
-- **零配置**：`www/` 目录自动提供静态文件服务
+- **零配置**：`core/system-Core/site/` 提供站点根 `/` 静态（favicon 等）；业务控制台见 `core/system-Core/www/xrk/`
 - **智能索引**：自动查找 index.html
 - **缓存优化**：合理的缓存策略
 
@@ -526,7 +526,7 @@ flowchart LR
     
     Auth -->|"认证通过"| DataStatic["💾 数据静态服务<br/>/media → data/media<br/>/uploads → data/uploads<br/>用户上传文件"]
     
-    DataStatic --> Static["📄 静态文件服务<br/>/www/* → www目录<br/>/ → index.html<br/>自动查找首页"]
+    DataStatic --> Static["📄 静态文件服务<br/>/ → core/system-Core/site<br/>（paths.www）"]
     
     Static --> NotFound["❌ 404处理<br/>未找到资源<br/>返回错误页面"]
     
@@ -554,7 +554,7 @@ flowchart TB
     Request --> Priority3["3️⃣ API路由<br/>📡 /api/*<br/>⭐ 最高优先级"]
     Request --> Priority4["4️⃣ 认证中间件<br/>🔐 静态资源/127回环/API Key"]
     Request --> Priority5["5️⃣ 数据静态服务<br/>💾 /media /uploads<br/>映射到data目录"]
-    Request --> Priority6["6️⃣ 静态文件服务<br/>📄 /www/* /<br/>映射到www目录"]
+    Request --> Priority6["6️⃣ 静态文件服务<br/>📄 / → site（paths.www）"]
     Request --> Priority7["7️⃣ 404处理<br/>❌ 未找到资源"]
     
     Priority1 --> Match1{"✅ 匹配?"}

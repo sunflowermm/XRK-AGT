@@ -12,7 +12,7 @@ const _config = path.join(_root, 'config');
 const _data = path.join(_root, 'data');
 const _trash = path.join(_root, 'trash');
 const _resources = path.join(_root, 'resources');
-const _www = path.join(_root, 'www');
+const _www = path.join(_core, 'system-Core', 'site');
 const _logs = path.join(_root, 'logs');
 const _renderers = path.join(_src, 'renderers');
 

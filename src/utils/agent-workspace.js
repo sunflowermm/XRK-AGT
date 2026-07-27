@@ -1,5 +1,5 @@
 /**
- * 工作区上下文注入：data/ai-workspace 助手文件 + 项目级 rules/skills/subagents。
+ * 工作区上下文注入：data/ai-workspace 助手文件 + agents/rules|skills|subagents。
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -13,6 +13,7 @@ import {
   AGENTS_MD,
   WORKSPACE_TEMPLATE_RELS,
   LONG_TERM_MEMORY_REL,
+  PROJECT_RULES_DIR_REL,
   PROJECT_SKILLS_STANDARD_REL,
   WORKSPACE_SKILLS_DIR,
   getProjectRoot,
@@ -209,7 +210,7 @@ export async function buildAgentWorkspaceSection(agentWorkspaceCfg = {}, streamN
   }
 
   if (runtimeConfig.includeRules) {
-    const rulesDir = path.join(projectRoot, 'rules');
+    const rulesDir = path.join(projectRoot, PROJECT_RULES_DIR_REL);
     try {
       const absFiles = listFilesRecursive(rulesDir, (_fp, name) => name.endsWith('.md') || name.endsWith('.mdc'));
       const relFiles = absFiles

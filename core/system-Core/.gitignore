@@ -107,3 +107,6 @@ commonconfig/**
 !www/
 !www/**
 
+!site/
+!site/**
+

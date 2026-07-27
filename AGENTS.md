@@ -9,7 +9,7 @@
 
 **首读**：[`docs/runtime-surface.md`](docs/runtime-surface.md) · [`docs/coding-style.md`](docs/coding-style.md) · [`docs/base-classes.md`](docs/base-classes.md)
 
-运行时对话 Agent 的规则在 `data/ai-workspace/{id}/`；`agents/workspace/` 仅为引导模板。
+运行时对话 Agent 的规则在 `data/ai-workspace/{id}/`；仓库种子在 `agents/`（`workspace/` 模板、`rules/`、`skills/standard`）。
 
 ## 本仓规则（`.cursor/rules/`）
 

@@ -323,7 +323,7 @@ export default class AiWorkflow {
   }
 
   /**
-   * 在 system 文案末尾注入工作区上下文（agents/workspace 模板、overlay、rules、skills、MEMORY、subagents），
+   * 在 system 文案末尾注入工作区上下文（agents/workspace 模板、agents/rules、skills、MEMORY、subagents），
    * 受 `ai-workflow.agentWorkspace` 控制。
    * 覆盖 buildChatContext 的子类若自行组装 system，应调用本方法以保持一致行为。
    * @param {string} text

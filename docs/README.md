@@ -35,10 +35,10 @@
 | `core/<name>/` | 业务：plugin / http / stream / tasker / events / commonconfig / www | system-Core 是 |
 | `config/default_config/` | 配置模板 | 是 |
 | `data/` | 运行期数据（按端口分目录） | 否（gitignore） |
+| `agents/` | Agent 面：`workspace/` · `rules/` · `skills/standard/` · `subagents.yaml`（见 `agents/README.md`） | 是 |
 | `core/system-Core/www/xrk/` | 内置 Web 控制台 | 是 |
-| `www/` | 可选根级静态站 | 是 |
+| `core/system-Core/site/` | 站点根静态（`/`，favicon 等；`paths.www`） | 是 |
 | `.cursor/` | Cursor 技能、规则、命令（**权威副本**） | 是 |
-| `rules/`、`skills/`、`agents/` | 助手注入规则 / 工作流技能 / 工作区记忆 | 是 |
 | `.claude/`、`.trae/` | 由 `sync-skills.ps1` 生成的 IDE 副本 | 否（gitignore，可删后重建） |
 | `logs/`、`trash/`、`node_modules/` | 日志、回收站、依赖 | 否 |
 

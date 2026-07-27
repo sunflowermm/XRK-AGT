@@ -1,8 +1,10 @@
-# rules/ - 根目录规则（给助手的 system prompt 注入块）
+# agents/rules — 运行时助手 system prompt 注入块
 
-系统会递归读取 `rules/**/*`，把 `.md` / `.mdc` 内容追加到 system prompt。
+系统递归读取本目录 `**/*.{md,mdc}`，追加到 Agent 工作区上下文（`includeRules`）。
 
-你可以把团队/个人的“回复方式约束”放在这里，比如：
+与 `.cursor/rules`（IDE / Cursor）无关；后者由 `sync-skills.ps1` 同步到 `.claude` / `.trae`。
+
+可放团队约束，例如：
 - 回复格式：先结论、后步骤、最后验证
 - 避免冗余：不讲框架原理，直接告诉用户怎么做
 - 安全边界：破坏性/外发操作必须先提示风险

@@ -42,4 +42,4 @@ Write-Host "Total copied files (including both targets): $totalCopiedFiles"
 Write-Host ("Elapsed: {0:n2}s" -f $elapsed.TotalSeconds)
 Write-Host "Covered paths: .cursor/skills, .cursor/rules, .cursor/agents, .cursor/commands -> .claude + .trae"
 Write-Host "Note: `.claude/` 与 `.trae/` 已在 .gitignore 中，仅为本地副本；删除后随时可重新运行本脚本生成。"
-Write-Host "Note: runtime 注入 sources 以 workspace 根目录的 `rules/` 与 `agents/workspace/` 为准。"
+Write-Host "Note: runtime 注入源为 `agents/rules/`、`agents/skills/`、`agents/workspace/`（≠ `.cursor/*`）。"

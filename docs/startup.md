@@ -43,7 +43,7 @@ flowchart TD
 2. **依赖管理**（`src/utils/bootstrap-deps.js`，跨平台命令解析见 `src/utils/command-spawn.js`）  
    - 根目录 `package.json` 缺失项 → **仅 pnpm install**（`PUPPETEER_SKIP_DOWNLOAD` 默认 `true`）。  
    - `core/*` 含 `package.json` 的子包各自 `pnpm install`。  
-   - `www/` 前端依赖（可用 `XRK_SKIP_FRONTEND_BOOTSTRAP=1` 跳过）。  
+   - `core/*/www/<app>/` 前端依赖（可用 `XRK_SKIP_FRONTEND_BOOTSTRAP=1` 跳过）。  
    - **不在引导阶段安装 Playwright Chromium**；见下方「Playwright 浏览器」。
 3. **动态 imports** — 合并 `data/importsJson/*.json` 的 `imports` 到根 `package.json`。
 
@@ -68,7 +68,7 @@ flowchart TD
 |------|------|
 | `XRK_SKIP_BOOTSTRAP=1` | `node app server` 时跳过引导中的依赖安装 |
 | `XRK_SKIP_CONFIG_CHECK=1` | 跳过配置检查 |
-| `XRK_SKIP_FRONTEND_BOOTSTRAP=1` | 跳过 `www/` 前端依赖检查 |
+| `XRK_SKIP_FRONTEND_BOOTSTRAP=1` | 跳过 `core/*/www` 前端依赖检查 |
 | `XRK_SKIP_FRONTEND_START=1` | 跳过前端 dev server |
 | `PUPPETEER_SKIP_DOWNLOAD` | 覆盖 Puppeteer Chromium 下载（默认 `true`） |
 

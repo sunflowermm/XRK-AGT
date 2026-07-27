@@ -424,7 +424,7 @@ flowchart TB
     Request --> Priority2["2️⃣ 文件服务<br/>📁 /File/*<br/>文件下载/上传"]
     Request --> Priority3["3️⃣ API路由<br/>📡 /api/*<br/>⭐ 最高优先级"]
     Request --> Priority4["4️⃣ 数据静态服务<br/>💾 /media/* /uploads/*<br/>映射到data目录"]
-    Request --> Priority5["5️⃣ 静态文件服务<br/>📄 /www/* /<br/>映射到www目录"]
+    Request --> Priority5["5️⃣ 静态文件服务<br/>📄 / → core/system-Core/site"]
     Request --> Priority6["6️⃣ 404处理<br/>❌ 未找到资源"]
     
     Priority1 --> Match1{"✅ 匹配?"}

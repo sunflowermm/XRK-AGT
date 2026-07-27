@@ -130,7 +130,7 @@ export const serverConfig = {
                     type: 'string',
                     label: '静态文件根目录',
                     component: 'Input',
-                    placeholder: './www'
+                    placeholder: './core/system-Core/site'
                   },
                   target: {
                     type: 'string',

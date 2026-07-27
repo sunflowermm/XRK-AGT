@@ -46,15 +46,17 @@ XRK-AGT/
 │   └── renderers/
 │
 ├── core/                     # 业务与智能体逻辑
-│   ├── system-Core/          # 内置：http / stream / plugin / tasker / www/xrk
+│   ├── system-Core/          # 内置：http / workflow / plugin / tasker / www/xrk / site
 │   └── <your-core>/          # 自定义 Core
 │
 ├── config/default_config/    # AGT 运行时配置模板（非独立产品业务 yaml）
 ├── data/server_bots/         # 运行时配置（gitignore）
+├── agents/                   # Agent 面：workspace 模板 / rules / skills / subagents
 ├── docs/                     # 开发文档
-├── www/                      # 可选根级静态站
 └── resources/                # 渲染模板
 ```
+
+> 站点根静态在 `core/system-Core/site/`（原根目录 `www/`）；业务页在 `core/*/www/<app>/`。
 
 ### 关键路径
 
@@ -67,6 +69,7 @@ XRK-AGT/
 | `core/*/tasker/` | 平台协议 → 统一事件 |
 | `core/*/events/` | 去重、标准化 → `PluginLoader.deal` |
 | `core/*/www/<app>/` | 静态前端（如 `/xrk/`） |
+| `core/system-Core/site/` | 站点根 `/` 静态（favicon 等） |
 | `core/*/commonconfig/` | 配置 Schema（独立 Core 模板在 `core/<名>/default/`） |
 
 **规则**：业务只在 `core/`；`config/default_config/` 仅 AGT 运行时模板；独立产品配置见各 Core 的 `default/` + `data/<产品>/`。

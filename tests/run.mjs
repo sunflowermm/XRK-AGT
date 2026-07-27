@@ -25,6 +25,7 @@ const SUITES = {
     'module-inventory.test.mjs',
     'module-import-error.test.mjs',
     'onebot-atbot.test.mjs',
+    'agent-layout.test.mjs',
     'safe-os-network.test.mjs',
     'monitor-safety.test.mjs',
     'observability.test.mjs',

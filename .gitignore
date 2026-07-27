@@ -120,10 +120,7 @@ scripts/*
 # 本地 Windows 注册表/卸载项清理备份（scripts/clean-empty-shell-uninstall.ps1）
 xrk-uninstall-backup-*.reg
 
-# Agent workspace local memories
-memory/*.md
-!memory/MEMORY.md
-!memory/.gitkeep
+# Agent 运行时记忆在 data/ai-workspace/{id}/memory/（由 agents/workspace/memory 种子）
 
 # 业务 Core 本地部署，主仓 framework Core：system-Core
 core/*

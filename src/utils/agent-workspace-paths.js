@@ -1,8 +1,8 @@
 /**
- * Agent 工作区路径约定（对齐 OpenClaw 等：独立工作区目录，非项目根）。
+ * Agent 工作区路径约定（对齐 OpenClaw：独立工作区目录，非项目根）。
  *
  * - 根目录 AGENTS.md：IDE 开发规则，不参与运行时
- * - agents/workspace/*：仓库内置模板，首次创建 data 工作区时复制进去
+ * - agents/：仓库内 Agent 面（模板 / 规则 / 技能种子 / subagents）
  * - data/ai-workspace/{id}/*：运行时工作区（AGENTS.md、SOUL.md、memory/…）
  */
 import fs from 'node:fs';
@@ -23,13 +23,17 @@ export const WORKSPACE_TEMPLATE_RELS = [
   'HEARTBEAT.md',
 ];
 
+/** 相对工作区根：长期记忆文件 */
 export const LONG_TERM_MEMORY_REL = 'memory/MEMORY.md';
 
 /** 仓库内首次引导用的模板目录（只读，运行时不从此处注入） */
 export const WORKSPACE_BUNDLE_DIR_REL = 'agents/workspace';
 
+/** 项目级规则（注入 system prompt；≠ `.cursor/rules`） */
+export const PROJECT_RULES_DIR_REL = 'agents/rules';
+
 /** 办公技能包（复制到工作区 skills/，与 ai-workflow customSkillRoots 对齐） */
-export const PROJECT_SKILLS_STANDARD_REL = 'skills/standard';
+export const PROJECT_SKILLS_STANDARD_REL = 'agents/skills/standard';
 
 /** 工作区内技能目录名（相对 data/ai-workspace/{id}） */
 export const WORKSPACE_SKILLS_DIR = 'skills';

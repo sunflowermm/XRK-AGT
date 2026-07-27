@@ -32,7 +32,7 @@
 | 环境 | office-env-setup, office-env-workspace, office-env-shell, office-env-web, office-env-desktop |
 | 长文 | office-long-doc, office-tech-writing |
 
-完整列表见对话 `<available_skills>`；新增技能从 `skills/standard` 种子同步（不覆盖你已改的副本）。
+完整列表见对话 `<available_skills>`；新增技能从 `agents/skills/standard` 种子同步（不覆盖你已改的副本）。
 
 ## 格式
 

@@ -55,9 +55,9 @@ proxy:
   domains:
     # 主域名 + 本机证书配置示例（本机同时承担TLS终结）
     - domain: "xrkk.cc"
-      # 静态文件根目录（可选）
-      # 如果不配置，使用默认的www目录
-      staticRoot: "./www"
+      # 站点根静态目录（/favicon.ico 等）；默认 core/system-Core/site
+      # 不配置时亦回退 paths.www（同上）
+      staticRoot: "./core/system-Core/site"
       # 是否启用SSL（需要在本机配置证书）
       # 如果该域名已经交给CDN做HTTPS，请删除整个ssl段或将enabled设为false
       ssl:
