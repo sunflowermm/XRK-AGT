@@ -10,7 +10,6 @@ import { chatbotConfig } from './system/system-chatbot.js';
 import { serverConfig } from './system/system-server.js';
 import { deviceConfig } from './system/system-device.js';
 import { groupConfig } from './system/system-group.js';
-import { noticeConfig } from './system/system-notice.js';
 import { redisConfig } from './system/system-redis.js';
 import { sqliteConfig } from './system/system-sqlite.js';
 import { aiWorkflowConfig } from './system/system-ai-workflow.js';
@@ -21,7 +20,7 @@ import { rendererConfig } from './system/system-renderer.js';
  * 系统配置管理
  * 管理所有系统级配置文件
  * 新配置结构：
- * - 全局配置（不随端口变化）：agt, device, monitor, notice, redis, sqlite（与 config-constants.js 一致）
+ * - 全局配置（不随端口变化）：agt, device, monitor, redis, sqlite（与 config-constants.js 一致）
  *   存储位置：server_bots/ 根目录
  * - 服务器配置（随端口变化）：server, chatbot, group
  *   存储位置：server_bots/{port}/
@@ -44,7 +43,6 @@ export default class SystemConfig extends ConfigBase {
       server: serverConfig,
       device: deviceConfig,
       group: groupConfig,
-      notice: noticeConfig,
       redis: redisConfig,
       sqlite: sqliteConfig,
       'ai-workflow': aiWorkflowConfig,

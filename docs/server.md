@@ -615,7 +615,7 @@ static:
 
 ### 开箱即用的Web控制台
 
-- **零配置**：`core/system-Core/www/xrk/`（**普通静态**，无 `sign.json`）
+- **零配置**：`core/system-Core/www/xrk/`（Vue 控制台，`sign.json` → `dist/`）
 - **访问路径**：`/xrk/`（等于文件夹名）
 - **功能完整**：API测试、配置管理、插件管理、设备管理等
 

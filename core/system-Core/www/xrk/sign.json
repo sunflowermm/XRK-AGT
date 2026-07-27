@@ -1,0 +1,15 @@
+{
+  "id": "xrk",
+  "name": "XRK-AGT 控制台",
+  "enabled": false,
+  "serve": "static",
+  "staticRoot": "dist",
+  "build": { "command": "pnpm", "args": ["build"] },
+  "_note": "enabled=false：启动时 build 挂 dist。开发 HMR：enabled=true + serve=proxy。",
+  "command": "pnpm",
+  "args": ["dev"],
+  "port": 5177,
+  "proxy": { "mount": "/xrk" },
+  "env": { "BROWSER": "none" },
+  "autoRestart": true
+}

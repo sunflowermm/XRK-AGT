@@ -19,7 +19,7 @@
 ## `lib/` 允许保留
 
 - `ai-assistant-runtime.js` / `ai-workspace-*.js` — 控制台与助手编排
-- `notice/`、`content-safety/` — system 产品能力
+- `content-safety/` — system 产品能力
 
 ## 禁止写进 Core（放 `src/`）
 

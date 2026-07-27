@@ -5,7 +5,7 @@ description: 编写或审查 core/*/www 静态页、校园 WebView 兼容、Http
 
 # Core www 浏览器兼容（底层标准）
 
-> **语义权威**：`core/system-Core/www/xrk/modules/web-compat.js`  
+> **语义权威**：`core/system-Core/www/xrk/src/utils/http.js`  
 > **挂载**：`mountCoreWwwStatic`（`src/infrastructure/http/mount-core-www.js`）  
 > **响应形状**：skill **`xrk-http-api`** · `HttpResponse.success`
 
@@ -20,9 +20,9 @@ description: 编写或审查 core/*/www 静态页、校园 WebView 兼容、Http
 
 | 场景 | 做法 |
 |------|------|
-| `/xrk` 控制台 | `import { … } from './web-compat.js'`（`utils.js` 再导出） |
+| `/xrk` 控制台 | `import { … } from '@/utils/http.js'` |
 | **其它产品 Core** | **只内联**同语义（psyche / xiaozhi 已如此）；**禁止**依赖 `/shared` 或跨应用 `/xrk/...` |
-| 经典 `<script>` | 内联，注释写「对齐 web-compat.js」 |
+| 经典 `<script>` | 内联，注释写「对齐 xrk/src/utils/http.js」 |
 
 | 导出 | 浏览器勿裸用 |
 |------|----------------|
@@ -31,7 +31,7 @@ description: 编写或审查 core/*/www 静态页、校园 WebView 兼容、Http
 | `abortTimeout` | `AbortSignal.timeout` |
 | `deepClone` | 无降级 `structuredClone` |
 
-新能力：**先改** `web-compat.js`，再同步各产品内联份。
+新能力：**先改** `src/utils/http.js`，再同步各产品内联份。
 
 ## www 目录名
 
@@ -43,6 +43,6 @@ description: 编写或审查 core/*/www 静态页、校园 WebView 兼容、Http
 ## 审查
 
 - [ ] 无裸 `randomUUID` / `AbortSignal.timeout` / 无降级 `structuredClone`
-- [ ] 产品页未 `import` `/shared` 或 `/xrk/modules/web-compat.js`
+- [ ] 产品页未 `import` `/shared` 或跨应用 `/xrk/...` 的兼容层
 - [ ] 未使用保留目录名 `shared`
 - [ ] `tests/framework/www-web-compat.test.mjs`

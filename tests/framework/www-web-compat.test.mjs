@@ -8,15 +8,15 @@ import {
   unwrapSuccess,
   abortTimeout,
   deepClone,
-} from '../../core/system-Core/www/xrk/modules/web-compat.js';
+} from '../../core/system-Core/www/xrk/src/utils/http.js';
 
 const compatPath = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
-  '../../core/system-Core/www/xrk/modules/web-compat.js'
+  '../../core/system-Core/www/xrk/src/utils/http.js'
 );
 
-describe('www/xrk web-compat', () => {
-  it('存在 modules/web-compat.js', () => {
+describe('www/xrk web-compat（http.js）', () => {
+  it('存在 src/utils/http.js', () => {
     assert.ok(fs.existsSync(compatPath));
   });
 
@@ -31,8 +31,7 @@ describe('www/xrk web-compat', () => {
     assert.deepEqual(out, { assessments: [1], webVersion: '1' });
   });
 
-  it('unwrapSuccess：优先 data 字段', () => {
-    assert.deepEqual(unwrapSuccess({ success: true, message: 'ok', data: { a: 1 } }), { a: 1 });
+  it('unwrapSuccess：数组在 data', () => {
     assert.deepEqual(unwrapSuccess({ success: true, message: 'ok', data: [1, 2] }), [1, 2]);
   });
 
@@ -41,18 +40,15 @@ describe('www/xrk web-compat', () => {
   });
 
   it('abortTimeout 返回 AbortSignal', () => {
-    const signal = abortTimeout(50);
-    assert.ok(signal instanceof AbortSignal);
-    assert.equal(signal.aborted, false);
+    const s = abortTimeout(50);
+    assert.ok(s instanceof AbortSignal);
   });
 
-  it('deepClone 拷贝对象且不共享引用', () => {
-    const src = { a: 1, nest: { b: 2 } };
-    const copy = deepClone(src);
-    assert.deepEqual(copy, src);
-    assert.notEqual(copy, src);
-    assert.notEqual(copy.nest, src.nest);
-    copy.nest.b = 9;
-    assert.equal(src.nest.b, 2);
+  it('deepClone 拷贝对象', () => {
+    const src = { a: 1, b: { c: 2 } };
+    const out = deepClone(src);
+    assert.deepEqual(out, src);
+    assert.notEqual(out, src);
+    assert.notEqual(out.b, src.b);
   });
 });

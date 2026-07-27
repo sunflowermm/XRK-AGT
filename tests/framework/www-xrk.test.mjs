@@ -3,53 +3,54 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { normalizeEmotionKey, EMOTION_KEYS } from '../../core/system-Core/www/xrk/modules/ui-kit.js';
+import { normalizeEmotionKey, EMOTION_KEYS } from '../../core/system-Core/www/xrk/src/utils/http.js';
 
 const wwwRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   '../../core/system-Core/www/xrk'
 );
 
-/** 与 index.html 引用的模块化 CSS 结构对齐（styles.css 已拆分） */
 const requiredFiles = [
+  'package.json',
+  'vite.config.js',
+  'sign.json',
   'index.html',
-  'app.js',
-  'css/styles-base.css',
-  'css/styles-layout.css',
-  'css/styles-chat-tools.css',
-  'css/pages.css',
-  'css/components.css',
-  'modules/ui-kit.js',
-  'modules/dom.js',
-  'modules/system-overview.js',
-  'modules/pages/home.js',
-  'modules/pages/home-plugins-workflow.js'
+  'src/main.js',
+  'src/App.vue',
+  'src/layouts/AppShell.vue',
+  'src/views/HomeView.vue',
+  'src/views/ChatView.vue',
+  'src/views/ConfigView.vue',
+  'src/views/ApiDebugView.vue',
+  'src/utils/http.js',
+  'public/api-config.json',
 ];
 
-describe('www/xrk 静态资源', () => {
+describe('www/xrk Vue 控制台', () => {
   for (const rel of requiredFiles) {
     it(`存在 ${rel}`, () => {
       assert.ok(fs.existsSync(path.join(wwwRoot, rel)), rel);
     });
   }
 
-  it('index.html 含主内容区与 toast 容器', () => {
-    const html = fs.readFileSync(path.join(wwwRoot, 'index.html'), 'utf8');
-    assert.match(html, /id="content"/);
-    assert.match(html, /id="toastContainer"/);
+  it('sign.json 静态挂 dist', () => {
+    const sign = JSON.parse(fs.readFileSync(path.join(wwwRoot, 'sign.json'), 'utf8'));
+    assert.equal(sign.enabled, false);
+    assert.equal(sign.serve, 'static');
+    assert.equal(sign.staticRoot, 'dist');
+    assert.equal(sign.proxy?.mount, '/xrk');
   });
 
-  it('index.html 引用模块化 CSS 而非旧 styles.css', () => {
-    const html = fs.readFileSync(path.join(wwwRoot, 'index.html'), 'utf8');
-    assert.doesNotMatch(html, /href="styles\.css"/);
-    assert.match(html, /css\/styles-base\.css/);
-    assert.match(html, /css\/styles-layout\.css/);
+  it('vite base 为 /xrk/', () => {
+    const vite = fs.readFileSync(path.join(wwwRoot, 'vite.config.js'), 'utf8');
+    assert.match(vite, /base:\s*`\$\{mount\}\/`/);
+    assert.match(vite, /const mount = '\/xrk'/);
   });
 
-  it('utils 再导出 ./web-compat', () => {
-    const src = fs.readFileSync(path.join(wwwRoot, 'modules/utils.js'), 'utf8');
-    assert.match(src, /from '\.\/web-compat\.js'/);
-    assert.ok(fs.existsSync(path.join(wwwRoot, 'modules/web-compat.js')));
+  it('http 工具含 unwrapSuccess', () => {
+    const src = fs.readFileSync(path.join(wwwRoot, 'src/utils/http.js'), 'utf8');
+    assert.match(src, /export function unwrapSuccess/);
+    assert.match(src, /export function abortTimeout/);
   });
 });
 

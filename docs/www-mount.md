@@ -25,7 +25,7 @@ www/<子目录>/
 
 | 项 | 规则 |
 |----|------|
-| 例 | `system-Core/www/xrk` → `/xrk/` |
+| 例 | `system-Core/www/xrk`（`sign.json` + Vite `dist`）→ `/xrk/` |
 | URL | 永远 `/${文件夹名}` |
 | 磁盘 | 目录本体（不探测 dist、不 build） |
 | 进程 | 无 |

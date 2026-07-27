@@ -7,7 +7,7 @@
 
 system-Core 是 XRK-AGT 的内置核心模块，提供了开箱即用的完整功能集，包括：
 
-- ✅ **12个HTTP API模块**：核心系统、机器人管理、配置管理、文件管理、插件管理、AI服务、**AI 工作区**、MCP服务、设备管理、通知服务、标准输入、数据编辑
+- ✅ **11个HTTP API模块**：核心系统、机器人管理、配置管理、文件管理、插件管理、AI服务、**AI 工作区**、MCP服务、设备管理、标准输入、数据编辑
 - ✅ **7个工作流**：chat、desktop、tools、memory、database、web、browser（MCP 工具数以 `registerMCPTool` 为准，当前 **80** 个）
 - ✅ **15个内置插件**：增强器（OneBot/OPQ/Device/Stdin）+ 运维与示例业务
 - ✅ **4个Tasker**：OneBotv11、GSUIDCORE、QBQBot、stdin
@@ -92,7 +92,7 @@ system-Core 提供了 **12 个** HTTP API 模块，覆盖系统管理的各个�
 |------|------|------|------|
 | `/api/config/list` | GET | 获取所有配置列表 | - |
 | `/api/config/:name/structure` | GET | 获取配置结构（Schema） | `name` - 配置名称 |
-| `/api/config/:name/flat-structure` | GET | 获取扁平化配置结构 | `name`, `path` - 子配置路径 |
+| `/api/config/:name/flat-structure` | GET | 获取扁平化配置结构。有子字段的 object/map 条目带 `container: true` | `name`, `path` - 子配置路径 |
 | `/api/config/:name/flat` | GET | 获取扁平化配置数据 | `name`, `path` - 子配置路径 |
 | `/api/config/:name/batch-set` | POST | 批量设置配置（扁平化） | `name`, `flat`, `path`, `backup`, `validate` |
 | `/api/config/:name/read` | GET | 读取配置 | `name`, `path` - 子配置路径 |
@@ -207,20 +207,7 @@ system-Core 提供了 **12 个** HTTP API 模块，覆盖系统管理的各个�
 - 音频文件管理
 - 设备/回收站文件读取经 `InputValidator.assertPathUnderRoots` 限制在 `data`、`trash`、`resources` 下
 
-### 9. 通知服务API (`notice.js`)
-
-**优先级**: 90
-
-通过 IYUU / Server酱 / 飞书等渠道发送系统通知（配置见 `notice.yaml` / SystemConfig 中 `notice` 段）。
-
-| 端点 | 方法 | 说明 | 参数 |
-|------|------|------|------|
-| `/api/notice/send` | POST | 发送通知 | `title`, `content`, `channels`（可选，渠道列表） |
-| `/api/notice/test` | POST | 发送测试通知 | - |
-
-**实现**：`core/system-Core/lib/notice/notice-service.js`
-
-### 10. 标准输入API (`stdin.js`)
+### 9. 标准输入API (`stdin.js`)
 
 **优先级**: 85
 
@@ -256,7 +243,7 @@ stdin 体系由 **Tasker + HTTP API + 增强插件** 共同组成：
 > 通过上述设计，**stdin 用户不需要在数据库单独注册**：  
 > 控制台与 HTTP 请求会在 Tasker 层即时构造事件和虚拟用户，并在插件层以统一方式处理。
 
-### 11. 数据编辑API (`write.js`)
+### 10. 数据编辑API (`write.js`)
 
 **优先级**: 75
 
@@ -272,7 +259,7 @@ stdin 体系由 **Tasker + HTTP API + 增强插件** 共同组成：
 - 自动备份
 - 路径验证和安全检查
 
-### 12. AI 工作区 API (`ai-workspace.js`)
+### 11. AI 工作区 API (`ai-workspace.js`)
 
 **优先级**: 90
 
@@ -748,7 +735,7 @@ system-Core 提供了完整的配置管理功能：
 
 system-Core 是 XRK-AGT 的核心模块，提供了：
 
-- ✅ **12个HTTP API模块**：覆盖系统管理、机器人管理、配置管理、文件管理、插件管理、AI服务、AI 工作区、MCP服务、设备管理、通知服务、标准输入、数据编辑
+- ✅ **11个HTTP API模块**：覆盖系统管理、机器人管理、配置管理、文件管理、插件管理、AI服务、AI 工作区、MCP服务、设备管理、标准输入、数据编辑
 - ✅ **7个工作流**：chat、desktop、tools、memory、database、web、browser；MCP 工具以 `registerMCPTool` 注册为准（当前 **80** 个）
 - ✅ **15个内置插件**：增强器 + 运维与示例业务
 - ✅ **4个Tasker**：支持OneBotv11、GSUIDCORE、QBQBot、stdin

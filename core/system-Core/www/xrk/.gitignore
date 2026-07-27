@@ -1,0 +1,15 @@
+# 依赖与构建产物（挂载用 dist，由启动时 pnpm build 生成）
+node_modules/
+dist/
+
+# 本地 / 工具缓存
+.DS_Store
+*.local
+.env
+.env.*
+!.env.example
+.vite/
+*.log
+*.tsbuildinfo
+.turbo/
+coverage/

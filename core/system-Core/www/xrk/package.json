@@ -1,0 +1,25 @@
+{
+  "name": "xrk-console",
+  "private": true,
+  "version": "3.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview --port 5177 --strictPort --host 127.0.0.1",
+    "static": "vite build"
+  },
+  "dependencies": {
+    "chart.js": "^4.4.9",
+    "marked": "^15.0.12",
+    "mermaid": "^11.16.0",
+    "naive-ui": "^2.41.0",
+    "pinia": "^3.0.2",
+    "vue": "^3.5.17",
+    "vue-router": "^4.5.1"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^5.2.4",
+    "vite": "^6.3.5"
+  }
+}

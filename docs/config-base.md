@@ -62,7 +62,7 @@ constructor(metadata = {})
 - 函数：动态路径函数 `(runtimeConfig) => path.join('data/server_bots', String(runtimeConfig.port), 'server.yaml')`
 
 **与运行时 `RuntimeConfig` 的关系**（`src/infrastructure/config/config.js`）：
-- **全局配置**（`GLOBAL_CONFIGS`）：`data/server_bots/<name>.yaml`（如 `agt`、`device`、`notice`、`redis`）
+- **全局配置**（`GLOBAL_CONFIGS`）：`data/server_bots/<name>.yaml`（如 `agt`、`device`、`redis`）
 - **随端口配置**（`SERVER_CONFIGS` + 工厂 LLM）：`data/server_bots/{port}/<name>.yaml`（如 `server`、`chatbot`、`ai-workflow`）
 - 默认模板来源：`config/default_config/<name>.yaml`；首次缺失时自动复制到上述路径
 
@@ -268,7 +268,7 @@ Web 前端可通过 HTTP API 调用 `ConfigBase` 子类的方法：
 |------|------|------|
 | `/api/config/:name/read` | GET | 读取配置（支持 `path` 参数读取子配置） |
 | `/api/config/:name/batch-set` | POST | 批量扁平写入 |
-| `/api/config/:name/flat-structure` | GET | 获取扁平化结构（用于前端表单） |
+| `/api/config/:name/flat-structure` | GET | 获取扁平化结构（用于前端表单）。object/map 若已展开子字段，条目带 `container: true`（仅分组壳，勿当 JSON 编辑器） |
 | `/api/config/:name/validate` | POST | 校验配置 |
 | `/api/config/:name/write` | POST | 写入配置 |
 | `/api/config/:name/backup` | POST | 备份配置 |

@@ -876,18 +876,19 @@ export default class ConfigBase {
     for (const [key, fs] of Object.entries(schema.fields)) {
       const path = prefix ? `${prefix}.${key}` : key;
       if (fs.type === 'object' || fs.type === 'map') {
-        // 先为对象 / Map 自身生成一条描述记录，保证：
-        // - component === 'SubForm' 时，即便没有子字段，前端也能渲染一个 JSON 编辑器
-        // - buildFieldTree 能够识别并分组 SubForm / 嵌套对象
+        const childFields = fs.fields && typeof fs.fields === 'object' ? fs.fields : null;
+        const hasChildren = Boolean(childFields && Object.keys(childFields).length > 0);
+        // container=true：仅作分组壳（有子字段已展开），前端勿再渲染空 JSON 编辑器
+        // 无子字段的 object/map/SubForm：前端渲染自由对象编辑器
         list.push({
           path,
           type: fs.type,
           component: fs.component,
-          meta: { ...fs }
+          container: hasChildren,
+          meta: { ...fs, container: hasChildren },
         });
-        // 若存在子字段，则继续递归展开
-        if (fs.fields && Object.keys(fs.fields).length > 0) {
-          list.push(...this.getFlatSchema(path, { fields: fs.fields }));
+        if (hasChildren) {
+          list.push(...this.getFlatSchema(path, { fields: childFields }));
         }
       } else if (fs.type === 'array' && fs.itemType === 'object') {
         // 数组<Object> 类型：始终为数组本身生成一条描述，
@@ -899,7 +900,8 @@ export default class ConfigBase {
           path,
           type: 'array<object>',
           component: fs.component,
-          meta: { ...fs }
+          container: false,
+          meta: { ...fs, container: false },
         });
 
         // 再为数组元素生成模板路径（xxx[]....），用于：
@@ -909,7 +911,13 @@ export default class ConfigBase {
           list.push(...this.getFlatSchema(`${path}[]`, { fields: itemFields }));
         }
       } else {
-        list.push({ path, type: fs.type, component: fs.component, meta: { ...fs } });
+        list.push({
+          path,
+          type: fs.type,
+          component: fs.component,
+          container: false,
+          meta: { ...fs, container: false },
+        });
       }
     }
     return list;

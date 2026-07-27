@@ -1,6 +1,6 @@
 # 应用 & 前后端开发总览
 
-> **文件位置**：`core/system-Core/www/xrk/`、`start.js` 菜单后的 AgentRuntime 运行时  
+> **文件位置**：`core/system-Core/www/xrk/`（Vue 3 + Vite + Naive UI，`sign.json` 挂 `dist/`）、`start.js` 菜单后的 AgentRuntime 运行时
 > **启动链**（bootstrap、环境变量、Playwright）：见 **[startup.md](startup.md)** — 本文不重复引导细节。
 
 本篇说明 Web 控制台、前后端协作、`runtimeConfig` 配置体系，以及插件 / 工作流 / HTTP API 的整合方式。
@@ -41,8 +41,8 @@ flowchart TB
         G1["agt.yaml"]
         G2["device.yaml"]
         G3["monitor.yaml"]
-        G4["notice.yaml"]
-        G5["redis.yaml"]
+        G4["redis.yaml"]
+        G5["sqlite.yaml"]
     end
 
     subgraph Server["端口配置"]
@@ -92,8 +92,8 @@ flowchart TB
 | `agt`     | `data/server_bots/agt.yaml`     | AGT 主配置      |
 | `device`  | `data/server_bots/device.yaml`  | 设备配置         |
 | `monitor` | `data/server_bots/monitor.yaml` | 监控配置         |
-| `notice`  | `data/server_bots/notice.yaml`  | 通知配置         |
 | `redis`   | `data/server_bots/redis.yaml`   | Redis 连接配置（详见 [database.md](database.md)）   |
+| `sqlite`  | `data/server_bots/sqlite.yaml`  | SQLite 配置    |
 
 
 **使用方式**：
@@ -157,8 +157,8 @@ const groupConfig = runtimeConfig.getServerConfig('group');
 - `runtimeConfig.agt` - AGT 配置
 - `runtimeConfig.device` - 设备配置
 - `runtimeConfig.monitor` - 监控配置
-- `runtimeConfig.notice` - 通知配置
 - `runtimeConfig.redis` - Redis 配置
+- `runtimeConfig.sqlite` - SQLite 配置
 
 **端口配置访问器**：
 
@@ -268,6 +268,10 @@ export default {
 ---
 
 ## Web 控制台（core/system-Core/www/xrk）与 API 交互
+
+Vue 3 SPA（`src/`），构建产物在 `dist/`。本地：`cd core/system-Core/www/xrk && pnpm install && pnpm build`。开发可用 `sign.json` 的 `enabled: true` 反代 Vite。
+
+核心页面：`#/home` 概览 · `#/chat` 对话 · `#/config` 配置 · `#/api` 调试。鉴权头 `X-API-Key`；成功体用 `unwrapSuccess`（见 `src/utils/http.js`）。
 
 **访问路径**：`/<目录名>`（如 `/xrk`，具体端口由启动配置决定）
 

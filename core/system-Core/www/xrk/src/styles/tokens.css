@@ -1,0 +1,259 @@
+:root {
+  color-scheme: light;
+  --ink: #1a1510;
+  --paper: #fff8e7;
+  --paper-2: #ffe9b8;
+  --card: #fffdf6;
+  --line: #1a1510;
+  --yellow: #ffd24a;
+  --pink: #ff6b9d;
+  --cyan: #3ecfff;
+  --green: #5ad67d;
+  --red: #ff5a5a;
+  --muted: #6b5e4e;
+  --shadow: 2px 2px 0 var(--ink);
+  --radius: 8px;
+  --font: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  --mono: "Cascadia Code", "Consolas", monospace;
+  --sidebar-w: 168px;
+  --topbar-h: 40px;
+  --gap: 6px;
+  --pad: 8px;
+  --font-ui: 13px;
+  --font-sm: 12px;
+  --font-xs: 11px;
+  --section-gap: 8px;
+  --cursor-default: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E%3Cpath fill='%231a1510' stroke='%23ffd24a' stroke-width='1.2' d='M4 3l8 17 1.5-6.5L20 12z'/%3E%3C/svg%3E") 2 2, auto;
+  --cursor-pointer: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E%3Cpath fill='%23ff6b9d' stroke='%231a1510' stroke-width='1.2' d='M8 2v11l3-2 2 6 3-1-2-6 5-1z'/%3E%3C/svg%3E") 4 2, pointer;
+  --cursor-busy: progress;
+}
+
+@media (max-width: 1100px) {
+  :root {
+    --sidebar-w: 148px;
+    --gap: 5px;
+    --pad: 6px;
+  }
+}
+@media (max-width: 800px) {
+  :root {
+    --topbar-h: 36px;
+    --section-gap: 6px;
+  }
+}
+
+html.dark {
+  color-scheme: dark;
+  /* 暖灰字色，避免奶油白刺眼；边框另用 --edge */
+  --ink: #c4b8a8;
+  --paper: #12100e;
+  --paper-2: #221c17;
+  --card: #1a1612;
+  --line: #4a433c;
+  --edge: #4f473f;
+  --yellow: #c9a035;
+  --pink: #d96b92;
+  --cyan: #3aabd0;
+  --green: #52b86c;
+  --red: #d95a5a;
+  --muted: #8a8074;
+  --shadow: 2px 2px 0 #000;
+}
+
+html.dark body {
+  background:
+    radial-gradient(circle at 12% 8%, color-mix(in srgb, var(--yellow) 8%, transparent), transparent 42%),
+    radial-gradient(circle at 88% 12%, color-mix(in srgb, var(--pink) 7%, transparent), transparent 40%),
+    radial-gradient(circle at 70% 90%, color-mix(in srgb, var(--cyan) 6%, transparent), transparent 44%),
+    var(--paper);
+  color: var(--ink);
+}
+
+html.dark .brutal-card,
+html.dark .brutal-tag {
+  border-color: var(--edge);
+  background: var(--card);
+  box-shadow: 2px 2px 0 #000;
+}
+
+html.dark .n-button {
+  --n-border: 1.5px solid var(--edge) !important;
+  --n-border-hover: 1.5px solid color-mix(in srgb, var(--ink) 55%, var(--edge)) !important;
+  --n-border-pressed: 1.5px solid var(--edge) !important;
+  --n-border-focus: 1.5px solid var(--pink) !important;
+  --n-text-color: var(--ink) !important;
+}
+
+html.dark .n-input,
+html.dark .n-base-selection {
+  --n-color: var(--card) !important;
+  --n-color-focus: var(--paper-2) !important;
+  --n-text-color: var(--ink) !important;
+  --n-placeholder-color: var(--muted) !important;
+  --n-border: 1.5px solid var(--edge) !important;
+  --n-border-hover: 1.5px solid color-mix(in srgb, var(--ink) 50%, var(--edge)) !important;
+  --n-border-focus: 1.5px solid var(--pink) !important;
+  --n-caret-color: var(--ink) !important;
+}
+
+html.dark .n-code {
+  --n-text-color: var(--ink) !important;
+  --n-color: var(--paper) !important;
+}
+
+html.dark .n-tag {
+  --n-border: 1.5px solid var(--edge) !important;
+  --n-text-color: var(--ink) !important;
+}
+
+/* 组件内大量 border: var(--ink) — 暗色改走 edge，避免亮框 */
+html.dark .brutal-card,
+html.dark [class*='pane'],
+html.dark [class*='form-sec'],
+html.dark [class*='group'],
+html.dark [class*='card'] {
+  border-color: var(--edge);
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+}
+
+body {
+  font-family: var(--font);
+  background:
+    radial-gradient(circle at 12% 8%, color-mix(in srgb, var(--yellow) 28%, transparent), transparent 40%),
+    radial-gradient(circle at 88% 12%, color-mix(in srgb, var(--pink) 22%, transparent), transparent 38%),
+    radial-gradient(circle at 70% 90%, color-mix(in srgb, var(--cyan) 18%, transparent), transparent 42%),
+    var(--paper);
+  color: var(--ink);
+  cursor: var(--cursor-default);
+  font-size: var(--font-ui);
+  line-height: 1.35;
+  -webkit-font-smoothing: antialiased;
+}
+
+a,
+button,
+[role='button'],
+.n-button,
+.n-menu-item,
+.n-data-table-tr,
+.nav-link {
+  cursor: var(--cursor-pointer);
+}
+
+button:active,
+.n-button:active,
+.nav-link:active {
+  transform: translate(1px, 1px);
+}
+
+body.is-busy {
+  cursor: var(--cursor-busy);
+}
+
+.skip-link {
+  position: absolute;
+  left: -999px;
+  top: 0;
+}
+.skip-link:focus {
+  left: 8px;
+  z-index: 1000;
+  background: var(--yellow);
+  border: 2px solid var(--ink);
+  padding: 4px 8px;
+  font-size: var(--font-sm);
+}
+
+.brutal-card {
+  background: var(--card);
+  border: 2px solid var(--ink);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+
+.brutal-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  border: 1.5px solid var(--ink);
+  border-radius: 999px;
+  padding: 0 6px;
+  font-size: var(--font-xs);
+  font-weight: 700;
+  line-height: 1.5;
+  background: var(--yellow);
+}
+
+.mono {
+  font-family: var(--mono);
+}
+
+/* 页面主滚动区统一滚动条 */
+.ink-scroll,
+.dashboard,
+.msgs,
+.file-list,
+.cfg-list,
+.form-wrap,
+.json-wrap,
+.editor-body,
+.audit-list,
+.list,
+.wf-list,
+.content {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--ink) 35%, transparent) transparent;
+}
+.ink-scroll::-webkit-scrollbar,
+.dashboard::-webkit-scrollbar,
+.msgs::-webkit-scrollbar,
+.file-list::-webkit-scrollbar,
+.cfg-list::-webkit-scrollbar,
+.form-wrap::-webkit-scrollbar,
+.editor-body::-webkit-scrollbar,
+.content::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.ink-scroll::-webkit-scrollbar-thumb,
+.dashboard::-webkit-scrollbar-thumb,
+.msgs::-webkit-scrollbar-thumb,
+.file-list::-webkit-scrollbar-thumb,
+.cfg-list::-webkit-scrollbar-thumb,
+.form-wrap::-webkit-scrollbar-thumb,
+.editor-body::-webkit-scrollbar-thumb,
+.content::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--ink) 30%, transparent);
+  border-radius: 4px;
+}
+
+.dense-table .n-data-table-th,
+.dense-table .n-data-table-td {
+  padding-top: 4px !important;
+  padding-bottom: 4px !important;
+  font-size: var(--font-sm) !important;
+}
+
+/* Naive 控件再压一档 */
+.n-button {
+  --n-border: 1.5px solid var(--ink) !important;
+}
+.n-input,
+.n-base-selection {
+  --n-border: 1.5px solid var(--ink) !important;
+  --n-border-hover: 1.5px solid var(--ink) !important;
+  --n-border-focus: 1.5px solid var(--ink) !important;
+}
