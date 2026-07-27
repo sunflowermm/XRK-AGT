@@ -363,10 +363,6 @@ onMounted(loadList);
 
 <template>
   <div class="config" :class="{ dense, 'list-open': listOpen }">
-    <button type="button" class="list-toggle" @click="listOpen = !listOpen">
-      <XrkIcon :name="listOpen ? 'close' : 'menu'" :size="14" />
-      <span>{{ listOpen ? '关闭列表' : selectedConfig?.displayName || selected || '选择配置' }}</span>
-    </button>
     <div v-if="listOpen" class="scrim" @click="listOpen = false" />
 
     <aside class="brutal-card side">
@@ -397,6 +393,16 @@ onMounted(loadList);
     <section class="brutal-card editor">
       <header>
         <div class="hdr-left">
+          <button
+            type="button"
+            class="list-toggle"
+            :title="listOpen ? '关闭列表' : '选择配置'"
+            :aria-label="listOpen ? '关闭列表' : '选择配置'"
+            @click="listOpen = !listOpen"
+          >
+            <XrkIcon :name="listOpen ? 'close' : 'menu'" :size="14" />
+            <span>{{ listOpen ? '关闭' : '列表' }}</span>
+          </button>
           <div class="hdr-titles">
             <h2>{{ selectedConfig?.displayName || selected || '未选择' }}</h2>
             <p v-if="selectedConfig?.description" class="hdr-desc">{{ selectedConfig.description }}</p>
@@ -967,18 +973,25 @@ header h2 {
   .list-toggle {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
+    justify-content: center;
+    gap: 0;
     border: 1.5px solid var(--ink);
-    border-radius: 8px;
+    border-radius: 6px;
     background: var(--cyan);
     font: inherit;
-    font-size: var(--font-sm);
-    font-weight: 800;
-    padding: 8px 10px;
+    width: 32px;
+    height: 32px;
+    padding: 0;
     box-shadow: var(--shadow);
-    width: fit-content;
-    max-width: 100%;
-    flex-shrink: 0;
+    flex: 0 0 auto;
+    touch-action: manipulation;
+  }
+  .list-toggle span {
+    display: none;
+  }
+  .list-toggle:active {
+    transform: translate(1px, 1px);
+    box-shadow: none;
   }
   .scrim {
     display: block;
@@ -996,7 +1009,7 @@ header h2 {
     position: fixed;
     z-index: 50;
     left: max(var(--gap), env(safe-area-inset-left));
-    top: calc(var(--topbar-h) + var(--gap) * 3 + 48px);
+    top: calc(var(--topbar-h) + var(--gap) * 2 + 36px);
     bottom: max(var(--gap), env(safe-area-inset-bottom));
     width: min(320px, calc(100vw - var(--gap) * 2));
     box-shadow: 4px 4px 0 var(--ink);
@@ -1006,7 +1019,33 @@ header h2 {
     min-height: 0;
   }
   .field-grid { grid-template-columns: 1fr; }
+  /* 开关 + 标题同一行；工具栏整宽换行 */
+  header {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: start;
+    gap: 6px 8px;
+  }
+  .hdr-left {
+    display: contents;
+  }
+  .hdr-titles {
+    min-width: 0;
+  }
+  header h2 {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .hdr-desc {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    max-width: none;
+  }
   header :deep(.n-space) {
+    grid-column: 1 / -1;
     width: 100%;
   }
   .tb-btn span {

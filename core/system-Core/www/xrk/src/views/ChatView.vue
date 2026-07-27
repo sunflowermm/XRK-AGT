@@ -1184,10 +1184,14 @@ function ensureSystemTip() {
 }
 
 function switchMode(next) {
-  if (next === chat.mode) return;
+  if (next === chat.mode) {
+    sideOpen.value = false;
+    return;
+  }
   clearAttachments();
   clearEventQuote();
   chat.setMode(next);
+  sideOpen.value = false;
 }
 
 function onWorkspaceChange(id) {
@@ -1245,10 +1249,6 @@ onDeactivated(() => {
     @dragleave.prevent="dragOver = false"
     @drop="onDrop"
   >
-    <button type="button" class="side-toggle" @click="sideOpen = !sideOpen">
-      <XrkIcon :name="sideOpen ? 'close' : 'menu'" :size="14" />
-      <span>{{ sideOpen ? '关闭设置' : '模式 / 设置' }}</span>
-    </button>
     <div v-if="sideOpen" class="side-scrim" @click="sideOpen = false" />
 
     <aside class="chat-side brutal-card">
@@ -1375,6 +1375,16 @@ onDeactivated(() => {
     <section class="chat-main brutal-card" :class="{ 'voice-main': chat.mode === 'voice' }">
       <header>
         <div class="title">
+          <button
+            type="button"
+            class="side-toggle"
+            :title="sideOpen ? '关闭设置' : '模式 / 设置'"
+            :aria-label="sideOpen ? '关闭设置' : '模式 / 设置'"
+            @click="sideOpen = !sideOpen"
+          >
+            <XrkIcon :name="sideOpen ? 'close' : 'menu'" :size="14" />
+            <span>{{ sideOpen ? '关闭' : '设置' }}</span>
+          </button>
           <span
             class="emo-dot"
             :data-emo="chat.mode === 'voice' ? voiceEmotion : headerEmotion"
@@ -1638,6 +1648,14 @@ header {
   align-items: center;
   gap: 6px;
   font-size: 13px;
+  min-width: 0;
+  flex: 1;
+}
+.title strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
 }
 .emo-dot {
   display: inline-flex;
@@ -1905,17 +1923,25 @@ header {
   .side-toggle {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
+    justify-content: center;
+    gap: 0;
     border: 1.5px solid var(--ink);
-    border-radius: 8px;
+    border-radius: 6px;
     background: var(--pink);
     font: inherit;
-    font-size: var(--font-sm);
-    font-weight: 800;
-    padding: 8px 10px;
+    width: 32px;
+    height: 32px;
+    padding: 0;
     box-shadow: var(--shadow);
-    width: fit-content;
-    flex-shrink: 0;
+    flex: 0 0 auto;
+    touch-action: manipulation;
+  }
+  .side-toggle span {
+    display: none;
+  }
+  .side-toggle:active {
+    transform: translate(1px, 1px);
+    box-shadow: none;
   }
   .side-scrim {
     display: block;
@@ -1932,7 +1958,7 @@ header {
     position: fixed;
     z-index: 50;
     left: max(var(--gap), env(safe-area-inset-left));
-    top: calc(var(--topbar-h) + var(--gap) * 3 + 48px);
+    top: calc(var(--topbar-h) + var(--gap) * 2 + 36px);
     bottom: max(var(--gap), env(safe-area-inset-bottom));
     width: min(300px, calc(100vw - var(--gap) * 2));
     max-height: none;
@@ -1942,6 +1968,9 @@ header {
   .chat-main {
     flex: 1;
     min-height: 0;
+  }
+  .chat-main > header {
+    gap: 8px;
   }
   .msgs {
     min-height: 200px;

@@ -425,10 +425,6 @@ function paramControl(p) {
 
 <template>
   <div class="api" :class="{ 'list-open': listOpen }">
-    <button type="button" class="list-toggle" @click="listOpen = !listOpen">
-      <XrkIcon :name="listOpen ? 'close' : 'menu'" :size="14" />
-      <span>{{ listOpen ? '关闭列表' : active?.title || '选择 API' }}</span>
-    </button>
     <div v-if="listOpen" class="scrim" @click="listOpen = false" />
 
     <aside class="brutal-card side">
@@ -469,26 +465,42 @@ function paramControl(p) {
     <section class="brutal-card main ink-scroll">
       <template v-if="!active">
         <div class="welcome">
+          <button type="button" class="list-toggle" @click="listOpen = !listOpen">
+            <XrkIcon :name="listOpen ? 'close' : 'menu'" :size="14" />
+            <span>{{ listOpen ? '关闭' : '选 API' }}</span>
+          </button>
           <h2>API 调试中心</h2>
-          <p>在左侧选择 API 开始测试</p>
+          <p>点「选 API」打开列表开始测试</p>
           <NEmpty description="未选择" />
         </div>
       </template>
 
       <template v-else>
         <header class="api-head">
-          <div>
-            <div class="head-row">
-              <h2>{{ active.title || active.id }}</h2>
-              <NTag size="small" :bordered="true" :type="methodTagType(active.method)">
-                {{ active.method || 'GET' }}
-              </NTag>
-              <NTag v-if="isMultipart" size="small" type="warning" :bordered="true">multipart</NTag>
+          <div class="head-left">
+            <button
+              type="button"
+              class="list-toggle"
+              :title="listOpen ? '关闭列表' : '选择 API'"
+              :aria-label="listOpen ? '关闭列表' : '选择 API'"
+              @click="listOpen = !listOpen"
+            >
+              <XrkIcon :name="listOpen ? 'close' : 'menu'" :size="14" />
+              <span>{{ listOpen ? '关闭' : '列表' }}</span>
+            </button>
+            <div class="head-meta">
+              <div class="head-row">
+                <h2>{{ active.title || active.id }}</h2>
+                <NTag size="small" :bordered="true" :type="methodTagType(active.method)">
+                  {{ active.method || 'GET' }}
+                </NTag>
+                <NTag v-if="isMultipart" size="small" type="warning" :bordered="true">multipart</NTag>
+              </div>
+              <p class="endpoint mono">{{ active.path || custom.url }}</p>
+              <p v-if="active.description" class="desc">{{ active.description }}</p>
             </div>
-            <p class="endpoint mono">{{ active.path || custom.url }}</p>
-            <p v-if="active.description" class="desc">{{ active.description }}</p>
           </div>
-          <NSpace size="small" class="head-acts">
+          <NSpace size="small" class="head-acts" :wrap="false">
             <NButton
               v-if="activeId !== 'custom'"
               size="small"
@@ -634,25 +646,11 @@ function paramControl(p) {
 
               <p
                 v-if="!isMultipart && !pathParamNames.length && !queryParams.length && !bodyParams.length"
-                class="hint"
+                class="hint bare"
               >
-                此 API 无额外参数，可直接执行。
+                此 API 无额外参数，可直接点右上角执行。
               </p>
             </template>
-
-            <div class="actions">
-              <NButton
-                v-if="activeId !== 'custom'"
-                size="small"
-                secondary
-                @click="fillExample"
-              >
-                填充示例
-              </NButton>
-              <NButton size="small" type="primary" :loading="loading" @click="execute">
-                执行请求
-              </NButton>
-            </div>
           </div>
 
           <div class="preview-col">
@@ -792,11 +790,29 @@ function paramControl(p) {
   border-bottom: 2px solid var(--ink);
   flex-shrink: 0;
 }
+.head-left {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  min-width: 0;
+  flex: 1;
+}
+.head-meta {
+  min-width: 0;
+  flex: 1;
+}
 .head-row {
   display: flex;
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
+}
+.head-acts {
+  flex-shrink: 0;
+}
+.hint.bare {
+  margin: 0;
+  padding: 4px 0;
 }
 .api-head h2 {
   margin: 0;
@@ -855,12 +871,6 @@ function paramControl(p) {
   font-size: var(--font-xs);
   color: var(--muted);
 }
-.actions {
-  display: flex;
-  gap: 8px;
-  margin-top: 4px;
-  flex-wrap: wrap;
-}
 .pane {
   border: 2px solid var(--ink);
   border-radius: 8px;
@@ -908,18 +918,37 @@ function paramControl(p) {
   .list-toggle {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
+    justify-content: center;
+    gap: 0;
     border: 1.5px solid var(--ink);
-    border-radius: 8px;
+    border-radius: 6px;
     background: var(--yellow);
     font: inherit;
-    font-size: var(--font-sm);
+    font-size: var(--font-xs);
     font-weight: 800;
-    padding: 8px 10px;
+    width: 32px;
+    height: 32px;
+    padding: 0;
     box-shadow: var(--shadow);
-    width: fit-content;
-    max-width: 100%;
-    flex-shrink: 0;
+    flex: 0 0 auto;
+    touch-action: manipulation;
+  }
+  .list-toggle span {
+    display: none;
+  }
+  .list-toggle:active {
+    transform: translate(1px, 1px);
+    box-shadow: none;
+  }
+  .welcome .list-toggle {
+    width: auto;
+    height: auto;
+    gap: 4px;
+    padding: 6px 10px;
+    margin: 0 auto 10px;
+  }
+  .welcome .list-toggle span {
+    display: inline;
   }
   .scrim {
     display: block;
@@ -936,7 +965,7 @@ function paramControl(p) {
     position: fixed;
     z-index: 50;
     left: max(var(--gap), env(safe-area-inset-left));
-    top: calc(var(--topbar-h) + var(--gap) * 3 + 48px);
+    top: calc(var(--topbar-h) + var(--gap) * 2 + 36px);
     bottom: max(var(--gap), env(safe-area-inset-bottom));
     width: min(320px, calc(100vw - var(--gap) * 2));
     box-shadow: 4px 4px 0 var(--ink);
@@ -948,14 +977,51 @@ function paramControl(p) {
   .form-grid {
     grid-template-columns: 1fr;
   }
+  /* 列表开关 | 标题 | 操作 —— 同一行，不再单独占整行 */
   .api-head {
-    flex-direction: column;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: start;
+    gap: 6px 8px;
+  }
+  .head-left {
+    display: contents;
+  }
+  .head-meta {
+    min-width: 0;
+  }
+  .head-meta h2 {
+    font-size: 14px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 100%;
   }
   .head-acts {
-    width: 100%;
+    align-self: start;
+  }
+  .head-meta .desc {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  .endpoint {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
   .resp {
     max-height: min(50vh, 360px);
+  }
+}
+@media (max-width: 480px) {
+  .api-head {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+  .head-acts {
+    grid-column: 1 / -1;
+    justify-self: end;
   }
 }
 </style>
