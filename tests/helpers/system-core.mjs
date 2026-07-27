@@ -7,10 +7,10 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 
 export const SYSTEM_CORE_DIR = path.join(root, 'core', 'system-Core');
 
-/** 框架基准：与 `git ls-files core/system-Core/<subdir>/*.js` 一致（vendor = 未入库本地 .js） */
+/** 框架基准：与 `git ls-files core/system-Core/<subdir>/*.js` 一致（仅入库；本地 vendor 不计） */
 export const SYSTEM_CORE_BASELINE = Object.freeze({
   http: 12,
-  workflow: 8,
+  workflow: 7,
   plugin: 15,
   tasker: 4,
   events: 4,

@@ -170,13 +170,13 @@ describe('www-app-resolve', () => {
     fs.rmSync(dir, { recursive: true, force: true });
   });
 
-  it('静态缺产物应 build；已有 dist 跳过', async () => {
+  it('静态默认每次 build；仅 buildOnStart:false 跳过', async () => {
     const { shouldRunSignedStaticBuild, resolveSignedStaticBuildSpec } = await import(
       '../../src/infrastructure/http/www-static-build.js'
     );
     const sign = { enabled: false, build: { command: 'pnpm', args: ['build'] } };
     assert.equal(shouldRunSignedStaticBuild(sign, { via: '.', warn: 'x' }), true);
-    assert.equal(shouldRunSignedStaticBuild(sign, { via: 'dist' }), false);
+    assert.equal(shouldRunSignedStaticBuild(sign, { via: 'dist' }), true);
     assert.equal(shouldRunSignedStaticBuild({ ...sign, buildOnStart: false }, { via: '.' }), false);
     assert.equal(resolveSignedStaticBuildSpec(sign, process.cwd())?.command, 'pnpm');
   });

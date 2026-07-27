@@ -310,7 +310,7 @@ flowchart TB
     style Streams fill:#E3F2FD,stroke:#1976D2,stroke-width:2px
 ```
 
-> **说明**：默认无 `stream/device.js`。设备 HTTP AI 入口在缺少 `device` 流时**回退 `chat`**；自定义部署可另加 `device` 流（`.gitignore` 中已预留白名单条目）。
+> **说明**：默认无 `workflow/device.js`。设备 HTTP AI 入口在缺少 `device` 流时**回退 `chat`**；自定义部署可自行增加 `device` 流。
 
 ### 1. chat 工作流
 
@@ -413,7 +413,7 @@ flowchart LR
     subgraph Plugins["🔌 插件（Plugin）"]
         direction TB
         Enhancers["🔧 增强器插件<br/>OneBotEnhancer<br/>OPQEnhancer<br/>DeviceEnhancer<br/>StdinEnhancer"]
-        Functions["⚙️ 功能插件<br/>add/restart/update<br/>sendLog/状态<br/>远程指令<br/>主动复读<br/>模拟定时输入"]
+        Functions["⚙️ 功能插件<br/>add/ai/restart/update<br/>sendLog/status/help/music<br/>remote-command<br/>active-repeat<br/>mock-scheduled-stdin"]
     end
     
     style Plugins fill:#4A90E2,stroke:#2E5C8A,stroke-width:2px,color:#fff
@@ -445,20 +445,20 @@ flowchart LR
   - 项目与 Core 更新插件：支持 `#更新/#强制更新` 指定 Core 或整仓库，`#全部更新/#静默全部更新` 批量更新 `core/*` 与项目根目录，自动拉取 Git 日志并在更新后联动 `restart` 插件重启。
 - **sendLog** (`sendLog.js`)  
   - 运行日志发送插件：通过 `#日志/#错误日志/#追踪日志/#debug日志` 等命令，按级别/关键词筛选最近日志文件，分批生成转发消息发到群/私聊，支持通过配置调整每批行数、总行数与单行最大长度。
-- **状态**（`状态.js`，类名 `stattools`）  
+- **status** (`status.js`，类名 `stattools`)  
   - 系统状态查询插件：`#状态` 查看 CPU/内存/磁盘、进程、网络信息，以及 AgentRuntime 运行时长、插件/定时任务数量、日志配置等（内部使用 `systeminformation` 库收集数据）。
-- **远程指令** (`远程指令.js`)  
+- **remote-command** (`remote-command.js`)  
   - 远程命令与调试终端插件：基于 `config/cmd/tools.yaml` 权限配置，提供安全包裹的命令执行、JS 调试、输出截断与落盘等能力，属于高权限「远程运维工具」。
-- **主动复读** (`主动复读.js`)  
+- **active-repeat** (`active-repeat.js`)  
   - 复读示例插件：`#复读` 后进入上下文，下一条消息会被完整复读并在指定时间后自动撤回，演示 `setContext/finish` 的典型用法。
-- **模拟定时输入** (`模拟定时输入.js`)  
+- **mock-scheduled-stdin** (`mock-scheduled-stdin.js`)  
   - 定时 STDIN 模拟插件：每天固定时间（如 12:00）构造模拟 `stdin` 事件，通过 `PluginLoader.deal()` 触发插件系统执行预设命令（例如 `#你是谁`），用于演示和测试定时任务 + 业务链路。
-- **帮助** (`帮助.js`)  
+- **help** (`help.js`)  
   - 内置命令帮助与用法说明。
-- **点歌** (`点歌.js`)  
+- **music** (`music.js`)  
   - 点歌示例插件（外部 API 调用演示）。
-- **x** (`x.js`)  
-  - 工作流调用示例插件。
+- **ai** (`ai.js`，类名 `XRKAIAssistant`)  
+  - AI 助手示例：@/前缀/随机触发，合并 memory、tools 等工作流。
 
 > 以上功能插件均构建在 `plugin` 基类与 `PluginLoader` 之上，**不修改底层基础设施代码**；你可以在 `core/system-Core/plugin/` 中参考这些实现，编写自己的业务插件。
 

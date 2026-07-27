@@ -7,24 +7,21 @@ plugin/**
 !plugin/OneBotEnhancer.js
 !plugin/DeviceEnhancer.js
 !plugin/OPQEnhancer.js
-!plugin/ComWeChatEnhancer.js
 !plugin/StdinEnhancer.js
-!plugin/主动复读.js
-!plugin/模拟定时输入.js
-!plugin/远程指令.js
-!plugin/状态.js
+!plugin/active-repeat.js
+!plugin/mock-scheduled-stdin.js
+!plugin/remote-command.js
+!plugin/status.js
 !plugin/restart.js
 !plugin/sendLog.js
 !plugin/update.js
 !plugin/add.js
 !plugin/ai.js
-!plugin/点歌.js
-!plugin/帮助.js
-!plugin/子服务.js
+!plugin/music.js
+!plugin/help.js
 
 !tasker
 tasker/**
-!tasker/ComWeChat.js
 !tasker/OneBotv11.js
 !tasker/stdin.js
 !tasker/GSUIDCORE.js
@@ -57,6 +54,7 @@ events/**
 !events/device.js
 !events/onebot.js
 !events/stdin.js
+!events/ai-workspace.js
 
 !workflow
 workflow/**
@@ -99,7 +97,6 @@ commonconfig/**
 !lib/ai-workspace-context.js
 !lib/ai-workspace-audit.js
 !lib/ai-assistant-runtime.js
-!events/ai-workspace.js
 
 !default/
 !default/ai_config.yaml
