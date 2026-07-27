@@ -8,6 +8,7 @@ import {
   unwrapSuccess,
   abortTimeout,
   deepClone,
+  copyText,
 } from '../../core/system-Core/www/xrk/src/utils/http.js';
 
 const compatPath = path.resolve(
@@ -50,5 +51,9 @@ describe('www/xrk web-compat（http.js）', () => {
     assert.deepEqual(out, src);
     assert.notEqual(out, src);
     assert.notEqual(out.b, src.b);
+  });
+
+  it('copyText 空串返回 false', async () => {
+    assert.equal(await copyText(''), false);
   });
 });

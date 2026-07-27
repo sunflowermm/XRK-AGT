@@ -15,7 +15,7 @@ import {
   useMessage,
 } from 'naive-ui';
 import { apiFetch, authHeaders, getServerUrl } from '@/api/client';
-import { abortTimeout } from '@/utils/http';
+import { abortTimeout, copyText } from '@/utils/http';
 import { useChatStore } from '@/stores/chat';
 import { useAuthStore } from '@/stores/auth';
 import {
@@ -580,13 +580,13 @@ function sendPoke() {
 
 async function copyMsg(m) {
   const text = msgPlainText(m);
-  if (!text) return;
-  try {
-    await navigator.clipboard.writeText(text);
-    message.success('已复制');
-  } catch {
-    message.error('复制失败');
+  if (!text) {
+    message.warning('无可复制内容');
+    return;
   }
+  const ok = await copyText(text);
+  if (ok) message.success('已复制');
+  else message.error('复制失败：浏览器限制或权限不足');
 }
 
 function deleteMsg(m) {

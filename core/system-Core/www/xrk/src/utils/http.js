@@ -62,3 +62,39 @@ export function normalizeEmotionKey(key) {
   const k = String(key || '').toLowerCase();
   return EMOTION_KEYS.has(k) ? k : 'happy';
 }
+
+/**
+ * 复制文本到剪贴板。
+ * 优先 Clipboard API；在非安全上下文（如 http://公网IP）失败时降级 textarea + execCommand。
+ * @param {string} text
+ * @returns {Promise<boolean>}
+ */
+export async function copyText(text) {
+  const value = String(text ?? '');
+  if (!value) return false;
+  try {
+    if (typeof globalThis.navigator?.clipboard?.writeText === 'function') {
+      await globalThis.navigator.clipboard.writeText(value);
+      return true;
+    }
+  } catch {
+    /* NotAllowedError / insecure context */
+  }
+  if (typeof document === 'undefined' || !document.body) return false;
+  try {
+    const ta = document.createElement('textarea');
+    ta.value = value;
+    ta.setAttribute('readonly', '');
+    ta.style.cssText = 'position:fixed;left:-9999px;top:0;opacity:0;';
+    document.body.appendChild(ta);
+    ta.focus();
+    ta.select();
+    ta.setSelectionRange(0, value.length);
+    const ok = document.execCommand('copy');
+    document.body.removeChild(ta);
+    return Boolean(ok);
+  } catch {
+    return false;
+  }
+}
+

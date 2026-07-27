@@ -17,6 +17,7 @@ import {
 import { authHeaders, getServerUrl } from '@/api/client';
 import FileDropZone from '@/components/FileDropZone.vue';
 import XrkIcon from '@/components/XrkIcon.vue';
+import { copyText } from '@/utils/http';
 
 const message = useMessage();
 const catalog = ref({ apiGroups: [] });
@@ -365,18 +366,16 @@ async function execute() {
   }
 }
 
-function copyPreview() {
-  navigator.clipboard?.writeText(previewText.value).then(
-    () => message.success('已复制预览'),
-    () => message.error('复制失败'),
-  );
+async function copyPreview() {
+  const ok = await copyText(previewText.value);
+  if (ok) message.success('已复制预览');
+  else message.error('复制失败：浏览器限制或权限不足');
 }
 
-function copyResponse() {
-  navigator.clipboard?.writeText(responseText.value).then(
-    () => message.success('已复制响应'),
-    () => message.error('复制失败'),
-  );
+async function copyResponse() {
+  const ok = await copyText(responseText.value);
+  if (ok) message.success('已复制响应');
+  else message.error('复制失败：浏览器限制或权限不足');
 }
 
 watch(

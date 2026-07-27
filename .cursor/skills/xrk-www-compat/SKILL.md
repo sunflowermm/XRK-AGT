@@ -30,6 +30,7 @@ description: 编写或审查 core/*/www 静态页、校园 WebView 兼容、Http
 | `unwrapSuccess` | 默认 `json.data.字段` |
 | `abortTimeout` | `AbortSignal.timeout` |
 | `deepClone` | 无降级 `structuredClone` |
+| `copyText` | 裸 `navigator.clipboard`（HTTP 公网页常失败） |
 
 新能力：**先改** `src/utils/http.js`，再同步各产品内联份。
 

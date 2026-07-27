@@ -317,14 +317,20 @@ function onImgError(e) {
   flex-wrap: wrap;
   gap: 4px;
   margin-top: 4px;
-  opacity: 0.7;
+  opacity: 0.85;
   justify-content: flex-start;
 }
 .msg[data-role='user'] .msg-actions {
   justify-content: flex-end;
 }
-.msg:hover .msg-actions {
+.msg:hover .msg-actions,
+.msg:focus-within .msg-actions {
   opacity: 1;
+}
+@media (hover: none) {
+  .msg-actions {
+    opacity: 1;
+  }
 }
 .act {
   border: 1.5px solid color-mix(in srgb, var(--ink) 40%, transparent);
@@ -340,6 +346,15 @@ function onImgError(e) {
   gap: 4px;
   color: var(--ink);
   line-height: 1.2;
+  min-height: 26px;
+  touch-action: manipulation;
+}
+.act:hover {
+  background: color-mix(in srgb, var(--yellow) 28%, var(--card));
+  border-color: var(--ink);
+}
+.act:active {
+  transform: translate(1px, 1px);
 }
 .act:disabled {
   opacity: 0.45;
