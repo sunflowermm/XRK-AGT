@@ -245,7 +245,7 @@ export function setNestedValue(source = {}, path = '', value) {
   return clone;
 }
 
-/** 按 itemSchema 生成新增条目默认值（对齐原 buildDefaultsFromFields） */
+/** 按 itemSchema 生成新增条目默认值（缺省按类型补全） */
 export function buildDefaultsFromFields(fields = {}) {
   const result = {};
   for (const [key, schema] of Object.entries(fields || {})) {
@@ -254,13 +254,17 @@ export function buildDefaultsFromFields(fields = {}) {
       result[key] = buildDefaultsFromFields(schema.fields);
       continue;
     }
-    if (schema.type === 'array') {
-      result[key] = Array.isArray(schema.default) ? deepClone(schema.default) : [];
-      continue;
-    }
     if (Object.prototype.hasOwnProperty.call(schema, 'default')) {
       result[key] = deepClone(schema.default);
+      continue;
     }
+    const ctrl = resolveFieldControl(schema);
+    if (ctrl === 'switch') result[key] = false;
+    else if (ctrl === 'number') result[key] = null;
+    else if (ctrl === 'tags' || ctrl === 'array') result[key] = [];
+    else if (ctrl === 'json' || ctrl === 'nested') result[key] = {};
+    else if (schema.type === 'array') result[key] = [];
+    else result[key] = '';
   }
   return result;
 }
@@ -299,6 +303,37 @@ const FULL_KEY_PATTERN =
   /^(wsUrl|baseUrl|path|instructions|promptCacheKey|safetyIdentifier|anthropicVersion|apiVersion|deployment|headers|extraBody|proxy|description|content|.*[Uu]rl)$/;
 
 /**
+ * 统一字段控件类型（ConfigView / ConfigArrayForm / 嵌套子表共用）
+ * @returns {'switch'|'select'|'tags'|'textarea'|'number'|'password'|'array'|'json'|'nested'|'input'}
+ */
+export function resolveFieldControl(field = {}) {
+  const c = String(field?.component || '').toLowerCase();
+  const t = String(field?.type || '').toLowerCase();
+  if (c === 'switch' || t === 'boolean') return 'switch';
+  if (c === 'select' || c === 'radio' || hasChoiceOptions(field)) return 'select';
+  if (c === 'multiselect' || c === 'tags' || (t === 'array' && c !== 'arrayform')) return 'tags';
+  if (c === 'textarea' || c === 'text-area') return 'textarea';
+  if (c === 'number' || c === 'inputnumber' || c === 'slider' || c === 'range' || t === 'number') {
+    return 'number';
+  }
+  if (c === 'inputpassword' || c === 'password') return 'password';
+  if (c === 'arrayform' || t === 'array<object>') return 'array';
+  if (c === 'subform' || (t === 'object' && field?.fields && Object.keys(field.fields).length)) {
+    return 'nested';
+  }
+  if (c === 'json' || t === 'object' || t === 'map') return 'json';
+  return 'input';
+}
+
+function hasChoiceOptions(field) {
+  const opts = field?.enum || field?.options || field?.choices;
+  if (!opts) return false;
+  if (Array.isArray(opts)) return opts.length > 0;
+  if (typeof opts === 'object') return Object.keys(opts).length > 0;
+  return false;
+}
+
+/**
  * 对齐原 config-page.resolveFieldSpanClass：
  * 半宽进两列网格；全宽占满一行。
  */
@@ -312,8 +347,12 @@ export function isFieldFullSpan(field) {
   const type = String(meta.type || '').toLowerCase();
   const path = String(meta.path || '');
   const key = path.split('.').pop() || path;
+  const ctrl = resolveFieldControl(meta);
 
   if (FULL_COMPONENTS.has(component)) return true;
+  if (ctrl === 'tags' || ctrl === 'textarea' || ctrl === 'array' || ctrl === 'json' || ctrl === 'nested') {
+    return true;
+  }
   if (type.startsWith('array') || type === 'object' || type === 'map' || type === 'array<object>') {
     return true;
   }
@@ -321,7 +360,7 @@ export function isFieldFullSpan(field) {
   return false;
 }
 
-function normalizeOptions(opts) {
+export function normalizeOptions(opts) {
   if (!opts) return [];
   if (Array.isArray(opts)) {
     return opts.map((o) => {
@@ -335,6 +374,48 @@ function normalizeOptions(opts) {
     return Object.entries(opts).map(([value, label]) => ({ value, label: String(label) }));
   }
   return [];
+}
+
+/** Tags 控件：数组 ↔ 逗号分隔文本 */
+export function formatTagsText(value) {
+  return Array.isArray(value) ? value.join(', ') : String(value ?? '');
+}
+
+export function parseTagsText(text) {
+  return String(text || '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+/**
+ * 按 schema 规范化 object（含嵌套）；未知键保留，避免丢自定义字段。
+ */
+export function canonicalizeObjectByFields(obj, fields = {}) {
+  const src = obj && typeof obj === 'object' && !Array.isArray(obj) ? obj : {};
+  const out = {};
+  for (const [key, schema] of Object.entries(fields || {})) {
+    if (!schema || typeof schema !== 'object') continue;
+    if ((schema.type === 'object' || schema.component === 'subform') && schema.fields) {
+      out[key] = canonicalizeObjectByFields(src[key], schema.fields);
+      continue;
+    }
+    out[key] = canonicalizeFieldValue(src[key], schema.type, schema.component);
+  }
+  for (const [key, val] of Object.entries(src)) {
+    if (!(key in out)) out[key] = deepClone(val);
+  }
+  return out;
+}
+
+export function canonicalizeArrayObjectValue(value, itemFields = {}) {
+  const arr = Array.isArray(value) ? value : [];
+  if (!itemFields || !Object.keys(itemFields).length) {
+    return arr.map((item) =>
+      item && typeof item === 'object' && !Array.isArray(item) ? deepClone(item) : {},
+    );
+  }
+  return arr.map((item) => canonicalizeObjectByFields(item, itemFields));
 }
 
 export function groupFields(fields) {
@@ -419,14 +500,32 @@ export function sameFieldValue(a, b, type, component) {
   );
 }
 
-export function buildDirtyFlat(values, original, fields) {
+/**
+ * @param {Record<string, any>} values
+ * @param {Record<string, any>} original
+ * @param {any[]} fields
+ * @param {Record<string, object>} [arraySchemas]
+ */
+export function buildDirtyFlat(values, original, fields, arraySchemas = {}) {
   const flat = {};
   for (const f of fields) {
-    const next = canonicalizeFieldValue(values[f.path], f.type, f.component);
-    const prev = canonicalizeFieldValue(original[f.path], f.type, f.component);
+    const isArrObj = f.type === 'array<object>' || f.component === 'arrayform';
+    const itemFields = arraySchemas?.[f.path] || f.itemFields || {};
+    const next = isArrObj
+      ? canonicalizeArrayObjectValue(values[f.path], itemFields)
+      : canonicalizeFieldValue(values[f.path], f.type, f.component);
+    const prev = isArrObj
+      ? canonicalizeArrayObjectValue(original[f.path], itemFields)
+      : canonicalizeFieldValue(original[f.path], f.type, f.component);
     if (!isSameValue(next, prev)) flat[f.path] = next;
   }
   return flat;
+}
+
+/** 将 path→value 的 JSON 对象落到 values；缺省 path 回落到 schema 默认 */
+export function applyFlatJsonObject(parsed, fields) {
+  const src = parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+  return valuesFromFlat(src, fields);
 }
 
 export function valuesFromFlat(flat, fields) {

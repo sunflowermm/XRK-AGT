@@ -1,10 +1,14 @@
 <script setup>
-import { computed } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { NButton, NInput, NInputNumber, NSelect, NSpace, NSwitch } from 'naive-ui';
 import {
   buildDefaultsFromFields,
+  formatTagsText,
   getNestedValue,
   isFieldFullSpan,
+  normalizeOptions,
+  parseTagsText,
+  resolveFieldControl,
   setNestedValue,
 } from '@/config/flat';
 import {
@@ -12,6 +16,7 @@ import {
   groupProviderSchemaFields,
   isLlmProvidersArray,
 } from '@/config/llm-provider-ui';
+import { randomId } from '@/utils/http';
 import XrkIcon from '@/components/XrkIcon.vue';
 
 const props = defineProps({
@@ -27,6 +32,9 @@ const emit = defineEmits(['update:modelValue']);
 const items = computed(() => (Array.isArray(props.modelValue) ? props.modelValue : []));
 const isProviders = computed(() => isLlmProvidersArray(props.path));
 const hasSchema = computed(() => Object.keys(props.itemFields || {}).length > 0);
+const rootEl = ref(null);
+/** 与条目一一对应的稳定 key，避免增删改序时控件错位 */
+const rowKeys = ref([]);
 
 const sectionsForItem = computed(() => {
   if (!hasSchema.value) return [];
@@ -34,36 +42,18 @@ const sectionsForItem = computed(() => {
   return [{ id: 'all', label: '', collapsible: false, entries: Object.entries(props.itemFields) }];
 });
 
-function normalizeOptions(schema) {
-  const opts = schema?.options || schema?.enum || schema?.choices;
-  if (!opts) return [];
-  if (Array.isArray(opts)) {
-    return opts.map((o) => {
-      if (o && typeof o === 'object') {
-        return { label: o.label ?? o.name ?? String(o.value), value: o.value ?? o.key ?? o.name };
-      }
-      return { label: String(o), value: o };
-    });
-  }
-  if (typeof opts === 'object') {
-    return Object.entries(opts).map(([value, label]) => ({ value, label: String(label) }));
-  }
-  return [];
-}
+watch(
+  () => items.value.length,
+  (len) => {
+    const next = rowKeys.value.slice(0, len);
+    while (next.length < len) next.push(randomId());
+    rowKeys.value = next;
+  },
+  { immediate: true },
+);
 
 function fieldControl(schema) {
-  const c = String(schema?.component || '').toLowerCase();
-  const t = String(schema?.type || '').toLowerCase();
-  if (c === 'switch' || t === 'boolean') return 'switch';
-  if (c === 'select' || c === 'radio' || schema?.enum || schema?.options) return 'select';
-  if (c === 'number' || c === 'inputnumber' || c === 'slider' || t === 'number') return 'number';
-  if (c === 'inputpassword' || c === 'password') return 'password';
-  if (c === 'textarea' || c === 'text-area') return 'textarea';
-  if (c === 'subform' || c === 'json' || t === 'object' || t === 'map') {
-    if (schema?.fields && Object.keys(schema.fields).length) return 'nested';
-    return 'json';
-  }
-  return 'input';
+  return resolveFieldControl(schema);
 }
 
 function asFieldMeta(key, schema) {
@@ -73,12 +63,19 @@ function asFieldMeta(key, schema) {
     component: String(schema?.component || '').toLowerCase(),
     layout: schema?.layout,
     span: schema?.span,
+    fields: schema?.fields,
   };
 }
 
 function isFull(key, schema) {
   const ctrl = fieldControl(schema);
-  return isFieldFullSpan(asFieldMeta(key, schema)) || ctrl === 'json' || ctrl === 'textarea' || ctrl === 'nested';
+  return (
+    isFieldFullSpan(asFieldMeta(key, schema)) ||
+    ctrl === 'json' ||
+    ctrl === 'textarea' ||
+    ctrl === 'nested' ||
+    ctrl === 'tags'
+  );
 }
 
 function readItem(item, relPath) {
@@ -117,7 +114,16 @@ function jsonText(item, relPath) {
   }
 }
 
+function tagsValue(item, relPath) {
+  return formatTagsText(readItem(item, relPath));
+}
+
+function setTags(index, relPath, text) {
+  patchItem(index, relPath, parseTagsText(text));
+}
+
 function addItem() {
+  rowKeys.value = [...rowKeys.value, randomId()];
   emit('update:modelValue', [
     ...items.value,
     hasSchema.value ? buildDefaultsFromFields(props.itemFields) : {},
@@ -125,8 +131,13 @@ function addItem() {
 }
 
 function removeItem(i) {
+  const title = summary(items.value[i], i);
+  if (!window.confirm(`确认删除「${title}」？`)) return;
   const next = [...items.value];
   next.splice(i, 1);
+  const keys = [...rowKeys.value];
+  keys.splice(i, 1);
+  rowKeys.value = keys;
   emit('update:modelValue', next);
 }
 
@@ -135,6 +146,9 @@ function moveItem(i, delta) {
   const j = i + delta;
   if (j < 0 || j >= next.length) return;
   [next[i], next[j]] = [next[j], next[i]];
+  const keys = [...rowKeys.value];
+  [keys[i], keys[j]] = [keys[j], keys[i]];
+  rowKeys.value = keys;
   emit('update:modelValue', next);
 }
 
@@ -142,21 +156,37 @@ function summary(item, index) {
   if (isProviders.value) return getProviderEntrySummary(item) || `${props.label} #${index + 1}`;
   return `${props.label} #${index + 1}`;
 }
+
+function collapseAll() {
+  rootEl.value?.querySelectorAll('details.card').forEach((el) => {
+    el.open = false;
+  });
+}
+
+function expandAll() {
+  rootEl.value?.querySelectorAll('details.card').forEach((el) => {
+    el.open = true;
+  });
+}
 </script>
 
 <template>
-  <div class="array-form" :class="{ dense, providers: isProviders }">
+  <div ref="rootEl" class="array-form" :class="{ dense, providers: isProviders }">
     <div class="bar">
       <span class="count">{{ items.length }} 项</span>
-      <NButton size="small" type="primary" class="ico-btn" @click="addItem">
-        <XrkIcon name="plus" :size="14" />
-        <span>新增{{ label }}</span>
-      </NButton>
+      <NSpace size="small">
+        <NButton v-if="items.length > 1" size="tiny" quaternary @click="collapseAll">全部折叠</NButton>
+        <NButton v-if="items.length > 1" size="tiny" quaternary @click="expandAll">全部展开</NButton>
+        <NButton size="small" type="primary" class="ico-btn" @click="addItem">
+          <XrkIcon name="plus" :size="14" />
+          <span>新增{{ label }}</span>
+        </NButton>
+      </NSpace>
     </div>
 
     <p v-if="!items.length" class="empty">暂无{{ label }}，点击下方按钮新增。</p>
 
-    <details v-for="(item, i) in items" :key="i" class="card" open>
+    <details v-for="(item, i) in items" :key="rowKeys[i] || i" class="card" open>
       <summary class="card-head">
         <span class="card-title">{{ summary(item, i) }}</span>
         <NSpace size="small" class="card-acts" @click.stop>
@@ -203,7 +233,7 @@ function summary(item, index) {
             v-for="sec in sectionsForItem"
             :key="sec.id"
             class="section"
-            v-bind="sec.collapsible ? { open: true } : {}"
+            v-bind="sec.collapsible ? { open: !dense } : {}"
           >
             <summary v-if="sec.collapsible" class="section-head">{{ sec.label }}</summary>
             <header v-else-if="sec.label" class="section-head static">{{ sec.label }}</header>
@@ -221,7 +251,7 @@ function summary(item, index) {
                       :key="nk"
                       class="field"
                       :class="{
-                        full: isFieldFullSpan(asFieldMeta(nk, ns)),
+                        full: isFull(nk, ns),
                         switch: fieldControl(ns) === 'switch',
                       }"
                     >
@@ -229,6 +259,32 @@ function summary(item, index) {
                       <NSwitch
                         v-if="fieldControl(ns) === 'switch'"
                         :value="Boolean(readItem(item, `${key}.${nk}`))"
+                        size="small"
+                        @update:value="(v) => patchItem(i, `${key}.${nk}`, v)"
+                      />
+                      <NSelect
+                        v-else-if="fieldControl(ns) === 'select'"
+                        :value="readItem(item, `${key}.${nk}`)"
+                        size="small"
+                        :options="normalizeOptions(ns.options || ns.enum || ns.choices)"
+                        clearable
+                        @update:value="(v) => patchItem(i, `${key}.${nk}`, v)"
+                      />
+                      <NInputNumber
+                        v-else-if="fieldControl(ns) === 'number'"
+                        :value="readItem(item, `${key}.${nk}`)"
+                        size="small"
+                        :min="ns.min"
+                        :max="ns.max"
+                        :step="ns.step || 1"
+                        style="width: 100%"
+                        @update:value="(v) => patchItem(i, `${key}.${nk}`, v)"
+                      />
+                      <NInput
+                        v-else-if="fieldControl(ns) === 'password'"
+                        :value="String(readItem(item, `${key}.${nk}`) ?? '')"
+                        type="password"
+                        show-password-on="click"
                         size="small"
                         @update:value="(v) => patchItem(i, `${key}.${nk}`, v)"
                       />
@@ -261,7 +317,7 @@ function summary(item, index) {
                     v-else-if="fieldControl(schema) === 'select'"
                     :value="readItem(item, key)"
                     size="small"
-                    :options="normalizeOptions(schema)"
+                    :options="normalizeOptions(schema.options || schema.enum || schema.choices)"
                     clearable
                     @update:value="(v) => patchItem(i, key, v)"
                   />
@@ -290,6 +346,13 @@ function summary(item, index) {
                     size="small"
                     :rows="dense ? 2 : 3"
                     @update:value="(v) => patchItem(i, key, v)"
+                  />
+                  <NInput
+                    v-else-if="fieldControl(schema) === 'tags'"
+                    :value="tagsValue(item, key)"
+                    size="small"
+                    placeholder="逗号分隔"
+                    @update:value="(v) => setTags(i, key, v)"
                   />
                   <NInput
                     v-else-if="fieldControl(schema) === 'json'"
@@ -332,11 +395,15 @@ function summary(item, index) {
   flex-direction: column;
   gap: 8px;
   width: 100%;
+  container-type: inline-size;
+  container-name: cfg-array;
 }
 .bar {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 .count {
   font-size: var(--font-xs);
@@ -388,6 +455,8 @@ function summary(item, index) {
   cursor: pointer;
   list-style: none;
   margin-bottom: 6px;
+  padding: 2px 0 2px 6px;
+  border-left: 3px solid var(--cyan);
 }
 .section-head.static { cursor: default; }
 .section-head::-webkit-details-marker { display: none; }
@@ -453,7 +522,11 @@ function summary(item, index) {
 .dense .card-head { padding: 6px 8px; }
 .dense .card-body { padding: 6px 8px 8px; }
 .dense .section { margin-bottom: 6px; padding: 4px; }
-.dense .field-grid { gap: 6px; }
+.dense .section-head { margin-bottom: 4px; font-size: var(--font-xs); }
+.dense .field-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
 .dense .field { gap: 1px; }
 .dense .field label { font-size: var(--font-xs); }
 .dense .desc {
@@ -461,7 +534,21 @@ function summary(item, index) {
   max-height: 1.35em;
 }
 
+@container cfg-array (max-width: 560px) {
+  .field-grid,
+  .dense .field-grid {
+    grid-template-columns: 1fr;
+  }
+}
+@container cfg-array (min-width: 561px) and (max-width: 780px) {
+  .dense .field-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
 @media (max-width: 720px) {
-  .field-grid { grid-template-columns: 1fr; }
+  .field-grid,
+  .dense .field-grid {
+    grid-template-columns: 1fr;
+  }
 }
 </style>

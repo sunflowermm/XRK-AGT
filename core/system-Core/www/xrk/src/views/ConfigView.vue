@@ -25,10 +25,13 @@ import {
   extractActiveSchema,
   formatExample,
   formatGroupLabel,
+  formatTagsText,
   groupFields,
   isFieldFullSpan,
   normalizeFlatFields,
+  parseTagsText,
   resolveArrayItemFields,
+  resolveFieldControl,
   sameFieldValue,
   valuesFromFlat,
 } from '@/config/flat';
@@ -51,7 +54,10 @@ const arraySchemas = ref({});
 const values = reactive({});
 const original = reactive({});
 const jsonText = ref('{}');
+const jsonBaseline = ref('{}');
 const children = ref([]);
+/** 阻止 selectedChild 回滚时二次触发 */
+let suppressChildWatch = false;
 
 const filtered = computed(() => {
   const q = filter.value.trim().toLowerCase();
@@ -70,7 +76,24 @@ const showGroupHeaders = computed(() => {
 });
 const selectedConfig = computed(() => configs.value.find((c) => c.name === selected.value) || null);
 const isSystem = computed(() => selected.value === 'system');
-const dirtyCount = computed(() => Object.keys(buildDirtyFlat(values, original, fields.value)).length);
+
+const dirtyCount = computed(() => {
+  if (mode.value === 'json' && jsonText.value !== jsonBaseline.value) {
+    try {
+      const parsed = JSON.parse(jsonText.value);
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return 1;
+      const shadow = valuesFromFlat(parsed, fields.value);
+      const n = Object.keys(
+        buildDirtyFlat(shadow, original, fields.value, arraySchemas.value),
+      ).length;
+      return n || 1;
+    } catch {
+      return 1;
+    }
+  }
+  return Object.keys(buildDirtyFlat(values, original, fields.value, arraySchemas.value)).length;
+});
+
 const childOptions = computed(() => {
   const cfg = selectedConfig.value;
   if (cfg?.configs && typeof cfg.configs === 'object') {
@@ -85,6 +108,12 @@ const childOptions = computed(() => {
   }));
 });
 
+function confirmDiscard() {
+  const n = dirtyCount.value;
+  if (!n) return true;
+  return window.confirm(`有 ${n} 项未保存，确定放弃修改？`);
+}
+
 function persistSelection() {
   try {
     if (selected.value) localStorage.setItem('lastConfigName', selected.value);
@@ -95,6 +124,10 @@ function persistSelection() {
 }
 
 function setMode(next) {
+  if (next === mode.value) return;
+  if (mode.value === 'json' && next === 'form') {
+    if (!applyJsonToValues()) return;
+  }
   mode.value = next;
   try {
     localStorage.setItem('configEditorMode', next);
@@ -143,7 +176,9 @@ function applyFlatData(flatSchema, flatData, structure = null) {
 function syncJsonFromValues() {
   const obj = {};
   for (const f of fields.value) obj[f.path] = values[f.path];
-  jsonText.value = JSON.stringify(obj, null, 2);
+  const text = JSON.stringify(obj, null, 2);
+  jsonText.value = text;
+  jsonBaseline.value = text;
 }
 
 function applyJsonToValues() {
@@ -158,11 +193,10 @@ function applyJsonToValues() {
     message.error('JSON 需为对象（path → value）');
     return false;
   }
-  for (const f of fields.value) {
-    if (Object.prototype.hasOwnProperty.call(parsed, f.path)) {
-      values[f.path] = parsed[f.path];
-    }
-  }
+  const next = valuesFromFlat(parsed, fields.value);
+  for (const k of Object.keys(values)) delete values[k];
+  Object.assign(values, next);
+  jsonBaseline.value = jsonText.value;
   return true;
 }
 
@@ -174,7 +208,7 @@ async function loadList() {
     if (!selected.value && configs.value[0]) {
       selected.value = configs.value[0].name;
     }
-    if (selected.value) await loadOne(selected.value);
+    if (selected.value) await loadOne(selected.value, { force: true });
   } catch (err) {
     message.error(err?.message || String(err));
   } finally {
@@ -189,8 +223,13 @@ function childQuery() {
   return '';
 }
 
-async function loadOne(name) {
+/**
+ * @param {string} name
+ * @param {{ force?: boolean }} [opts]
+ */
+async function loadOne(name, opts = {}) {
   if (!name) return;
+  if (!opts.force && !confirmDiscard()) return;
   if (name === 'system' && !selectedChild.value) {
     const cfg = configs.value.find((c) => c.name === 'system');
     if (cfg?.configs) {
@@ -199,7 +238,7 @@ async function loadOne(name) {
     fields.value = [];
     arraySchemas.value = {};
     clearValues();
-    // 展示子配置卡片，不强制立即选中
+    syncJsonFromValues();
     return;
   }
 
@@ -243,7 +282,7 @@ async function save() {
   }
   if (mode.value === 'json' && !applyJsonToValues()) return;
 
-  const flat = buildDirtyFlat(values, original, fields.value);
+  const flat = buildDirtyFlat(values, original, fields.value, arraySchemas.value);
   if (!Object.keys(flat).length) {
     message.info('无变更');
     return;
@@ -296,43 +335,45 @@ function selectConfig(name) {
     listOpen.value = false;
     return;
   }
+  if (!confirmDiscard()) return;
+  suppressChildWatch = true;
   selected.value = name;
   if (name !== 'system') selectedChild.value = '';
   children.value = [];
   listOpen.value = false;
   persistSelection();
-  void loadOne(name);
+  queueMicrotask(() => {
+    suppressChildWatch = false;
+  });
+  void loadOne(name, { force: true });
 }
 
 function fieldControl(f) {
-  const c = f.component;
-  if (c === 'switch') return 'switch';
-  if (c === 'select' || c === 'radio') return 'select';
-  if (c === 'multiselect' || c === 'tags') return 'tags';
-  if (c === 'textarea' || c === 'text-area') return 'textarea';
-  if (c === 'number' || c === 'inputnumber' || c === 'slider' || c === 'range') return 'number';
-  if (c === 'inputpassword') return 'password';
-  if (c === 'arrayform' || f.type === 'array<object>') return 'array';
-  if (c === 'json' || c === 'subform' || f.type === 'object' || f.type === 'map') return 'json';
-  return 'input';
+  return resolveFieldControl(f);
 }
 
 function isDirty(path) {
   const f = fields.value.find((x) => x.path === path);
   if (!f) return false;
+  if (f.type === 'array<object>' || f.component === 'arrayform') {
+    const itemFields = arraySchemas.value[f.path] || f.itemFields || {};
+    const flat = buildDirtyFlat(
+      { [path]: values[path] },
+      { [path]: original[path] },
+      [f],
+      { [path]: itemFields },
+    );
+    return Boolean(flat[path]);
+  }
   return !sameFieldValue(values[path], original[path], f.type, f.component);
 }
 
 function tagsText(path) {
-  const v = values[path];
-  return Array.isArray(v) ? v.join(', ') : String(v ?? '');
+  return formatTagsText(values[path]);
 }
 
 function setTags(path, text) {
-  values[path] = String(text || '')
-    .split(',')
-    .map((s) => s.trim())
-    .filter(Boolean);
+  values[path] = parseTagsText(text);
 }
 
 function jsonFieldText(path) {
@@ -351,10 +392,35 @@ function setJsonField(path, text) {
   }
 }
 
-watch(selectedChild, (v) => {
-  if (selected.value === 'system' && v) {
-    persistSelection();
-    void loadFlat('system');
+function formatJsonEditor() {
+  try {
+    const parsed = JSON.parse(jsonText.value);
+    jsonText.value = JSON.stringify(parsed, null, 2);
+    message.success('已格式化');
+  } catch {
+    message.error('JSON 无法解析，无法格式化');
+  }
+}
+
+watch(selectedChild, (v, prev) => {
+  if (suppressChildWatch) return;
+  if (selected.value !== 'system') return;
+  if (v === prev) return;
+  if (!confirmDiscard()) {
+    suppressChildWatch = true;
+    selectedChild.value = prev;
+    queueMicrotask(() => {
+      suppressChildWatch = false;
+    });
+    return;
+  }
+  persistSelection();
+  if (v) void loadFlat('system');
+  else {
+    fields.value = [];
+    arraySchemas.value = {};
+    clearValues();
+    syncJsonFromValues();
   }
 });
 
@@ -419,6 +485,7 @@ onMounted(loadList);
             size="small"
             :options="childOptions"
             placeholder="子配置"
+            clearable
             style="width: 160px"
           />
           <NButton size="small" :type="mode === 'form' ? 'primary' : 'default'" class="tb-btn" @click="setMode('form')">
@@ -434,7 +501,7 @@ onMounted(loadList);
             secondary
             class="tb-btn"
             :type="dense ? 'primary' : 'default'"
-            :title="dense ? '切换舒适布局' : '切换紧凑布局'"
+            :title="dense ? '舒适布局（一行两列）' : '紧凑布局（一行三列）'"
             @click="toggleDense"
           >
             <XrkIcon :name="dense ? 'comfortable' : 'dense'" :size="14" />
@@ -483,8 +550,13 @@ onMounted(loadList);
           </div>
 
           <div v-else-if="mode === 'json'" class="json-wrap">
+            <div class="json-bar">
+              <NButton size="tiny" secondary @click="formatJsonEditor">格式化</NButton>
+              <NButton size="tiny" secondary @click="syncJsonFromValues">从表格同步</NButton>
+              <span v-if="dirtyCount" class="json-dirty">{{ dirtyCount }} 未保存</span>
+            </div>
             <NInput v-model:value="jsonText" type="textarea" class="mono" :rows="dense ? 18 : 22" />
-            <p class="hint">JSON 为 path → value 扁平对象；保存时只提交相对原始值的变更。</p>
+            <p class="hint">JSON 为 path → value 扁平对象；保存时只提交相对原始值的变更。切回表单会应用当前 JSON。</p>
           </div>
 
           <div v-else-if="!fields.length" class="placeholder">
@@ -773,6 +845,22 @@ header h2 {
   overflow: visible;
   min-height: 0;
 }
+.json-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+  flex-wrap: wrap;
+}
+.json-dirty {
+  font-size: var(--font-xs);
+  font-weight: 800;
+  color: var(--ink);
+  border: 1.5px solid var(--ink);
+  border-radius: 999px;
+  padding: 1px 8px;
+  background: color-mix(in srgb, var(--pink) 28%, var(--card));
+}
 .group {
   position: relative;
   margin-bottom: 14px;
@@ -857,8 +945,13 @@ header h2 {
 }
 .field:not(.full) { min-height: 100%; }
 .field:not(.full) .ctrl { margin-top: auto; padding-top: 4px; }
+/* 紧凑 = 两列 → 三列，并收紧间距 */
+.dense .field-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  column-gap: 10px;
+  row-gap: 0;
+}
 .dense .field { padding: 4px 2px; }
-.dense .field-grid { column-gap: 10px; row-gap: 0; }
 .dense .group { margin-bottom: 8px; }
 .dense .group-h { padding: 6px 8px 6px 12px; }
 .dense .group .field-grid { padding: 0 6px 2px 10px; }
@@ -959,10 +1052,15 @@ header h2 {
 .sys-card strong { font-size: 12px; }
 .sys-card span { font-size: var(--font-xs); color: var(--muted); }
 @container config (max-width: 720px) {
-  .field-grid { grid-template-columns: 1fr; }
+  .field-grid,
+  .dense .field-grid {
+    grid-template-columns: 1fr;
+  }
 }
-@container config (min-width: 1100px) {
-  .dense .field-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+@container config (min-width: 721px) and (max-width: 980px) {
+  .dense .field-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 @media (max-width: 900px) {
   .config {
@@ -1018,7 +1116,10 @@ header h2 {
     flex: 1;
     min-height: 0;
   }
-  .field-grid { grid-template-columns: 1fr; }
+  .field-grid,
+  .dense .field-grid {
+    grid-template-columns: 1fr;
+  }
   /* 开关 + 标题同一行；工具栏整宽换行 */
   header {
     display: grid;
@@ -1051,8 +1152,5 @@ header h2 {
   .tb-btn span {
     display: none;
   }
-}
-@media (min-width: 1400px) {
-  .dense .field-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 </style>
