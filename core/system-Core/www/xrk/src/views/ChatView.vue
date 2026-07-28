@@ -66,7 +66,7 @@ const input = ref('');
 const streaming = ref(false);
 /** Event 已发出、等 WS 回包（不锁输入） */
 const awaitingReply = ref(false);
-const settingsOpen = ref(true);
+const settingsOpen = ref(false);
 const listEl = ref(null);
 const fileInputEl = ref(null);
 const loadingOpts = ref(false);

@@ -160,7 +160,11 @@ class FrontendLauncher {
     return [...list, '--', '--strictPort', '--host', '127.0.0.1', '--port', String(port)];
   }
 
-  static async #ensurePortFree(port) {
+  /**
+   * @param {number} port
+   * @param {{ force?: boolean }} [opts] force=true 时才强杀占用进程；默认只检测并抛错
+   */
+  static async #ensurePortFree(port, opts = {}) {
     if (!Number.isFinite(port) || port <= 0) return;
     const killPids = new Set();
     try {
@@ -181,21 +185,29 @@ class FrontendLauncher {
           if (pid) killPids.add(pid);
         }
       }
-    } catch {}
+    } catch {
+      /* ignore probe errors */
+    }
 
     const self = String(process.pid);
-    for (const pid of killPids) {
-      if (pid === self) continue;
+    const foreign = [...killPids].filter((pid) => pid !== self);
+    if (!foreign.length) return;
+
+    if (!opts.force) {
+      throw new Error(
+        `端口 ${port} 已被占用 (PID: ${foreign.join(', ')})；请结束占用进程，或在 sign.json 设 "forceFreePort": true`,
+      );
+    }
+
+    for (const pid of foreign) {
       if (process.platform === 'win32') {
         await execFile('taskkill', ['/PID', pid, '/T', '/F']).catch(() => {});
       } else {
         await execFile('kill', ['-9', pid]).catch(() => {});
       }
     }
-    if (killPids.size) {
-      await RuntimeUtil.sleep(400).catch(() => {});
-      RuntimeUtil.makeLog('debug', `已释放端口 ${port} (PID: ${[...killPids].join(', ')})`, 'Frontend');
-    }
+    await RuntimeUtil.sleep(400).catch(() => {});
+    RuntimeUtil.makeLog('warn', `已强制释放端口 ${port} (PID: ${foreign.join(', ')})`, 'Frontend');
   }
 
   /** 停止所有已启动的前端子进程（用于主服务关闭/重启释放资源） */
@@ -221,7 +233,9 @@ class FrontendLauncher {
       app.buildProcess = undefined;
       app.status = 'stopped';
       app.startedAt = undefined;
-      if (app.config?.port) await this.#ensurePortFree(app.config.port).catch(() => {});
+      if (app.config?.port) {
+        await this.#ensurePortFree(app.config.port, { force: true }).catch(() => {});
+      }
     }
 
     this.#started = false;
@@ -411,6 +425,7 @@ class FrontendLauncher {
           mountPath,
           env,
           autoRestart,
+          forceFreePort: json.forceFreePort === true,
           // 生产环境可选：build + prod 启动声明（不影响开发态）
           build: buildSpec ? { ...buildSpec, env: { ...env, ...buildSpec.env } } : null,
           buildOnStart,
@@ -492,7 +507,17 @@ class FrontendLauncher {
       this.#spawnChildProcess(cmd, args, { cwd, env });
 
     const startRuntime = async () => {
-      await this.#ensurePortFree(config.port).catch(() => {});
+      try {
+        await this.#ensurePortFree(config.port, { force: config.forceFreePort === true });
+      } catch (err) {
+        appInfo.status = 'error';
+        RuntimeUtil.makeLog(
+          'error',
+          `前端项目无法启动: ${config.id} — ${err?.message || err}`,
+          'Frontend',
+        );
+        return;
+      }
       appInfo.runtimePort = config.port;
       appInfo.status = 'starting';
       const runtimeArgs = this.#viteRuntimeArgs(runArgs, config.port);

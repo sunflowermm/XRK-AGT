@@ -615,34 +615,41 @@ static:
 
 ### 开箱即用的Web控制台
 
-- **零配置**：`core/system-Core/www/xrk/`（Vue 控制台，`sign.json` → `dist/`）
-- **访问路径**：`/xrk/`（等于文件夹名）
+- **开箱即用**：`core/system-Core/www/xrk/`（Vue 控制台，`sign.json` → 按需 build 挂 `dist/`）
+- **访问路径**：`/xrk/`（`sign.proxy.mount`，与文件夹名一致）
 - **功能完整**：API测试、配置管理、插件管理、设备管理等
 
 ---
 
-## www 挂载（普通静态 / 前端工程）
+## www 挂载（零配置静态 / 有 sign）
 
-`core/*/www/<子目录>/` 分两类，**规则不同**。完整说明、对照表与推荐 `sign.json`：**[www-mount.md](www-mount.md)**。
+`core/*/www/<子目录>/`：**无 sign** 为零配置静态；**有 `sign.json`** 可定制 URL、纯静态/产物/反代，以及与主服合并的覆盖项（**sign 已写优先，未写回落 `server.yaml`**）。纯静态页也可使用 `sign.json`。完整字段表与示例：**[www-mount.md](www-mount.md)**。
 
 | 类型 | 判定 | URL | 磁盘 |
 |------|------|-----|------|
-| **普通静态** | 无有效 `sign.json` | 固定 `/${文件夹名}` | 目录本体 |
-| **前端工程①** | `enabled: false` | `proxy.mount`… | 按需 build（过期才编）、不启进程，挂 dist |
-| **前端工程②** | `enabled: true` | 同上 | **启进程 + 反代** |
+| **零配置静态** | 无有效 `sign.json` | 固定 `/${文件夹名}` | 目录本体 |
+| **有 sign · 纯静态** | `staticRoot: "."` 等 | `proxy.mount`… | 目录本体，不 build |
+| **有 sign · 产物** | `enabled: false` / `serve: static` | 同上 | 按需 build，挂 dist |
+| **有 sign · 反代** | `enabled: true` | 同上 | **启进程 + 反代** |
 
-完整说明：**[www-mount.md](www-mount.md)**。代码：`www-app-resolve.js` · `www-static-build.js` · `mount-core-www.js` · `frontend/launcher.js`。
+代码：`www-app-resolve.js` · `www-static-build.js` · `www-sign-merge.js` · `mount-core-www.js` · `frontend/launcher.js`。
 
-### 前端工程字段速查
+### sign 字段速查
+
+完整表见 **[www-mount.md](www-mount.md)**「字段全表」。常用：
 
 | 字段 | 作用 |
 |------|------|
-| `proxy.mount` | 对外路径（静态与反代共用；Vite `base` 须一致） |
-| `serve` | `static` 挂产物；`proxy` 拉进程反代 |
-| `enabled` | `false` 时不反代（配合 `serve=static`） |
-| `staticRoot` / `outDir` | 产物相对目录 |
-| `command` / `args` / `port` | 仅反代需要 |
-| `build` / `prod` / `mode` / `devOnly` / `modes` | 可选；进程模式生产启动 |
+| `proxy.mount` / `mount` / `id` / `publicPath` | 对外路径（Vite `base` 须一致） |
+| `name` / `description` | 元数据 |
+| `serve` / `enabled` | `static` 挂静态；`proxy` 拉进程反代 |
+| `staticRoot` / `outDir` | 静态根；`"."` = 纯静态 |
+| `build` / `buildOnStart` | 构建；静态有 stale 三态，反代语义不同 |
+| `command` / `args` / `port` / `cwd` / `env` | 反代进程 |
+| `autoRestart` / `forceFreePort` | 重启与抢端口 |
+| `mode` / `prod` / `devOnly` / `modes` | 反代环境筛选与生产入口 |
+| `static` / `cacheTime` | 覆盖 `server.static`（sign 优先） |
+| `rateLimit` | 本挂载限流；与 `server.rateLimit` 合并，sign 优先 |
 
 规范示例：`Example-Core/www/frontend-example/`（URL `/example`）、`vibe-learn-Core/www/vibe-learn/`。
 

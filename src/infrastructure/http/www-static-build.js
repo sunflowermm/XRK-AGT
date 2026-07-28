@@ -15,7 +15,7 @@ import {
   getPnpmInstallHint,
   resolveCommandSpawn,
 } from '#utils/command-spawn.js';
-import { resolveWwwStaticRoot } from '#infrastructure/http/www-app-resolve.js';
+import { resolveWwwStaticRoot, isWwwSignedStaticRootOk } from '#infrastructure/http/www-app-resolve.js';
 
 const BUILD_WALK_SKIP = new Set([
   'node_modules',
@@ -339,6 +339,7 @@ export async function runSignedStaticBuild(appDir, sign, label = appDir) {
  * @param {string} appDir
  * @param {object} sign
  * @param {string} [mountPath]
+ * @returns {Promise<{ root: string, via: string, warn?: string, buildFailed?: boolean, ok: boolean }>}
  */
 export async function ensureSignedStaticArtifacts(appDir, sign, mountPath) {
   const label = mountPath || path.basename(appDir);
@@ -352,10 +353,26 @@ export async function ensureSignedStaticArtifacts(appDir, sign, mountPath) {
         'AgentRuntime',
       );
     }
-    return resolved;
+    return {
+      ...resolved,
+      ok: isWwwSignedStaticRootOk(appDir, sign, resolved),
+      buildFailed: false,
+    };
   }
 
-  const ok = await runSignedStaticBuild(appDir, sign, label);
-  if (!ok) return resolved;
-  return resolveWwwStaticRoot(appDir, sign);
+  const okBuild = await runSignedStaticBuild(appDir, sign, label);
+  if (!okBuild) {
+    resolved = resolveWwwStaticRoot(appDir, sign);
+    return {
+      ...resolved,
+      ok: isWwwSignedStaticRootOk(appDir, sign, resolved),
+      buildFailed: true,
+    };
+  }
+  resolved = resolveWwwStaticRoot(appDir, sign);
+  return {
+    ...resolved,
+    ok: isWwwSignedStaticRootOk(appDir, sign, resolved),
+    buildFailed: false,
+  };
 }

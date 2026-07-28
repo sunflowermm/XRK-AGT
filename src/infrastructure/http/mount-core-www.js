@@ -1,12 +1,12 @@
 /**
  * 挂载各 Core 的 www。
  *
- * 两类子目录逻辑不同，决策在 `www-app-resolve.js`，说明见 `docs/www-mount.md`：
+ * 决策在 `www-app-resolve.js`，与主服合并在 `www-sign-merge.js`，说明见 `docs/www-mount.md`：
  *
- * 1. **普通静态**（无 sign）：`/${文件夹名}` → 目录本体
- * 2. **前端工程**（有 sign）只有两种：
- *    - enabled=false → 缺 dist 则 build，挂产物，**不启进程**
- *    - enabled=true  → 跳过静态，Launcher **启进程 + 反代**
+ * 1. **零配置静态**（无 sign）：`/${文件夹名}` → 目录本体
+ * 2. **有 sign**（含纯静态 / SPA 产物 / 反代）：
+ *    - 纯静态或产物静态 → 按需 build（仅工程树），再挂；可覆盖 static / rateLimit
+ *    - 反代 → 跳过静态，Launcher 启进程
  *
  * 另：`/core/<Core名>` 始终挂该 Core 的整个 `www/`（调试/直链用）。
  * 同名对外路径先到先得；保留段见 `RESERVED_ROOT_SEGMENTS`。
@@ -17,12 +17,18 @@ import express from 'express';
 import RuntimeUtil from '#utils/runtime-util.js';
 import paths from '#utils/paths.js';
 import { statDirs } from '#utils/core-fs.js';
+import runtimeConfig from '#infrastructure/config/config.js';
 import {
   resolveWwwAppMount,
   resolveWwwStaticRoot,
   wwwMountPathRootSegment,
 } from '#infrastructure/http/www-app-resolve.js';
 import { ensureSignedStaticArtifacts } from '#infrastructure/http/www-static-build.js';
+import {
+  resolveWwwMountOverlays,
+  applyWwwStaticOverlay,
+  createWwwMountRateLimiter,
+} from '#infrastructure/http/www-sign-merge.js';
 
 export {
   resolveWwwAppMount,
@@ -34,7 +40,16 @@ export {
   WWW_BUILD_OUT_CANDIDATES,
   isActiveFrontendSign,
   resolveWwwAppStaticRoot,
+  isWwwSignedStaticRootOk,
+  looksLikeFrontendSourceTree,
 } from '#infrastructure/http/www-app-resolve.js';
+
+export {
+  mergePreferDefined,
+  resolveWwwMountOverlays,
+  applyWwwStaticOverlay,
+  createWwwMountRateLimiter,
+} from '#infrastructure/http/www-sign-merge.js';
 
 /**
  * 不可占用的对外路径第一段。
@@ -44,7 +59,7 @@ export const RESERVED_ROOT_SEGMENTS = ['api', 'core', 'media', 'uploads', 'File'
 
 /**
  * @param {import('express').Application} app
- * @param {object} [staticOptions] express.static 选项
+ * @param {object} [staticOptions] express.static 选项（主服默认；可被各 sign.static 覆盖）
  * @returns {Promise<Set<string>>} 已挂载路径（含 `/core/<名>` 与对外 `/…`）
  */
 export async function mountCoreWwwStatic(app, staticOptions = {}) {
@@ -52,6 +67,7 @@ export async function mountCoreWwwStatic(app, staticOptions = {}) {
   const mountedPaths = new Set();
   const wwwDirPaths = coreDirs.map((coreDir) => path.join(coreDir, 'www'));
   const wwwIsDir = await statDirs(wwwDirPaths);
+  const serverCfg = runtimeConfig.server || {};
 
   for (let ci = 0; ci < coreDirs.length; ci++) {
     const coreDir = coreDirs[ci];
@@ -87,7 +103,7 @@ export async function mountCoreWwwStatic(app, staticOptions = {}) {
       const decision = resolveWwwAppMount(subDirPath);
       const mountPath = decision.mountPath || `/${subDirName}`;
       const rootSeg = wwwMountPathRootSegment(mountPath);
-      const kindLabel = decision.kind === 'signed' ? '前端工程' : '普通静态';
+      const kindLabel = decision.kind === 'signed' ? '有 sign' : '零配置静态';
 
       if (RESERVED_ROOT_SEGMENTS.includes(rootSeg) || RESERVED_ROOT_SEGMENTS.includes(subDirName)) {
         RuntimeUtil.makeLog(
@@ -119,17 +135,27 @@ export async function mountCoreWwwStatic(app, staticOptions = {}) {
       let staticRoot = decision.staticRoot;
       let reason = decision.reason;
       let warn = decision.warn;
+      const sign = decision.sign;
 
-      // ① 静态模式：缺产物则 build（不启进程），再挂 dist
-      if (decision.kind === 'signed' && decision.sign) {
-        const after = await ensureSignedStaticArtifacts(subDirPath, decision.sign, mountPath);
-        staticRoot = after.root;
-        if (after.via !== '.') {
-          reason = `前端工程静态（只 build 不启动）→ ${after.via}`;
-          warn = after.warn;
-        } else {
-          warn = after.warn || warn;
+      if (decision.kind === 'signed' && sign) {
+        const after = await ensureSignedStaticArtifacts(subDirPath, sign, mountPath);
+        if (!after.ok) {
+          RuntimeUtil.makeLog(
+            'error',
+            `有 sign 无可用静态根，跳过挂载: ${mountPath} (dir=${subDirName}, core: ${coreName})` +
+              (after.buildFailed
+                ? ' — 构建失败，请在该目录执行 pnpm install && pnpm build'
+                : ' — 请先构建 dist，或设 staticRoot: "." 挂纯静态'),
+            'AgentRuntime',
+          );
+          continue;
         }
+        staticRoot = after.root;
+        reason =
+          after.via === '.'
+            ? `有 sign 纯静态 → .`
+            : `有 sign 静态（按需 build）→ ${after.via}`;
+        warn = after.warn;
       }
 
       if (!staticRoot) {
@@ -141,7 +167,13 @@ export async function mountCoreWwwStatic(app, staticOptions = {}) {
         continue;
       }
 
-      app.use(mountPath, express.static(staticRoot, staticOptions));
+      const overlays = resolveWwwMountOverlays(sign, serverCfg);
+      const mountStaticOpts = applyWwwStaticOverlay(staticOptions, overlays.static);
+      const mountLimiter = createWwwMountRateLimiter(overlays.rateLimit);
+      if (mountLimiter) {
+        app.use(mountPath, mountLimiter);
+      }
+      app.use(mountPath, express.static(staticRoot, mountStaticOpts));
       mountedPaths.add(mountPath);
       RuntimeUtil.makeLog(
         'info',

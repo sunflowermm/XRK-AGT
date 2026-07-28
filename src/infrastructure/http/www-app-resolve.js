@@ -1,20 +1,22 @@
 /**
  * Core www 应用挂载决策（纯函数，可单测）
  *
- * ## 两类 www 子目录
+ * ## www 子目录
  *
  * | 类型 | 判定 | 行为 |
  * |------|------|------|
- * | **普通静态** | 无有效 sign | URL=`/${文件夹名}`，挂目录本体 |
- * | **前端工程** | 有有效 sign | 见下两种（仅此两种） |
+ * | **零配置静态** | 无有效 sign | URL=`/${文件夹名}`，挂目录本体 |
+ * | **有 sign** | 有效 sign.json | 可定制 URL / 产物 / 反代 / 与 server 合并的覆盖项 |
  *
- * ### 前端工程仅两种
+ * ### 有 sign 时的运行方式
  *
  * | 开关 | 行为 |
  * |------|------|
- * | `enabled: false` / `serve: static` | **只 build、不启进程**，挂 dist（`www-static-build`） |
+ * | `serve: static` + `staticRoot: "."`（或无前端工程树） | **纯静态**：挂目录本体，不 build |
+ * | `enabled: false` / `serve: static` + dist | **只 build、不启进程**，挂产物 |
  * | `enabled: true` / `serve: proxy` | **启进程 + 反代**（`FrontendLauncher`） |
  *
+ * 与主服合并：`www-sign-merge.js`（sign 已写优先，未写回落 server）。
  * 权威说明：`docs/www-mount.md`。
  */
 import path from 'node:path';
@@ -109,12 +111,12 @@ function hasIndexHtml(dir) {
 }
 
 /**
- * 粗判「Vite 源码树尚未 build」（仅 signed 缺产物时 warn）。
+ * 粗判「Vite/前端源码树尚未 build」（缺产物时不应挂源码）。
  *
  * @param {string} appDir
  * @returns {boolean}
  */
-function looksLikeFrontendSourceTree(appDir) {
+export function looksLikeFrontendSourceTree(appDir) {
   try {
     if (!fsSync.existsSync(path.join(appDir, 'package.json'))) return false;
     if (hasIndexHtml(appDir)) {
@@ -163,8 +165,8 @@ function isInsideAppDir(appDir, candidateAbs) {
 /**
  * 解析静态文件根目录。
  *
- * - **普通静态**（无 sign）：始终挂应用目录本体，不探测 dist。
- * - **前端工程**（有 sign）：`staticRoot`/`outDir` → dist/build/out/…（须含 index.html）。
+ * - **零配置静态**（无 sign）：始终挂应用目录本体，不探测 dist。
+ * - **有 sign**：`staticRoot`/`outDir` → dist/build/out/…；显式 `"."` 挂目录本体（纯静态）。
  *
  * @param {string} appDir
  * @param {object | null} [sign]
@@ -175,11 +177,19 @@ export function resolveWwwStaticRoot(appDir, sign = null) {
     return { root: appDir, via: '.' };
   }
 
-  const preferred = [];
   const fromSign =
     (sign.staticRoot && String(sign.staticRoot).trim()) ||
     (sign.outDir && String(sign.outDir).trim()) ||
     '';
+  if (fromSign === '.' || fromSign === './') {
+    return {
+      root: appDir,
+      via: '.',
+      warn: hasIndexHtml(appDir) ? undefined : 'staticRoot=. 但目录无 index.html',
+    };
+  }
+
+  const preferred = [];
   if (fromSign) preferred.push(fromSign);
   for (const c of WWW_BUILD_OUT_CANDIDATES) {
     if (!preferred.includes(c)) preferred.push(c);
@@ -201,13 +211,30 @@ export function resolveWwwStaticRoot(appDir, sign = null) {
 }
 
 /**
+ * 有 sign 的静态挂载根是否可用（含纯静态挂目录本体）。
+ *
+ * @param {string} appDir
+ * @param {object | null | undefined} sign
+ * @param {{ root?: string, via?: string } | null | undefined} resolved
+ * @returns {boolean}
+ */
+export function isWwwSignedStaticRootOk(appDir, sign, resolved) {
+  if (!resolved?.root) return false;
+  if (resolved.via && resolved.via !== '.') return true;
+  const hint = String(sign?.staticRoot || sign?.outDir || '').trim();
+  if (hint === '.' || hint === './') return true;
+  if (looksLikeFrontendSourceTree(appDir)) return false;
+  return hasIndexHtml(resolved.root);
+}
+
+/**
  * 对外 URL 挂载路径。
  *
- * - **普通静态**：恒为 `/${文件夹名}`（忽略任何虚构字段）。
- * - **前端工程**：`proxy.mount` → `mount` → `/${id}` → 回退 `/${文件夹名}`。
+ * - **零配置静态**（无 sign）：恒为 `/${文件夹名}`。
+ * - **有 sign**（含纯静态）：`proxy.mount` → `mount` → `/${id}` → 回退 `/${文件夹名}`。
  *
  * @param {string} appDirName www 下文件夹名
- * @param {object | null | undefined} sign 有效 sign 对象；null=普通静态
+ * @param {object | null | undefined} sign 有效 sign 对象；null=零配置静态
  * @returns {string} 形如 `/example`（无尾斜杠）
  */
 export function resolveWwwPublicMountPath(appDirName, sign = null) {
@@ -238,7 +265,7 @@ export function wwwMountPathRootSegment(mountPath) {
 }
 
 /**
- * 综合决策：普通静态 | 前端工程(static|proxy)。
+ * 综合决策：零配置静态 | 有 sign（纯静态 / 产物静态 / 反代）。
  *
  * @param {string} appDir www 下某一应用目录绝对路径
  * @param {string} [signPath] 默认 `appDir/sign.json`
@@ -248,7 +275,7 @@ export function resolveWwwAppMount(appDir, signPath = path.join(appDir, 'sign.js
   const appDirName = path.basename(appDir);
   const read = readWwwSignFile(signPath);
 
-  // 无 sign 或损坏 → 普通静态
+  // 无 sign 或损坏 → 零配置静态
   if (!read.ok || !read.value) {
     const resolved = resolveWwwStaticRoot(appDir, null);
     const mountPath = resolveWwwPublicMountPath(appDirName, null);
@@ -258,8 +285,8 @@ export function resolveWwwAppMount(appDir, signPath = path.join(appDir, 'sign.js
       staticRoot: resolved.root,
       mountPath,
       reason: !read.ok
-        ? `sign 无效，按普通静态挂载 (${read.error})`
-        : '普通静态（无 sign.json）',
+        ? `sign 无效，按零配置静态挂载 (${read.error})`
+        : '零配置静态（无 sign.json）',
       warn: !read.ok ? read.error : undefined,
       sign: null,
     };
@@ -274,16 +301,22 @@ export function resolveWwwAppMount(appDir, signPath = path.join(appDir, 'sign.js
       mode: 'proxy',
       staticRoot: null,
       mountPath,
-      reason: '前端工程：反代（serve=proxy/dev，或未写 serve 且 enabled 未关）',
+      reason: '有 sign：反代（serve=proxy/dev，或未写 serve 且 enabled 未关）',
       sign,
     };
   }
 
   const resolved = resolveWwwStaticRoot(appDir, sign);
   const serve = String(sign.serve || '').toLowerCase();
-  let reason = '前端工程：静态托管产物';
-  if (sign.enabled === false) reason = '前端工程：enabled=false，静态托管';
-  else if (serve === 'static' || serve === 'dist') reason = '前端工程：serve=static，静态托管';
+  const hint = String(sign.staticRoot || sign.outDir || '').trim();
+  let reason = '有 sign：静态托管';
+  if (hint === '.' || hint === './' || (resolved.via === '.' && !looksLikeFrontendSourceTree(appDir))) {
+    reason = '有 sign：纯静态（挂目录本体）';
+  } else if (sign.enabled === false) {
+    reason = '有 sign：enabled=false，静态托管产物';
+  } else if (serve === 'static' || serve === 'dist') {
+    reason = '有 sign：serve=static，静态托管产物';
+  }
 
   return {
     kind: 'signed',

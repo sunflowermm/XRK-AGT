@@ -1,9 +1,11 @@
 # Core www 挂载
 
-> 代码：`www-app-resolve.js` · `www-static-build.js` · `mount-core-www.js` · `frontend/launcher.js`  
+> 代码：`www-app-resolve.js` · `www-static-build.js` · `www-sign-merge.js` · `mount-core-www.js` · `frontend/launcher.js`  
 > 浏览器兼容：skill **`xrk-www-compat`**
 
-`core/<Core>/www/<子目录>/` 每个一级子目录都会挂载。先分「有没有 sign」，有 sign 的前端工程再分两种运行方式。
+`core/<Core>/www/<子目录>/` 每个一级子目录都会挂载。  
+**无 `sign.json`**：零配置静态。  
+**有 `sign.json`**：可定制 URL、产物/反代、以及与主服 `server` 的合并覆盖（**sign 已写优先，未写回落主服**）。纯静态页也可以放 `sign.json`。
 
 ---
 
@@ -11,24 +13,24 @@
 
 ```
 www/<子目录>/
-├── 无 sign.json ──────────► 普通静态：URL = /文件夹名，挂目录本体
-└── 有 sign.json ──────────► 前端工程（特殊）
-        ├── enabled: false （或 serve: static）──► 按需 build，不启进程，挂 dist
-        └── enabled: true  （或 serve: proxy） ──► 启进程 + 反向代理
+├── 无 sign.json ────────────────► 零配置静态：URL = /文件夹名，挂目录本体
+└── 有 sign.json ────────────────► 可扩展应用（含纯静态）
+        ├── serve: static + staticRoot: "." ──► 纯静态：挂目录本体，不 build
+        ├── enabled: false / serve: static ───► 按需 build，不启进程，挂 dist
+        └── enabled: true  / serve: proxy ───► 启进程 + 反向代理
 ```
-
-就这两种前端工程状态，没有第三种。
 
 ---
 
-## 普通静态（无 sign）
+## 零配置静态（无 sign）
 
 | 项 | 规则 |
 |----|------|
-| 例 | `system-Core/www/xrk`（`sign.json` + Vite `dist`）→ `/xrk/` |
+| 例 | `Some-Core/www/help/`（无 sign）→ `/help/` |
 | URL | 永远 `/${文件夹名}` |
 | 磁盘 | 目录本体（不探测 dist、不 build） |
 | 进程 | 无 |
+| 主服选项 | 全用 `server.yaml`（`static` / 全局 `rateLimit` 等） |
 
 保留段：`api`、`core`、`media`、`uploads`、`File`、`shared`。
 
@@ -36,18 +38,40 @@ www/<子目录>/
 
 ---
 
-## 前端工程（有 sign）— 仅两种
+## 有 sign.json（含纯静态）
 
-对外 URL 两边相同，优先级：`proxy.mount` → `mount` → `/${id}` → `/${文件夹名}`。  
+对外 URL（静态与反代共用）优先级：`proxy.mount` → `mount` → `/${id}` → `/${文件夹名}`。  
 Vite `base` 必须与该 URL 一致。
 
-### ① 静态：`enabled: false`（推荐日常 / 生产 SPA）
+例：`system-Core/www/xrk/` → `/xrk/`（按需 build 挂 `dist`）。
+
+### ① 纯静态：`staticRoot: "."`
+
+目录就是成品 HTML/CSS/JS，**不需要** `package.json` / build。仍可用 sign 改 URL、缓存、本路径限流等。
+
+```json
+{
+  "id": "help",
+  "enabled": false,
+  "serve": "static",
+  "staticRoot": ".",
+  "buildOnStart": false,
+  "proxy": { "mount": "/help-docs" },
+  "static": { "cacheTime": "1h" },
+  "rateLimit": { "windowMs": 60000, "max": 300 }
+}
+```
+
+- 无前端工程树、且根目录有 `index.html` 时，即使未写 `staticRoot: "."`，也会按纯静态挂目录本体。
+- 若像 Vite 源码树（有 `package.json` + `vite.config.*` 或 `index.html` 引用 `/src/`）却没有 dist，**不会**挂源码，需先 build 或改 `staticRoot`。
+
+### ② SPA 产物：`enabled: false`（或 `serve: "static"`）
 
 **默认按需 build**（源码比产物新、或没有 `dist/index.html` 才编），不启动前端进程；编完再挂 dist。
 
 | 步骤 | 行为 |
 |------|------|
-| 1 | 若需要：执行 `sign.build`（未写则默认 `pnpm build`） |
+| 1 | 若需要：执行 `sign.build`（未写则有 `package.json` 时默认 `pnpm build`） |
 | 2 | 主服 `express.static` 挂产物；**Launcher 不拉起** `command` |
 
 ```json
@@ -71,7 +95,7 @@ Vite `base` 必须与该 URL 一致。
   - `false` / `"never"`：永不自动编（自行保证 dist）
 - `pnpm`/`npm` 经 `#utils/command-spawn.js` 解析（Windows `.cmd`、PATH、`pnpm.cjs`、corepack、`npm exec pnpm`），避免葵子/精简 PATH 下 `spawn pnpm ENOENT`。
 
-### ② 反代：`enabled: true`
+### ③ 反代：`enabled: true`
 
 **启动**前端进程，并由主服**反向代理**到 `proxy.mount`。
 
@@ -92,22 +116,131 @@ Vite `base` 必须与该 URL 一致。
 }
 ```
 
-开发 HMR 用这个；生产流量不要用 `pnpm dev`。
+开发 HMR 用这个；生产流量不要用 `pnpm dev`。  
+端口被占用时默认**报错退出**（不静默 `kill -9`）；确需抢端口时加 `"forceFreePort": true`。
 
 ### 开关怎么认
 
 | 写法 | 走哪条 |
 |------|--------|
-| `enabled: false` 或 `serve: "static"` | ① 按需 build、不启动 |
-| `enabled: true` 且非 static（含 `serve: "proxy"` / 未写 serve） | ② 启动 + 反代 |
+| `staticRoot: "."`（或非前端源码树的静态目录） | ① 纯静态 |
+| `enabled: false` 或 `serve: "static"`（且有/将有 dist） | ② 按需 build、不启动 |
+| `enabled: true` 且非 static（含 `serve: "proxy"` / 未写 serve） | ③ 启动 + 反代 |
+
+---
+
+## 与主服合并（sign 优先）
+
+主服默认来自 `data/server_bots/{port}/server.yaml`（模板：`config/default_config/server.yaml`）。  
+**按挂载点可覆盖**的段写在 `sign.json` 里：字段**已写则以 sign 为准**，**未写则用主服**。实现：`www-sign-merge.js` → `resolveWwwMountOverlays`。
+
+| sign 字段 | 回落主服 | 作用 |
+|-----------|----------|------|
+| `static`（对象） | `server.static` | 本挂载 `express.static`：`cacheTime` / `index` / `extensions` / `immutable` 等 |
+| `cacheTime`（顶层简写） | `server.static.cacheTime` | 等同 `static.cacheTime` |
+| `rateLimit`（对象） | `server.rateLimit`（作默认叶子） | **仅本挂载路径**额外限流；未写则只用全局限流 |
+
+`rateLimit` 写法任选其一（均会与主服同名叶子合并，sign 覆盖）：
+
+```json
+"rateLimit": { "windowMs": 60000, "max": 500, "message": "本页请求过频" }
+```
+
+```json
+"rateLimit": {
+  "enabled": true,
+  "mount": { "windowMs": 60000, "max": 500 }
+}
+```
+
+- `"rateLimit": { "enabled": false }`：本挂载**不加**路径限流（全局 `server.rateLimit.global` 仍生效）。
+- 未写 `rateLimit`：本挂载不加路径限流，完全跟主服全局策略。
+
+不在 sign 里覆盖、始终只看主服的示例：`server.host` / `https` / CORS / 全局 body `limits` 等。
+
+---
+
+## `sign.json` 字段全表（代码已读的全部）
+
+> 权威以本表为准。未列出的键运行时**不读**（`_note` 等仅给人看）。  
+> 与主服重叠的项：**sign 已写优先，未写回落 `server.yaml`**（仅下表「主服覆盖」段）。
+
+### 身份与挂载（静态 + 反代）
+
+| 字段 | 类型 | 谁读 | 说明 |
+|------|------|------|------|
+| `id` | string | resolve / Launcher | 应用 id；缺省为文件夹名。未写 mount 时 URL=`/${id}` |
+| `name` | string | Launcher | 展示名（日志）；缺省=`id` |
+| `description` | string | Launcher | 元数据描述；缺省空 |
+| `proxy.mount` | string | resolve | 对外 URL（最高优先）；Vite `base` 对齐它 |
+| `mount` | string | resolve | 对外 URL（次于 `proxy.mount`） |
+| `publicPath` | string | Launcher | 反代侧历史别名；未写 mount 时也可作公开路径线索（优先仍是 `proxy.mount`→`mount`→`id`） |
+
+### 运行开关（静态 + 反代）
+
+| 字段 | 类型 | 谁读 | 说明 |
+|------|------|------|------|
+| `enabled` | boolean | resolve / Launcher | `false` → 不反代（静态路径）；`true` 且非 static → 反代 |
+| `serve` | string | resolve | `static`/`dist` 强制静态；`proxy`/`dev` 反代；未写则看 `enabled` |
+| `staticRoot` | string | resolve / build | 静态根相对路径；`"."` = 纯静态挂目录本体 |
+| `outDir` | string | resolve / build | `staticRoot` 别名 |
+| `buildOnStart` | boolean \| string | build / Launcher | **静态模式**：`if-stale`（默认）/`always`/`never` 或 `true`/`false`。**反代模式**：仅当有 `build` 段时，`!== false` 则启动前先编（语义与静态的 stale 探测不同） |
+| `build` | object | build / Launcher | `{ command, args?, cwd?, env? }`。静态：无则有 `package.json` 时默认 `pnpm build`。反代：生产路径可先 build 再启进程 |
+
+### 反代进程（仅 `serve=proxy` / `enabled` 未关）
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `command` | string | 启动命令（必需，除非走 `prod.command`） |
+| `args` | string[] | 启动参数 |
+| `port` | number | 本地前端端口（必需） |
+| `cwd` | string | 工作目录（相对**仓库根**解析，见 Launcher） |
+| `env` | object | 子进程环境变量；框架会再注入 `PORT`、`VITE_XRK_PUBLIC_PATH`、`VITE_XRK_CORE_NAME`、`VITE_XRK_APP_ID` |
+| `autoRestart` | boolean | 退出后是否重启；默认 `true` |
+| `forceFreePort` | boolean | `true` 才允许清占用端口；默认 `false`（占线则报错退出） |
+| `mode` | `"auto"` \| `"dev"` \| `"prod"` | 缺省 `auto`。`auto` 且存在 `prod` 或 `build` 时按生产入口 |
+| `prod` | object | `{ command, args?, cwd?, env? }` 生产启动规格；有则生产用它替代顶层 `command`/`args` |
+| `devOnly` | boolean | `true` 且判定为生产时**跳过**该应用 |
+| `modes` | string[] | 非空时：当前 mode 不在列表内则跳过（小写比较） |
+
+### 主服覆盖（sign 优先；未写回落 `server.*`）
+
+| 字段 | 类型 | 回落 | 说明 |
+|------|------|------|------|
+| `static` | object | `server.static` | 本挂载 `express.static`：常用 `cacheTime`、`index`、`extensions`、`immutable` |
+| `cacheTime` | string \| number | `server.static.cacheTime` | 顶层简写，等同 `static.cacheTime` |
+| `rateLimit` | object | `server.rateLimit` 作默认叶子 | **仅本挂载路径**额外限流。叶子：`enabled`、`windowMs`、`max`、`message`；或 `mount`/`global` 嵌套。未写整段 = 不加路径限流 |
+
+`rateLimit` 示例：
+
+```json
+"rateLimit": { "windowMs": 60000, "max": 500 }
+```
+
+```json
+"rateLimit": { "enabled": false }
+```
+
+### 命令对象形状（`build` / `prod` / 顶层 command）
+
+| 子字段 | 类型 | 说明 |
+|--------|------|------|
+| `command` | string | 可执行名（如 `pnpm`） |
+| `args` | string[] | 参数 |
+| `cwd` | string | 工作目录（`build` 相对应用目录；Launcher 的 `cwd`/`prod.cwd` 相对仓库根） |
+| `env` | object | 额外环境变量 |
+
+### 不在 sign 里、只在主服的
+
+`server.host` / `https` / CORS / 全局 body `limits` / 全局 `rateLimit.global` 与 `rateLimit.api` 等——**不按 Core 拆**；要放宽某页流量用上面的 `sign.rateLimit`。
 
 ---
 
 ## 启动顺序
 
 ```
-FrontendLauncher.start()   → 只处理 ② 反代工程
-mountCoreWwwStatic()       → 普通静态 + ①（产物过期或缺 dist 才 build，再挂）
+FrontendLauncher.start()   → 只处理反代工程
+mountCoreWwwStatic()       → 零配置静态 + 有 sign 的静态（按需 build；应用 sign↔server 覆盖）
 ```
 
 ---
@@ -118,6 +251,7 @@ mountCoreWwwStatic()       → 普通静态 + ①（产物过期或缺 dist 才 
 |------|-----|
 | `Example-Core/www/frontend-example/` | `/example` |
 | `vibe-learn-Core/www/vibe-learn/` | `/vibe-learn` |
+| 纯静态 + `proxy.mount: "/help-docs"` | `/help-docs` |
 
 ---
 
@@ -125,10 +259,13 @@ mountCoreWwwStatic()       → 普通静态 + ①（产物过期或缺 dist 才 
 
 | 误解 | 实际 |
 |------|------|
-| `enabled: false` 什么都不干 | 会挂静态；缺/过期 dist 时还会 build |
-| `enabled: false` 仍会起 Vite | 不会；只有 `enabled: true` 才启进程 |
-| 文件夹名 = URL | 有 sign 时看 `proxy.mount` |
-| 每次重启都重新 build | 否；默认仅源码新于产物时才编 |
+| 纯静态不能写 sign | 可以；用 `staticRoot: "."` 定制 URL / 缓存 / 限流 |
+| `enabled: false` 什么都不干 | SPA 会按需 build 并挂 dist；无产物且像前端源码树则**跳过挂载** |
+| `enabled: false` 仍会起 Vite | 不会；只有反代模式才启进程 |
+| 文件夹名 = URL | 无 sign 时是；有 sign 时看 `proxy.mount` → `mount` → `id` |
+| 每次重启都重新 build | 否；静态默认仅源码新于产物时才编 |
+| sign 里写了部分 rateLimit | 未写的叶子用主服；已写的以 sign 为准 |
+| `buildOnStart` 在反代和静态一样 | 不一样：静态有 stale 三态；反代只是「有 build 段时要不要先编」 |
 
 ---
 

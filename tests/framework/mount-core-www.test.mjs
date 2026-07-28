@@ -6,6 +6,7 @@ import path from 'node:path';
 import { RESERVED_ROOT_SEGMENTS } from '../../src/infrastructure/http/mount-core-www.js';
 import {
   isActiveFrontendSign,
+  isWwwSignedStaticRootOk,
   readWwwSignFile,
   resolveWwwAppMount,
   resolveWwwAppStaticRoot,
@@ -13,6 +14,11 @@ import {
   resolveWwwStaticRoot,
   shouldProxyFrontend,
 } from '../../src/infrastructure/http/www-app-resolve.js';
+import {
+  mergePreferDefined,
+  resolveWwwMountOverlays,
+  applyWwwStaticOverlay,
+} from '../../src/infrastructure/http/www-sign-merge.js';
 
 describe('mount-core-www 保留根段', () => {
   it('含框架与历史冲突名 shared', () => {
@@ -41,7 +47,7 @@ describe('www-app-resolve', () => {
     assert.equal(shouldProxyFrontend({ enabled: true, serve: 'proxy' }), true);
   });
 
-  it('普通静态：无 sign → URL=目录名，不挂 dist', () => {
+  it('零配置静态：无 sign → URL=目录名，不挂 dist', () => {
     const parent = tmpApp();
     const appDir = path.join(parent, 'xrk');
     fs.mkdirSync(appDir);
@@ -93,7 +99,63 @@ describe('www-app-resolve', () => {
     fs.rmSync(parent, { recursive: true, force: true });
   });
 
-  it('sign 损坏时回退普通静态', () => {
+  it('纯静态有 sign：staticRoot=. 挂目录并可改 URL', () => {
+    const dir = tmpApp();
+    writeSign(dir, {
+      enabled: false,
+      serve: 'static',
+      staticRoot: '.',
+      buildOnStart: false,
+      id: 'help',
+      proxy: { mount: '/help-docs' },
+    });
+    fs.writeFileSync(path.join(dir, 'index.html'), '<html>help</html>');
+    const d = resolveWwwAppMount(dir);
+    assert.equal(d.kind, 'signed');
+    assert.equal(d.mode, 'static');
+    assert.equal(d.mountPath, '/help-docs');
+    assert.equal(d.staticRoot, dir);
+    assert.equal(resolveWwwStaticRoot(dir, d.sign).via, '.');
+    assert.equal(isWwwSignedStaticRootOk(dir, d.sign, { root: dir, via: '.' }), true);
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('sign↔server 合并：sign 已写优先，未写回落主服', () => {
+    const server = {
+      static: { cacheTime: '1d', index: ['index.html'], immutable: true },
+      rateLimit: {
+        enabled: true,
+        global: { windowMs: 900000, max: 1000, message: '全局过频' },
+      },
+    };
+    const overlays = resolveWwwMountOverlays(
+      {
+        static: { cacheTime: '1h' },
+        rateLimit: { max: 50 },
+      },
+      server,
+    );
+    assert.equal(overlays.static.cacheTime, '1h');
+    assert.deepEqual(overlays.static.index, ['index.html']);
+    assert.equal(overlays.static.immutable, true);
+    assert.equal(overlays.rateLimit?.enabled, true);
+    assert.equal(overlays.rateLimit?.max, 50);
+    assert.equal(overlays.rateLimit?.windowMs, 900000);
+    assert.equal(overlays.rateLimit?.message, '全局过频');
+
+    const noRl = resolveWwwMountOverlays({ staticRoot: '.' }, server);
+    assert.equal(noRl.rateLimit, null);
+    assert.equal(noRl.static.cacheTime, '1d');
+
+    assert.deepEqual(mergePreferDefined({ a: 1, b: 2 }, { b: 9, c: 3 }), { a: 1, b: 9, c: 3 });
+    const opts = applyWwwStaticOverlay(
+      { maxAge: '1d', index: ['index.html'], immutable: true },
+      overlays.static,
+    );
+    assert.equal(opts.maxAge, '1h');
+  });
+
+  it('sign 损坏时回退零配置静态', () => {
     const dir = tmpApp();
     fs.writeFileSync(path.join(dir, 'sign.json'), '{not-json');
     const read = readWwwSignFile(path.join(dir, 'sign.json'));
@@ -103,6 +165,7 @@ describe('www-app-resolve', () => {
     assert.equal(d.kind, 'plain');
     assert.equal(d.mode, 'static');
     assert.equal(d.staticRoot, dir);
+    assert.match(String(d.reason), /零配置静态|sign 无效/);
     fs.rmSync(dir, { recursive: true, force: true });
   });
 

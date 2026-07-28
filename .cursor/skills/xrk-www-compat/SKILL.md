@@ -1,6 +1,6 @@
 ---
 name: xrk-www-compat
-description: 编写或审查 core/*/www 静态页、校园 WebView 兼容、HttpResponse 前端解包时使用。浏览器环境 ≠ Node 26。含普通静态与前端工程（sign.json）挂载。
+description: 编写或审查 core/*/www 静态页、校园 WebView 兼容、HttpResponse 前端解包时使用。浏览器环境 ≠ Node 26。含零配置静态与有 sign.json（纯静态/产物/反代，sign↔server 合并）挂载。
 ---
 
 # Core www 浏览器兼容 + 挂载
@@ -35,15 +35,16 @@ description: 编写或审查 core/*/www 静态页、校园 WebView 兼容、Http
 
 新能力：**先改** `src/utils/http.js`，再同步各产品内联份。
 
-## www 两类 + 前端工程两种
+## www 两类 + 有 sign 时的模式
 
 | | 判定 | 行为 |
 |--|------|------|
-| 普通静态 | 无 sign | URL=`/${文件夹名}`，挂目录本体 |
-| 前端工程① | `enabled: false` | **只 build、不启进程**，挂 dist |
-| 前端工程② | `enabled: true` | **启进程 + 反代** |
+| 零配置静态 | 无 sign | URL=`/${文件夹名}`，挂目录本体 |
+| 有 sign · 纯静态 | `staticRoot: "."` 等 | 挂目录本体；可改 URL / `static` / `rateLimit` |
+| 有 sign · 产物 | `enabled: false` | **只 build、不启进程**，挂 dist |
+| 有 sign · 反代 | `enabled: true` | **启进程 + 反代** |
 
-详见 [docs/www-mount.md](../../../docs/www-mount.md)。Vite `base` = `proxy.mount`。
+与主服合并：**sign 已写优先，未写回落 `server.yaml`**（`www-sign-merge.js`）。详见 [docs/www-mount.md](../../../docs/www-mount.md)。Vite `base` = `proxy.mount`。
 
 ## 审查
 

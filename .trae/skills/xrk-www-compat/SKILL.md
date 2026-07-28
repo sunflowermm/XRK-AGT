@@ -35,12 +35,13 @@ description: 编写或审查 core/*/www 静态页、校园 WebView 兼容、Http
 
 新能力：**先改** `src/utils/http.js`，再同步各产品内联份。
 
-## www 目录名
+## www 目录名与挂载
 
 - 必须：`core/<core>/www/<应用名>/`
 - **保留根名**（`RESERVED_ROOT_SEGMENTS`）：`api`、`core`、`media`、`uploads`、`File`、**`shared`**
 - 产品静态用自有名（例：`www/lsy-shared` → `/lsy-shared`）
 - 同名根路径：先挂占用，后挂 warn 跳过
+- 无 sign = 零配置静态；有 `sign.json` 可定制 URL / 纯静态或产物 / 反代，且 **sign 已写优先、未写回落 `server.yaml`**。权威：[docs/www-mount.md](../../../docs/www-mount.md)
 
 ## 审查
 

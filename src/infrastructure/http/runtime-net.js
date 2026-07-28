@@ -116,6 +116,25 @@ export async function displayAccessUrls(runtime, protocol, port) {
 
     console.log(`    ${chalk.cyan('•')} ${chalk.white(displayUrl)}`);
   }
+
+  const wwwPaths = Array.isArray(runtime.wwwMountPaths) ? runtime.wwwMountPaths : [];
+  if (wwwPaths.length) {
+    console.log(chalk.yellow('\n  Web 控制台：'));
+    const bases = [];
+    if (ipInfo.local.length > 0) {
+      const primary = ipInfo.local.find((i) => i.primary) || ipInfo.local[0];
+      bases.push(`${protocol}://${primary.ip}:${port}`);
+    } else {
+      bases.push(`${protocol}://127.0.0.1:${port}`);
+    }
+    for (const mount of wwwPaths) {
+      const rel = String(mount).replace(/\/$/, '') || '';
+      for (const base of bases) {
+        console.log(`    ${chalk.cyan('•')} ${chalk.white(`${base}${rel}/`)}`);
+      }
+    }
+    console.log(chalk.gray('    浏览器打开后粘贴上方 API 密钥到顶栏'));
+  }
 }
 
 /**

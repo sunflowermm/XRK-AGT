@@ -38,7 +38,31 @@ function go(name) {
 }
 
 function saveKey() {
-  auth.setApiKey(keyDraft.value);
+  const next = String(keyDraft.value || '').trim();
+  // 失焦时空串不落盘，避免误清已保存的 Key
+  if (!next) {
+    keyDraft.value = auth.apiKey;
+    return;
+  }
+  auth.setApiKey(next);
+}
+
+function clearKey() {
+  if (!auth.hasKey) {
+    keyDraft.value = '';
+    return;
+  }
+  if (!window.confirm('确认清除已保存的 API Key？')) {
+    keyDraft.value = auth.apiKey;
+    return;
+  }
+  keyDraft.value = '';
+  auth.setApiKey('');
+}
+
+function onKeyEnter() {
+  if (!String(keyDraft.value || '').trim()) clearKey();
+  else saveKey();
 }
 
 function toggleCollapse() {
@@ -98,7 +122,8 @@ function toggleCollapse() {
             show-password-on="click"
             placeholder="X-API-Key"
             style="width: 148px"
-            @keyup.enter="saveKey"
+            title="回车保存；清空后回车可清除已存 Key"
+            @keyup.enter="onKeyEnter"
             @blur="saveKey"
           />
           <NTooltip>

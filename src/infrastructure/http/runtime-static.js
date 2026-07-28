@@ -128,7 +128,8 @@ export async function setupStaticServing(runtime) {
 
   const staticOptions = createStaticOptions(runtime);
   const { mountCoreWwwStatic } = await import('#infrastructure/http/mount-core-www.js');
-  await mountCoreWwwStatic(runtime.express, staticOptions);
+  const mounted = await mountCoreWwwStatic(runtime.express, staticOptions);
+  runtime.wwwMountPaths = [...mounted].filter((p) => !String(p).startsWith('/core/'));
 
   runtime.express.use((req, res, next) => {
     if (runtime._checkHeadersSent(res, next)) return;
