@@ -100,6 +100,7 @@ agentWorkspace:
   # 另自动合并 data/ai-workspace/{id}/skills（种子自 agents/skills/standard，缺啥补啥不覆盖）
   maxRulesChars: 12000
   maxAgentMdChars: 12000
+  maxSubagentsChars: 4000    # agents/subagents.yaml 注入预算（OpenCode 式 mode/when/skills 清单）
 
 # RAG / 记忆增强（AiWorkflowLoader.applyEmbeddingConfig 合并到各工作流 embeddingConfig）
 embedding:

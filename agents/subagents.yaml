@@ -1,10 +1,64 @@
-subagents:
-  - name: xrk-config-sync
-    description: 当用户要改配置/Schema/默认模板但不确定是否生效时使用；Core 示例须遵守 Node 26（skill xrk-node-runtime）
+# Agents 清单：告诉助手有哪些「办事角色」，注入 prompt 用，不是独立子进程
+# 工作区 data/ai-workspace/{id}/subagents.yaml 若存在则优先
+agents:
+  - name: assistant
+    mode: primary
+    description: 默认主助手；帮用户查、写、整理，先匹配技能再动手；群聊里克制、先给结论
+    when: 日常问答、办公事务、读写工作区里的文稿与资料
+    skills:
+      - agent-core
+      - agent-tools
+      - answer-format
     model: null
-  - name: xrk-http-api-impl
-    description: 当用户要实现/排错 HTTP API handler、路由与参数校验时使用；必用 fetch+AbortSignal.timeout、normalizeError（skill xrk-node-runtime）
+    permissions:
+      file_write: ask
+      bash: ask
+
+  - name: plan
+    mode: primary
+    description: 只帮用户想方案、拆步骤、标风险；少改文件，输出可执行的计划与验收点
+    when: 用户要计划、任务拆解或风险评估，还没要求直接改稿或动文件
+    skills:
+      - office-plan
+      - agent-core
     model: null
-  - name: xrk-plugin-tasker
-    description: 当用户要做插件/Tasker 协议适配、输入输出映射与运行时校验时使用；二进制用 toBase64/fromBase64（skill xrk-node-runtime）
+    permissions:
+      file_write: deny
+      bash: ask
+
+  - name: research
+    mode: subagent
+    description: 帮用户上网查资料、做对比、写摘要；标明来源，不确定处如实说明
+    when: 开放问题、产品/政策对比、需要联网核实的事实
+    skills:
+      - agent-search
+      - office-research
     model: null
+    permissions:
+      file_write: deny
+      bash: deny
+
+  - name: docs
+    mode: subagent
+    description: 帮用户写邮件、纪要、润色文稿，以及 docx、xlsx、pdf、pptx 等办公格式
+    when: 写或改邮件、会议材料、对外稿、表格与演示文档
+    skills:
+      - office-doc
+      - office-email
+      - office-meeting
+    model: null
+    permissions:
+      file_write: ask
+      bash: ask
+
+  - name: workspace
+    mode: subagent
+    description: 帮用户在工作区里找文件、改草稿、整理目录；只管办事文件夹，不碰框架源码
+    when: 找材料、改工作区里的草稿、列目录、整理文档结构
+    skills:
+      - office-env-workspace
+      - agent-tools
+    model: null
+    permissions:
+      file_write: ask
+      bash: deny

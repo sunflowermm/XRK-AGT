@@ -1,14 +1,22 @@
-# agents/ — Agent 运行时面（仓库种子）
+# agents/ — 办事助手种子
 
-与 `src/`（Runtime 代码）、`.cursor/`（IDE 规则/技能）分离。本目录只放**可复制进工作区或注入 prompt**的内容。
+这里是**办事助手**的仓库种子：第一次启用某个工作区时，会把模板复制到 `data/ai-workspace/{id}/`，之后以运行时那份为准。
 
-| 路径 | 用途 |
-|------|------|
-| `workspace/` | 首次创建 `data/ai-workspace/{id}/` 时复制的模板（AGENTS/SOUL/…、`memory/MEMORY.md`） |
-| `rules/` | 项目级规则，注入 system prompt（`includeRules`；≠ `.cursor/rules`） |
-| `skills/standard/` | 技能种子；复制到工作区 `skills/`，并可由 `customSkillRoots` 扫描 |
-| `subagents.yaml` | Subagents 清单 |
+**完整说明（用户 / 运营向）**：[docs/agents.md](../docs/agents.md)
 
-路径常量：`src/utils/agent-workspace-paths.js`。注入逻辑：`src/utils/agent-workspace.js`。
+## 里面有什么
 
-运行时记忆与改过的技能在 **`data/ai-workspace/`**，不要往项目根再放 `memory/` / `skills/` / `rules/`。
+| 目录 / 文件 | 用途 |
+|-------------|------|
+| `workspace/` | 工作区模板：助手怎么帮你、你的偏好、本机备注、记忆结构 |
+| `rules/` | 办事行为规则（回复安全、项目边界等） |
+| `skills/standard/` | 技能种子：办公、检索、环境、基础路由 |
+| `subagents.yaml` | 主助手与专项助手清单（规划、调研、文稿、工作区整理） |
+
+## 你会改哪份
+
+- **日常定制**：改 `data/ai-workspace/{id}/` 里的 `AGENTS.md`、`USER.md`、`TOOLS.md`、`memory/` 等。
+- **更新默认模板给所有人**：改本目录种子，新工作区或缺省文件会跟着变；已在工作区里改过的副本不会被覆盖。
+- **换助手角色说明**：工作区根 `subagents.yaml` 优先于本文件的 `subagents.yaml`。
+
+配置项见 `ai-workflow.yaml` 的 `agentWorkspace`；实现细节见 [docs/agents.md](../docs/agents.md) 文末「实现索引」。

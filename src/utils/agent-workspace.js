@@ -1,10 +1,16 @@
 /**
  * 工作区上下文注入：data/ai-workspace 助手文件 + agents/rules|skills|subagents。
+ *
+ * 分区顺序固定（跨请求稳定，利于 prefix cache）：
+ *   1. assistant — AGENTS.md + WORKSPACE_TEMPLATE_RELS + 日更 memory + MEMORY.md
+ *   2. contextFiles — agentWorkspace.contextFiles
+ *   3. rules — agents/rules
+ *   4. Skills — customSkillRoots / standard + 工作区 skills/
+ *   5. Agents — agents/subagents.yaml|yml|json（或工作区同名；OpenCode 式 mode 清单，非隔离执行）
  */
 import fs from 'node:fs';
 import path from 'node:path';
 import YAML from 'yaml';
-import paths from '#utils/paths.js';
 import { realpathSyncOrResolve } from '#utils/path-guards.js';
 import { readTextFileUnderWorkspaceRoot } from '#utils/safe-workspace-read.js';
 import { buildSkillsPromptFromWorkspace } from '#utils/agent-workspace-skills.js';
@@ -20,9 +26,95 @@ import {
   resolveAgentWorkspaceAbs,
 } from '#utils/agent-workspace-paths.js';
 
-const SUBAGENT_MANIFEST_RELS = ['agents/subagents.yaml', 'agents/subagents.yml', 'agents/subagents.json'];
+/** 工作区优先，再项目根 agents/ */
+const AGENT_MANIFEST_BASENAMES = ['subagents.yaml', 'subagents.yml', 'subagents.json'];
 
 const workspaceFileCache = new Map();
+
+function formatPermissionHints(permissions) {
+  if (!permissions || typeof permissions !== 'object' || Array.isArray(permissions)) return '';
+  const parts = [];
+  for (const [k, v] of Object.entries(permissions)) {
+    if (v == null || v === '') continue;
+    parts.push(`${k}=${typeof v === 'object' ? JSON.stringify(v) : v}`);
+  }
+  return parts.length ? parts.join(', ') : '';
+}
+
+function formatAgentCatalogLine(item) {
+  const id = item.name || item.id || 'agent';
+  const mode = String(item.mode || 'subagent').toLowerCase();
+  const desc = item.description || item.prompt || item.instructions || '';
+  const when = typeof item.when === 'string' ? item.when.trim() : '';
+  const skills = Array.isArray(item.skills)
+    ? item.skills.filter((s) => typeof s === 'string' && s.trim()).map((s) => s.trim())
+    : [];
+  const model = item.model != null && item.model !== '' ? String(item.model) : '';
+  const perm = formatPermissionHints(item.permissions);
+  const bits = [`- **${id}** [${mode}]`];
+  if (model) bits[0] += ` (model: ${model})`;
+  bits[0] += `: ${desc}`;
+  const extras = [];
+  if (when) extras.push(`何时：${when}`);
+  if (skills.length) extras.push(`技能：${skills.join(', ')}`);
+  if (perm) extras.push(`权限提示：${perm}`);
+  if (extras.length) bits.push(`  （${extras.join('；')}）`);
+  return `${bits.join('\n')}\n`;
+}
+
+/**
+ * 解析 agents 清单：工作区 subagents.* 优先覆盖项目根 agents/subagents.*
+ * @returns {{ list: object[], sourceRel: string } | null}
+ */
+function loadAgentCatalog(workspaceRoot, projectRoot) {
+  const candidates = [];
+  for (const base of AGENT_MANIFEST_BASENAMES) {
+    candidates.push({ root: workspaceRoot, abs: path.join(workspaceRoot, base), rel: base });
+    candidates.push({
+      root: projectRoot,
+      abs: path.join(projectRoot, 'agents', base),
+      rel: `agents/${base}`,
+    });
+  }
+
+  for (const c of candidates) {
+    const got = readTextFileUnderWorkspaceRootCached(c.root, c.abs, 512 * 1024);
+    if (!got.ok) continue;
+    try {
+      const data = c.abs.endsWith('.json') ? JSON.parse(got.content) : YAML.parse(got.content);
+      const list = data?.agents || data?.subagents || (Array.isArray(data) ? data : null);
+      if (!Array.isArray(list) || list.length === 0) continue;
+      return { list, sourceRel: c.rel };
+    } catch {
+      continue;
+    }
+  }
+  return null;
+}
+
+function buildAgentsCatalogPrompt(list, maxChars) {
+  const primary = [];
+  const sub = [];
+  for (const item of list) {
+    if (!item || typeof item !== 'object') continue;
+    if (item.disable === true || item.disabled === true) continue;
+    const mode = String(item.mode || 'subagent').toLowerCase();
+    const line = formatAgentCatalogLine(item);
+    if (mode === 'primary' || mode === 'all') primary.push(line);
+    else sub.push(line);
+  }
+  const sections = [];
+  if (primary.length) {
+    sections.push(`### Primary\n\n${primary.join('')}`);
+  }
+  if (sub.length) {
+    sections.push(`### Subagents\n\n${sub.join('')}`);
+  }
+  if (!sections.length) return '';
+  const note =
+    '以下为路由提示（对齐 OpenCode mode）；**不**启动隔离子会话。按 description/when 选用技能与工具，model 字段暂不切换 LLM。\n\n';
+  return truncate(note + sections.join('\n'), maxChars, 'agents-catalog');
+}
 
 function listFilesRecursive(dir, predicate) {
   const out = [];
@@ -148,6 +240,7 @@ export async function buildAgentWorkspaceSection(agentWorkspaceCfg = {}, streamN
     maxTotalChars: 0,
     maxRulesChars: 12_000,
     maxAgentMdChars: 12_000,
+    maxSubagentsChars: 4_000,
     maxDiagnosticsChars: 2_000,
     maxCandidatesPerRoot: DEFAULT_SKILL_LIMITS.maxCandidatesPerRoot,
     maxSkillsLoadedPerSource: DEFAULT_SKILL_LIMITS.maxSkillsLoadedPerSource,
@@ -190,6 +283,7 @@ export async function buildAgentWorkspaceSection(agentWorkspaceCfg = {}, streamN
     proseSections.push(block);
   };
 
+  // --- 1. assistant ---
   if (runtimeConfig.includeAgentMd) {
     injectWorkspaceAssistant(workspaceRoot, runtimeConfig.maxAgentMdChars, pushProse, {
       isMainSession: streamName === 'v3' || !streamName,
@@ -198,6 +292,7 @@ export async function buildAgentWorkspaceSection(agentWorkspaceCfg = {}, streamN
     });
   }
 
+  // --- 2. contextFiles ---
   const extraMarkdownFiles = Array.isArray(runtimeConfig.contextFiles) ? runtimeConfig.contextFiles : [];
   for (const rel of extraMarkdownFiles) {
     if (typeof rel !== 'string' || !rel.trim()) continue;
@@ -209,6 +304,7 @@ export async function buildAgentWorkspaceSection(agentWorkspaceCfg = {}, streamN
     pushProse(safeRel, got.content);
   }
 
+  // --- 3. rules ---
   if (runtimeConfig.includeRules) {
     const rulesDir = path.join(projectRoot, PROJECT_RULES_DIR_REL);
     try {
@@ -233,6 +329,7 @@ export async function buildAgentWorkspaceSection(agentWorkspaceCfg = {}, streamN
 
   const parts = [...proseSections];
 
+  // --- 4. Skills（根路径字典序，保证稳定）---
   const configuredRoots = Array.isArray(runtimeConfig.customSkillRoots) ? runtimeConfig.customSkillRoots.filter(Boolean).map(String) : [];
   const skillRootAbs = new Set();
   for (const rel of configuredRoots) {
@@ -251,28 +348,15 @@ export async function buildAgentWorkspaceSection(agentWorkspaceCfg = {}, streamN
     if (skillsPrompt) parts.push(`## Skills\n\n${skillsPrompt}`);
   }
 
+  // --- 5. Agents 清单（OpenCode 式 mode；提示非隔离执行）---
   if (runtimeConfig.includeSubagents) {
-    for (const rel of SUBAGENT_MANIFEST_RELS) {
-      const fp = path.join(projectRoot, rel);
-      const got = readTextFileUnderWorkspaceRootCached(projectRoot, fp, 512 * 1024);
-      if (!got.ok) continue;
-      try {
-        const data = fp.endsWith('.json') ? JSON.parse(got.content) : YAML.parse(got.content);
-        const list = data?.subagents || data?.agents || (Array.isArray(data) ? data : null);
-        if (!Array.isArray(list) || list.length === 0) continue;
-        let subTxt = '';
-        for (const item of list) {
-          if (!item || typeof item !== 'object') continue;
-          const id = item.name || item.id || 'subagent';
-          const line = item.description || item.prompt || item.instructions || '';
-          const model = item.model ? ` (model: ${item.model})` : '';
-          subTxt += `- **${id}**${model}: ${line}\n`;
-        }
-        parts.push(`## Subagents\n\n${subTxt}`);
-        break;
-      } catch {
-        /* try next */
-      }
+    const catalog = loadAgentCatalog(workspaceRoot, projectRoot);
+    if (catalog) {
+      const maxSub = Number(runtimeConfig.maxSubagentsChars) > 0
+        ? Number(runtimeConfig.maxSubagentsChars)
+        : 4_000;
+      const body = buildAgentsCatalogPrompt(catalog.list, maxSub);
+      if (body) parts.push(`## Agents\n\n${body}`);
     }
   }
 

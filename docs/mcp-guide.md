@@ -58,11 +58,12 @@
 ```
 
 #### `tools.write`
-写入文件内容（覆盖）
+新建文件；目标已存在时须 `overwrite=true` 才整文件覆盖。局部改动用 `search_replace`。
 
 **参数**：
 - `filePath` (string, 必需): 文件路径
 - `content` (string, 必需): 文件内容
+- `overwrite` (boolean, 可选): 已存在时是否允许覆盖，默认 `false`
 
 #### `tools.delete_file`
 删除文件
@@ -71,13 +72,13 @@
 - `filePath` (string, 必需): 文件路径
 
 #### `tools.search_replace`
-按精确子串替换文件内容（改代码优先于此；勿用已移除的 `modify_file`）。
+按精确子串替换文件内容（**改已有文件首选**；勿用已移除的 `modify_file`）。
 
 **参数**：
 - `filePath` (string, 必需): 文件路径
-- `old_string` (string, 必需): 要替换的原文（须唯一匹配，除非 `replace_all`）
-- `new_string` (string, 必需): 替换后文本
-- `replace_all` (boolean, 可选): 是否替换全部匹配
+- `oldText` (string, 必需): 要替换的原文（须唯一匹配，除非 `replaceAll`）
+- `newText` (string, 必需): 替换后文本
+- `replaceAll` (boolean, 可选): 是否替换全部匹配
 
 #### `tools.grep`
 在文件中搜索文本

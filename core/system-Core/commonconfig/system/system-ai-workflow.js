@@ -331,8 +331,8 @@ export const aiWorkflowConfig = {
               },
               includeSubagents: {
                 type: 'boolean',
-                label: '包含 subagents 清单',
-                description: '项目根 agents/subagents.yaml|json',
+                label: '包含 Agents 清单',
+                description: '注入 agents/subagents.yaml（或工作区同名文件）；条目为 prompt 路由提示，非隔离子会话',
                 default: true,
                 component: 'Switch'
               },
@@ -429,6 +429,14 @@ export const aiWorkflowConfig = {
                 label: 'AGENT 文件最大字符',
                 min: 100,
                 default: 12000,
+                component: 'InputNumber'
+              },
+              maxSubagentsChars: {
+                type: 'number',
+                label: 'Agents 清单最大字符',
+                description: 'Primary / Subagents 注入段总预算',
+                min: 100,
+                default: 4000,
                 component: 'InputNumber'
               }
             }

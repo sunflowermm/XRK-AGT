@@ -34,7 +34,7 @@
 - `llm.retry.*`
 - `embedding.enabled` / `embedding.maxContexts`
 - `mcp.*`
-- `agentWorkspace.*`
+- `agentWorkspace.*`（注入与预算；完整契约见 [agents.md](agents.md)）
 - `tools.file.*`
 
 说明：

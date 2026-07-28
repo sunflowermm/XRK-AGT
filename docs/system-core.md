@@ -341,7 +341,7 @@ const stream = await this.getWorkflow('desktop');
 **文件**: `core/system-Core/workflow/tools.js`  
 **优先级**: 200  
 
-**工具**：`read`、`grep`、`search_replace`、`write`、`delete_file`、`list_files`、`run`（新建文件用 `write`，自动建目录；改代码优先 `search_replace`）  
+**工具**：`read`、`grep`、`search_replace`、`write`、`delete_file`、`list_files`、`run`（改已有用 `search_replace`；`write` 新建，已存在须 `overwrite=true`；契约见 [agents.md](agents.md)）  
 
 **配置**：`ai-workflow.tools.file`（`workspace`、`maxReadChars`、`grepMaxResults`、`runEnabled`、`runTimeoutMs`、`maxCommandOutputChars`）。`run` 在 Windows 与 Unix 下均可使用（Unix 为 `/bin/sh -lc`）。
 

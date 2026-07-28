@@ -27,7 +27,7 @@ export const serverConfig = {
               url: {
                 type: 'string',
                 label: '外部访问URL',
-                description: '用于生成完整的访问链接，留空则自动检测',
+                description: '启动展示与 Web 控制台基址；留空则公网 IP（detectPublicIP）或 127.0.0.1',
                 default: '',
                 component: 'Input'
               }
@@ -1038,6 +1038,7 @@ export const serverConfig = {
               detectPublicIP: {
                 type: 'boolean',
                 label: '检测公网IP',
+                description: 'server.url 为空时，用公网 IP 作为启动展示基址；关闭则回退 127.0.0.1',
                 default: true,
                 component: 'Switch'
               },
@@ -1056,35 +1057,6 @@ export const serverConfig = {
                 min: 100,
                 default: 3000,
                 component: 'InputNumber'
-              },
-              udpProbe: {
-                type: 'object',
-                label: 'UDP 探测配置',
-                component: 'SubForm',
-                fields: {
-                  host: {
-                    type: 'string',
-                    label: '探测目标主机',
-                    description: '用于 UDP 探测本机出口 IP 的远端地址',
-                    default: '223.5.5.5',
-                    component: 'Input'
-                  },
-                  port: {
-                    type: 'number',
-                    label: '探测目标端口',
-                    min: 1,
-                    max: 65535,
-                    default: 80,
-                    component: 'InputNumber'
-                  },
-                  timeoutMs: {
-                    type: 'number',
-                    label: '探测超时（毫秒）',
-                    min: 100,
-                    default: 3000,
-                    component: 'InputNumber'
-                  }
-                }
               },
               trashCleanupIntervalMinutes: {
                 type: 'number',

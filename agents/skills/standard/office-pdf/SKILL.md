@@ -1,73 +1,77 @@
 ---
 name: office-pdf
-description: PDF 全文/表格提取、合并拆分、旋转、OCR、水印、简单生成；工作区 run + pypdf/pdfplumber/qpdf/pdftotext
+description: |
+  PDF：读正文/表格、合并拆分、OCR、转文本；工作区 run + pypdf/pdfplumber 等；缺环境则请用户粘贴。
+  触发词：「读这个 PDF」「合并 PDF」「拆 PDF」「OCR」「PDF 转文字」「提取表格」。
+  要 Word 走 office-docx；表格进 Excel 走 office-xlsx。
+metadata:
+  version: 2.0.0
 ---
+
+# PDF 处理
+
+你是办事助手的 PDF 帮手。目标：从 PDF **抽出可用文字/表格**，或合并拆分；扫面件尽量 OCR；做不到就说清缺什么。
 
 ## 何时使用
 
-`.pdf`：读内容、并/拆、转 txt、扫面 OCR、加水印、元数据、简单生成。
+- 读 `.pdf` 正文、抽表、合并/拆分/旋转
+- 扫描件 OCR、简单加水印/生成
 
-## 工具链（按环境选）
+**不适用**：长文结构写作（→ **office-doc**）；只要 Word（→ **office-docx**）。
+
+## 动手前：缺省假设
+
+| 信息 | 缺省假设 |
+|------|----------|
+| 文件位置 | 先放入工作区再处理 |
+| 密码 PDF | **用户提供合法密码**才解密 |
+| 缺工具 | 请用户粘贴关键页，或说明无法 OCR |
+
+读 **ENV.md**；无 run → **office-env-setup** 降级。
+
+## 原则
+
+- 不编造 PDF 里没有的字/数  
+- 表格抽出后可交 **office-xlsx**  
+- OCR 失败如实说明（缺 Tesseract/中文包）
+
+## 工具链
 
 | 任务 | 方式 |
 |------|------|
-| 读正文 | `pdftotext -layout in.pdf out.txt`（poppler） |
-| 读表格 | Python `pdfplumber` |
-| 合并/拆分/旋转 | `qpdf` 或 `pypdf` |
-| 扫描 OCR | `pdf2image` + `pytesseract` |
-| 简单生成 | `reportlab` |
+| 读正文 | `pdftotext -layout` 或 pypdf |
+| 读表格 | `pdfplumber` |
+| 合并/拆分 | `qpdf` / `pypdf` |
+| OCR | `pdf2image` + `pytesseract` |
 
-文件均在 **Agent 工作区**；用 `write` 写脚本、`run` 执行、`list_files` 验收。
+流程：`write` 脚本 → 确认后 `run` → `list_files` 验收。
 
-## Python 片段
+## 示例
 
 ```python
-# 合并
 from pypdf import PdfReader, PdfWriter
 w = PdfWriter()
 for f in ["a.pdf", "b.pdf"]:
     for p in PdfReader(f).pages: w.add_page(p)
-with open("merged.pdf", "wb") as o: w.write(o)
-
-# 表格 → 列表
-import pdfplumber
-with pdfplumber.open("in.pdf") as pdf:
-    for page in pdf.pages:
-        for table in page.extract_tables() or []:
-            print(table)
+with open("exports/merged.pdf", "wb") as o: w.write(o)
 ```
-
-## 命令行
 
 ```bash
-pdftotext -layout input.pdf output.txt
-qpdf --empty --pages a.pdf b.pdf -- merged.pdf
-qpdf input.pdf --pages . 1-3 -- p1-3.pdf
+pdftotext -layout input.pdf exports/output.txt
+qpdf --empty --pages a.pdf b.pdf -- exports/merged.pdf
 ```
 
-## OCR 扫描件
+## 质量清单
 
-```python
-from pdf2image import convert_from_path
-import pytesseract
-text = []
-for i, img in enumerate(convert_from_path("scan.pdf")):
-    text.append(f"--- Page {i+1} ---\n" + pytesseract.image_to_string(img, lang="chi_sim+eng"))
-open("ocr.txt", "w", encoding="utf-8").write("\n".join(text))
-```
-
-需系统 Tesseract 中文包；缺失时先告知用户再装依赖。
-
-## 后续
-
-- 表格要 Excel → `office-xlsx`
-- 纪要 → `office-meeting`
+- [ ] 输出是否在工作区且路径已告知？
+- [ ] 是否未杜撰正文？
+- [ ] 密码 PDF 是否经用户授权？
 
 ## 禁止
 
-- 不编造 PDF 原文
-- 不解密受密码保护 PDF，除非用户提供合法密码
+- 不编造原文；不破解密码
+- 未确认不装系统级 OCR 包
 
-## 缺环境
+## 相关技能
 
-无 run / 无 pypdf / 无 OCR → **office-env-setup**（用户粘贴、pdftotext、或说明无法处理扫描件）
+**office-xlsx** · **office-meeting** · **office-env-shell** · **office-env-setup**

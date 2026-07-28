@@ -85,14 +85,33 @@ export class BaseTools {
   }
 
   /**
-   * 写入文件
+   * 写入文件。overwrite=false 时若目标已存在则拒绝（逼模型改用 searchReplace）。
+   * @param {string} filePath
+   * @param {string} content
+   * @param {string} [encoding='utf8']
+   * @param {{ overwrite?: boolean }} [options]
    */
-  async writeFile(filePath, content, encoding = 'utf8') {
+  async writeFile(filePath, content, encoding = 'utf8', options = {}) {
+    const { overwrite = false } = options;
     const fullPath = this.resolvePath(filePath);
     try {
+      let exists = false;
+      try {
+        await fs.access(fullPath);
+        exists = true;
+      } catch {
+        exists = false;
+      }
+      if (exists && !overwrite) {
+        return {
+          success: false,
+          error: '文件已存在：局部改动请用 search_replace；确需整文件覆盖请传 overwrite=true',
+          path: fullPath
+        };
+      }
       await fs.mkdir(path.dirname(fullPath), { recursive: true });
       await fs.writeFile(fullPath, content, encoding);
-      return { success: true, path: fullPath };
+      return { success: true, path: fullPath, overwritten: exists };
     } catch (error) {
       return { success: false, error: error.message, path: fullPath };
     }

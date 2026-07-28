@@ -161,6 +161,7 @@ const result = await bot.em('stdin.message', {
 await bot.run({ port: 端口号 });  // 端口号由开发者指定
 await bot.closeServer();
 const url = bot.getServerUrl();
+// public：按 server.misc.detectPublicIP 探测；local 恒为 []（展示基址见 server.server.url → 公网 → 127.0.0.1）
 const ipInfo = await bot.getLocalIpAddress();
 ```
 

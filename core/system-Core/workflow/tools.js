@@ -192,7 +192,8 @@ export default class ToolsStream extends AiWorkflow {
     });
 
     this.registerMCPTool('write', {
-      description: '整文件写入（覆盖）。新建或重写用此工具；局部改动优先 search_replace。',
+      description:
+        '新建文件或整文件覆盖。已存在文件默认拒绝，须 overwrite=true；局部改动必须用 search_replace（对齐 OpenCode：edit 改、write 建）。',
       inputSchema: {
         type: 'object',
         properties: {
@@ -203,27 +204,33 @@ export default class ToolsStream extends AiWorkflow {
           content: {
             type: 'string',
             description: '文件内容'
+          },
+          overwrite: {
+            type: 'boolean',
+            description: '目标已存在时是否允许整文件覆盖（默认 false）',
+            default: false
           }
         },
         required: ['filePath', 'content']
       },
-      handler: async (args = {}, context = {}) => {
-        const { filePath, content } = args;
+      handler: async (args = {}) => {
+        const { filePath, content, overwrite = false } = args;
         if (!filePath) return { success: false, error: '文件路径不能为空' };
         if (content === undefined) return { success: false, error: '文件内容不能为空' };
 
-        const result = await this.tools.writeFile(filePath, content);
-        
+        const result = await this.tools.writeFile(filePath, content, 'utf8', { overwrite: !!overwrite });
+
         if (result.success) {
           return {
             success: true,
             data: {
               filePath: result.path,
-              message: '文件写入成功'
+              overwritten: !!result.overwritten,
+              message: result.overwritten ? '文件已整文件覆盖' : '文件写入成功'
             }
           };
         }
-        
+
         return { success: false, error: result.error };
       },
       enabled: true
@@ -407,7 +414,7 @@ export default class ToolsStream extends AiWorkflow {
     const ws = this.workspace;
     return `【基础工具】read / grep / search_replace / write / delete_file / list_files / run
 工作区 cwd: ${ws}
-改代码：grep → read → search_replace；整文件用 write。已移除 modify_file。run 受超时约束，勿伪造输出。`;
+改已有文件：grep → read → search_replace（oldText/newText）。write 仅新建；已存在须 overwrite=true 才整文件覆盖。已移除 modify_file。run 受超时约束，勿伪造输出。`;
   }
 }
 

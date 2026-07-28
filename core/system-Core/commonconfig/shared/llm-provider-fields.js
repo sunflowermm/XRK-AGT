@@ -286,7 +286,7 @@ function baseProviderEntryFields(options = {}) {
     enableTools: { type: 'boolean', label: '启用 MCP 工具', default: true, component: 'Switch' },
     toolChoice: { type: 'string', label: 'tool_choice', default: 'auto', component: 'Input' },
     parallelToolCalls: { type: 'boolean', label: 'parallel_tool_calls', default: true, component: 'Switch' },
-    maxToolRounds: { type: 'number', label: '最大工具轮次', min: 1, max: 20, default: 7, component: 'InputNumber' },
+    maxToolRounds: { type: 'number', label: '最大工具轮次', min: 1, default: 7, component: 'InputNumber' },
     enableStream: { type: 'boolean', label: '启用流式', default: true, component: 'Switch' },
     headers: HEADERS_FIELD,
     extraBody: EXTRA_BODY_FIELD,

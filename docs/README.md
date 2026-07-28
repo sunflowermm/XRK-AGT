@@ -35,7 +35,7 @@
 | `core/<name>/` | 业务：plugin / http / stream / tasker / events / commonconfig / www | system-Core 是 |
 | `config/default_config/` | 配置模板 | 是 |
 | `data/` | 运行期数据（按端口分目录） | 否（gitignore） |
-| `agents/` | Agent 面：`workspace/` · `rules/` · `skills/standard/` · `subagents.yaml`（见 `agents/README.md`） | 是 |
+| `agents/` | Agent 面：`workspace/` · `rules/` · `skills/standard/` · `subagents.yaml`（契约 [agents.md](agents.md)、种子 [agents/README.md](../agents/README.md)） | 是 |
 | `core/system-Core/www/xrk/` | 内置 Web 控制台 | 是 |
 | `core/system-Core/site/` | 站点根静态（`/`，favicon 等；`paths.www`） | 是 |
 | `.cursor/` | Cursor 技能、规则、命令（**权威副本**） | 是 |
@@ -98,6 +98,7 @@
 
 - **说明**：Node 侧统一通过工作流 + MCP 工具完成能力编排；如需 Python 侧能力，请在子服务端按 `apis/<group>/*.py` 扩展自定义接口。
 - **[底层架构设计](底层架构设计.md)** - AI 主链路、AiWorkflow 链路、子服务端职责边界（权威）
+- **[Agents 运行时面](agents.md)** - 工作区注入、Agents 清单、文件工具改写契约
 - **[MCP 完整指南](mcp-guide.md)** - MCP 工具注册与连接
 - **[MCP 配置指南](mcp-config-guide.md)** - Cursor、Claude Desktop 等外部平台连接配置
 - **[AiWorkflow 工作流基类文档](ai-workflow.md)** - `AiWorkflow` 基类技术文档，涵盖 Embedding、多提供商支持、Function Calling 与上下文增强（MCP 工具 vs Call Function 见该文档）

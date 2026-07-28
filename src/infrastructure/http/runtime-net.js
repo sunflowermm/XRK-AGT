@@ -1,9 +1,9 @@
 /**
- * 服务器网络/配置访问辅助（host/url/代理、本机 IP、对外 URL、启动地址展示）
+ * 服务器网络/配置访问辅助（host/url/代理、公网 IP、启动地址展示）
  * 从 AgentRuntime 拆出，供 listen/proxy/boot 与 facade 共用。
+ *
+ * 展示基址以 yaml 为准：server.server.url → 公网（misc.detectPublicIP）→ 127.0.0.1
  */
-import dgram from 'node:dgram';
-import os from 'node:os';
 import chalk from 'chalk';
 import RuntimeUtil from '#utils/runtime-util.js';
 import runtimeConfig from '#infrastructure/config/config.js';
@@ -66,121 +66,106 @@ export function getPublicServerUrl(runtime, override = '') {
 }
 
 /**
+ * 将 server.url（可无 scheme）归一为带端口的展示 origin/path。
+ * @param {string} protocol
+ * @param {number} port
+ */
+function formatConfiguredDisplayUrl(protocol, port) {
+  const configuredUrl = getConfiguredServerUrl();
+  if (!configuredUrl) return '';
+
+  let normalizedUrl = configuredUrl;
+  if (!/^https?:\/\//i.test(normalizedUrl)) {
+    normalizedUrl = `${protocol}://${normalizedUrl}`;
+  }
+
+  try {
+    const parsed = new URL(normalizedUrl);
+    if (!parsed.port) parsed.port = String(port);
+    return parsed.origin + parsed.pathname.replace(/\/$/, '');
+  } catch {
+    const hasPort = /:[0-9]+$/.test(normalizedUrl.split('://')[1] || '');
+    return hasPort ? normalizedUrl.replace(/\/$/, '') : `${normalizedUrl.replace(/\/$/, '')}:${port}`;
+  }
+}
+
+/**
+ * 启动展示 / Web 基址：配置 url > 公网 > 127.0.0.1
+ * @param {string|null} publicIp
+ * @param {string} protocol
+ * @param {number} port
+ */
+function resolveAccessBase(publicIp, protocol, port) {
+  const configured = formatConfiguredDisplayUrl(protocol, port);
+  if (configured) {
+    try {
+      return new URL(configured).origin;
+    } catch {
+      return configured.replace(/\/+$/, '');
+    }
+  }
+  if (publicIp) {
+    return `${protocol}://${publicIp}:${port}`;
+  }
+  return `${protocol}://127.0.0.1:${port}`;
+}
+
+/**
  * @param {import('../../agent-runtime.js').default} runtime
  * @param {string} protocol
  * @param {number} port
  */
 export async function displayAccessUrls(runtime, protocol, port) {
-  const ipInfo = await getLocalIpAddress(runtime);
+  const detectPublic = runtimeConfig.server?.misc?.detectPublicIP !== false;
+  const publicIp = detectPublic ? await getPublicIP(runtime) : null;
+  const base = resolveAccessBase(publicIp, protocol, port);
 
   console.log(chalk.cyan('\n▶ 访问地址：'));
+  console.log(`    ${chalk.cyan('•')} ${chalk.white(base)}`);
 
-  if (ipInfo.local.length > 0) {
-    console.log(chalk.yellow('  本地网络：'));
-    ipInfo.local.forEach((info) => {
-      const url = `${protocol}://${info.ip}:${port}`;
-      const label = info.primary ? chalk.green(' ★') : '';
-      const interfaceInfo = chalk.gray(` [${info.interface}]`);
-      console.log(`    ${chalk.cyan('•')} ${chalk.white(url)}${interfaceInfo}${label}`);
-    });
-  }
-
-  if (ipInfo.public && runtimeConfig.server?.misc?.detectPublicIP !== false) {
-    console.log(chalk.yellow('\n  公网访问：'));
-    const publicUrl = `${protocol}://${ipInfo.public}:${port}`;
-    console.log(`    ${chalk.cyan('•')} ${chalk.white(publicUrl)}`);
-  }
-
-  const configuredUrl = getConfiguredServerUrl();
-  if (configuredUrl) {
+  const configuredDisplay = formatConfiguredDisplayUrl(protocol, port);
+  if (configuredDisplay && configuredDisplay !== base && !configuredDisplay.startsWith(base)) {
     console.log(chalk.yellow('\n  配置域名：'));
-
-    let normalizedUrl = configuredUrl;
-    if (!/^https?:\/\//i.test(normalizedUrl)) {
-      normalizedUrl = `${protocol}://${normalizedUrl}`;
-    }
-
-    let displayUrl = normalizedUrl.replace(/\/$/, '');
-    try {
-      const parsed = new URL(normalizedUrl);
-      if (!parsed.port) {
-        parsed.port = String(port);
-      }
-      displayUrl = parsed.origin + parsed.pathname.replace(/\/$/, '');
-    } catch {
-      const hasPort = /:[0-9]+$/.test(normalizedUrl.split('://')[1] || '');
-      if (!hasPort) {
-        displayUrl = `${normalizedUrl}:${port}`;
-      }
-    }
-
-    console.log(`    ${chalk.cyan('•')} ${chalk.white(displayUrl)}`);
+    console.log(`    ${chalk.cyan('•')} ${chalk.white(configuredDisplay)}`);
   }
 
   const wwwPaths = Array.isArray(runtime.wwwMountPaths) ? runtime.wwwMountPaths : [];
   if (wwwPaths.length) {
-    console.log(chalk.yellow('\n  Web 控制台：'));
-    const bases = [];
-    if (ipInfo.local.length > 0) {
-      const primary = ipInfo.local.find((i) => i.primary) || ipInfo.local[0];
-      bases.push(`${protocol}://${primary.ip}:${port}`);
-    } else {
-      bases.push(`${protocol}://127.0.0.1:${port}`);
-    }
-    for (const mount of wwwPaths) {
+    const norm = (mount) => {
       const rel = String(mount).replace(/\/$/, '') || '';
-      for (const base of bases) {
-        console.log(`    ${chalk.cyan('•')} ${chalk.white(`${base}${rel}/`)}`);
-      }
+      return rel.startsWith('/') ? `${rel}/` : `/${rel}/`;
+    };
+    const paths = wwwPaths.map(norm);
+    const systemPaths = paths.filter((p) => p === '/xrk/');
+    const otherPaths = paths.filter((p) => p !== '/xrk/').sort((a, b) => a.localeCompare(b));
+
+    console.log(chalk.yellow('\n  Web 控制台：'));
+    console.log(`    ${chalk.gray('基址')} ${chalk.white(base)}`);
+    if (systemPaths.length) {
+      console.log(`    ${chalk.gray('系统')} ${chalk.white(systemPaths.join('  '))}`);
     }
-    console.log(chalk.gray('    浏览器打开后粘贴上方 API 密钥到顶栏'));
+    if (otherPaths.length) {
+      console.log(`    ${chalk.gray('其它')} ${chalk.white(otherPaths.join('  '))}`);
+    }
+    console.log(chalk.gray('    路径拼在基址后打开；顶栏粘贴 API 密钥'));
   }
 }
 
 /**
+ * 网络信息（兼容旧 API）。不再枚举局域网网卡；仅按 yaml 探测公网。
  * @param {import('../../agent-runtime.js').default} runtime
+ * @returns {Promise<{ local: [], public: string|null, primary: null }>}
  */
 export async function getLocalIpAddress(runtime) {
   const cacheKey = 'local_ip_addresses';
   const cached = runtime._cache.get(cacheKey);
   if (cached) return cached;
 
-  const result = {
-    local: [],
-    public: null,
-    primary: null
-  };
-
+  const result = { local: [], public: null, primary: null };
   try {
-    const interfaces = os.networkInterfaces();
-
-    for (const [name, ifaces] of Object.entries(interfaces)) {
-      if (name.toLowerCase().includes('lo')) continue;
-
-      for (const iface of ifaces) {
-        if (iface.family !== 'IPv4' || iface.internal) continue;
-
-        result.local.push({
-          ip: iface.address,
-          interface: name,
-          mac: iface.mac,
-          virtual: isVirtualInterface(name)
-        });
-      }
-    }
-
-    try {
-      result.primary = await getIpByUdp();
-      const existingItem = result.local.find((item) => item.ip === result.primary);
-      if (existingItem) {
-        existingItem.primary = true;
-      }
-    } catch { /* probe optional */ }
-
     if (runtimeConfig.server?.misc?.detectPublicIP !== false) {
-      result.public = await getPublicIP();
+      result.public = await getPublicIP(runtime);
     }
-
     runtime._cache.set(cacheKey, result);
     return result;
   } catch (err) {
@@ -189,49 +174,21 @@ export async function getLocalIpAddress(runtime) {
   }
 }
 
-function isVirtualInterface(name) {
-  const virtualPatterns = [
-    /^(docker|br-|veth|virbr|vnet)/i,
-    /^(vmnet|vmware)/i,
-    /^(vboxnet|virtualbox)/i
-  ];
-  return virtualPatterns.some((p) => p.test(name));
-}
-
-function getIpByUdp() {
-  return new Promise((resolve, reject) => {
-    const socket = dgram.createSocket('udp4');
-    const udpCfg = runtimeConfig.server?.misc?.udpProbe || {};
-    const probeHost = (udpCfg.host && String(udpCfg.host).trim()) || '223.5.5.5';
-    const probePort = Number(udpCfg.port) || 80;
-    const timeoutMs = Number(udpCfg.timeoutMs) || 3000;
-    const timeout = setTimeout(() => {
-      socket.close();
-      reject(new Error('UDP超时'));
-    }, timeoutMs);
-
-    try {
-      socket.connect(probePort, probeHost, () => {
-        clearTimeout(timeout);
-        const address = socket.address();
-        socket.close();
-        resolve(address.address);
-      });
-    } catch (err) {
-      clearTimeout(timeout);
-      socket.close();
-      reject(err);
-    }
-  });
-}
-
 function isValidIP(ip) {
   if (!ip) return false;
-  const ipv4Regex = /^((25[0-5]|2[0-4]\d|[01]?\d\d?)\.){3}(25[0-5]|2[0-4]\d|[01]?\d\d?)$/;
-  return ipv4Regex.test(ip);
+  return /^((25[0-5]|2[0-4]\d|[01]?\d\d?)\.){3}(25[0-5]|2[0-4]\d|[01]?\d\d?)$/.test(ip);
 }
 
-async function getPublicIP() {
+/**
+ * @param {import('../../agent-runtime.js').default} [runtime]
+ */
+async function getPublicIP(runtime) {
+  const cacheKey = 'public_ip_only';
+  if (runtime?._cache) {
+    const hit = runtime._cache.get(cacheKey);
+    if (hit !== undefined) return hit;
+  }
+
   const apis = (Array.isArray(runtimeConfig.server?.misc?.publicIpApis) && runtimeConfig.server.misc.publicIpApis.length)
     ? runtimeConfig.server.misc.publicIpApis
     : [
@@ -242,6 +199,7 @@ async function getPublicIP() {
     ];
   const timeoutMs = Number(runtimeConfig.server?.misc?.publicIpTimeoutMs) || 3000;
 
+  let found = null;
   for (const apiUrl of apis) {
     try {
       const response = await fetch(apiUrl, {
@@ -254,7 +212,8 @@ async function getPublicIP() {
       if (response.ok) {
         const ip = (await response.text()).trim();
         if (ip && isValidIP(ip)) {
-          return ip;
+          found = ip;
+          break;
         }
       }
     } catch {
@@ -262,6 +221,9 @@ async function getPublicIP() {
     }
   }
 
-  RuntimeUtil.makeLog('debug', '获取公网IP失败，所有API均不可用', '服务器');
-  return null;
+  if (!found) {
+    RuntimeUtil.makeLog('debug', '获取公网IP失败，所有API均不可用', '服务器');
+  }
+  if (runtime?._cache) runtime._cache.set(cacheKey, found);
+  return found;
 }
