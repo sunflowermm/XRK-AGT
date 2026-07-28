@@ -35,6 +35,7 @@ import {
   segReplyId,
   segText,
 } from '#utils/onebot-message-seg.js';
+import { chatSessionHistory } from '#utils/chat-session-history.js';
 import { summarizeToolForHistory } from '#utils/mcp-tool-result-text.js';
 import { readImageBuffer } from '#utils/entry-media.js';
 import {
@@ -62,7 +63,10 @@ function stripLegacyToolUsagePrefix(text) {
 /** 聊天工作流：群聊/互动/群管 MCP 工具 */
 export default class ChatStream extends AiWorkflow {
   static emotionImages = {};
-  static messageHistory = new Map();
+  /** 笔录单例（勿再 new Map：FileLoader ?t= 热重载会拆出多份静态字段） */
+  static get messageHistory() {
+    return chatSessionHistory;
+  }
   static cleanupTimer = null;
   /**
    * 已通过用户可见动作体现的工具，不再重复记【我·工具】（基名匹配）。
@@ -2663,10 +2667,13 @@ export default class ChatStream extends AiWorkflow {
   getHistorySource(e) {
     const historyKey = ChatStream.getEventHistoryKey(e);
     if (!historyKey) return null;
-    const getter =
-      (e?.group && typeof e.group.getChatHistory === 'function' && e.group.getChatHistory) ||
-      (typeof e?.getChatHistory === 'function' && e.getChatHistory) ||
-      null;
+    // e.getChatHistory 多为已 bind；e.group.getChatHistory 必须 bind，否则 this 丢失会静默空结果
+    let getter = null;
+    if (typeof e?.getChatHistory === 'function') {
+      getter = e.getChatHistory.bind(e);
+    } else if (e?.group && typeof e.group.getChatHistory === 'function') {
+      getter = e.group.getChatHistory.bind(e.group);
+    }
     if (!getter) return null;
     return { historyKey, getter };
   }

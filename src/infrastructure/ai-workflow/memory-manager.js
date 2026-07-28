@@ -2,7 +2,7 @@
  * Memory Manager — 进程内短期 / 长期记忆（关键词 contains，非向量 RAG）。
  * - 短期：AiWorkflow.storeMessageMemory / retrieveRelevantContexts
  * - 长期：system-Core `workflow/memory.js` 的 MCP 工具写入与检索
- * 主对话历史仍以 ChatStream.messageHistory 为准。
+ * 主对话历史仍以 chatSessionHistory / ChatStream.messageHistory 为准。
  */
 export class MemoryManager {
   shortTermMemories = new Map();
