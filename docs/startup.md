@@ -39,15 +39,20 @@ flowchart TD
 
 实现位于 `src/utils/bootstrap.js`（`app.js` 仅一行调用）。
 
-1. **环境验证** — Node **≥ 26**；`paths.ensureBaseDirs()`；`paths.warmupCoreLayout()` 预热 `core/*` 子目录索引。
-2. **依赖管理**（`src/utils/bootstrap-deps.js`，跨平台命令解析见 `src/utils/command-spawn.js`）  
-   - 根目录 `package.json` 缺失项 → **仅 pnpm install**（`PUPPETEER_SKIP_DOWNLOAD` 默认 `true`）。  
-   - `core/*` 含 `package.json` 的子包各自 `pnpm install`。  
-   - `core/*/www/<app>/` 前端依赖（可用 `XRK_SKIP_FRONTEND_BOOTSTRAP=1` 跳过）。  
-   - **不在引导阶段安装 Playwright Chromium**；见下方「Playwright 浏览器」。
-3. **动态 imports** — 合并 `data/importsJson/*.json` 的 `imports` 到根 `package.json`。
+**按入口分流**（`process.argv[2] === 'server'`）：
 
-`node app server` 且 `XRK_SKIP_BOOTSTRAP=1` 时跳过依赖安装，仍加载 `start.js`。
+| 入口 | 行为 |
+|------|------|
+| `node app`（菜单） | 仅环境验证（Node ≥ 26、目录预热），尽快进菜单 |
+| `node app server`（含 Ctrl+C 热重启子进程） | 完整依赖检查后再加载 `start.js` |
+
+**server 依赖步骤**（`src/utils/bootstrap-deps.js`，跨平台见 `src/utils/command-spawn.js`）：
+
+1. 根目录 `package.json` 缺失项 → **仅 pnpm install**（`PUPPETEER_SKIP_DOWNLOAD` 默认 `true`）。
+2. `core/*` 含 `package.json` 的子包各自 `pnpm install`。
+3. `core/*/www/<app>/` 前端依赖（`XRK_SKIP_FRONTEND_BOOTSTRAP=1` 可跳过；热重启默认跳过）。
+4. **不在引导阶段安装 Playwright Chromium**；见下方「Playwright 浏览器」。
+5. 合并 `data/importsJson/*.json` 的 `imports` 到根 `package.json`。
 
 ---
 
@@ -66,9 +71,8 @@ flowchart TD
 
 | 变量 | 作用 |
 |------|------|
-| `XRK_SKIP_BOOTSTRAP=1` | `node app server` 时跳过引导中的依赖安装 |
-| `XRK_SKIP_CONFIG_CHECK=1` | 跳过配置检查 |
-| `XRK_SKIP_FRONTEND_BOOTSTRAP=1` | 跳过 `core/*/www` 前端依赖检查 |
+| `XRK_SKIP_CONFIG_CHECK=1` | 跳过端口配置检查（热重启由父进程设置） |
+| `XRK_SKIP_FRONTEND_BOOTSTRAP=1` | 跳过 `core/*/www` 前端依赖检查（热重启默认设置） |
 | `XRK_SKIP_FRONTEND_START=1` | 跳过前端 dev server |
 | `PUPPETEER_SKIP_DOWNLOAD` | 覆盖 Puppeteer Chromium 下载（默认 `true`） |
 

@@ -345,8 +345,8 @@ class ServerManager extends BaseManager {
       ...process.env,
       XRK_SERVER_PORT: port.toString(),
       XRK_SKIP_CONFIG_CHECK: skipConfigCheck ? '1' : '0',
-      XRK_SKIP_BOOTSTRAP: skipConfigCheck ? '1' : '0',
-      XRK_SKIP_FRONTEND_BOOTSTRAP: skipConfigCheck ? '1' : '0',
+      // 热重启仍走 app.js initialize（查根/插件依赖）；仅跳过前端依赖扫描
+      XRK_SKIP_FRONTEND_BOOTSTRAP: skipConfigCheck ? '1' : (process.env.XRK_SKIP_FRONTEND_BOOTSTRAP || '0'),
       XRK_SKIP_FRONTEND_START: process.env.XRK_SKIP_FRONTEND_START || '0',
       XRK_FAST_START: process.env.XRK_FAST_START || '0'
     };

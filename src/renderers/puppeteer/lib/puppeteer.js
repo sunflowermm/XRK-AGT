@@ -69,11 +69,18 @@ export default class PuppeteerRenderer extends BrowserRendererBase {
       }
 
       if (!this.browser) {
-        this.browser = await puppeteer.launch(this.config).catch((err) => {
+        this.browser = await puppeteer.launch(this.buildBrowserLaunchOptions()).catch((err) => {
           RuntimeUtil.makeLog("error", `Failed to start Chromium: ${err.message}`, this.logTag);
 
-          if (err.message.includes("Could not find Chromium")) {
-            RuntimeUtil.makeLog("error", "Chromium not installed. Try: node node_modules/puppeteer/install.js", this.logTag);
+          if (
+            err.message.includes("Could not find Chromium") ||
+            /Executable doesn't exist|Failed to launch/i.test(err.message)
+          ) {
+            RuntimeUtil.makeLog(
+              "error",
+              "未找到 Chromium：请安装系统 Chrome/Edge，或配置 chromiumPath / PUPPETEER_EXECUTABLE_PATH",
+              this.logTag
+            );
           } else if (err.message.includes("cannot open shared object file")) {
             RuntimeUtil.makeLog("error", "Chromium runtime libraries not installed", this.logTag);
           }
@@ -112,7 +119,7 @@ export default class PuppeteerRenderer extends BrowserRendererBase {
     if (this.healthCheckTimer) return;
 
     this.healthCheckTimer = setInterval(async () => {
-      if (!this.browser || this.shoting.length > 0) return;
+      if (!this.browser || this.activeSlotCount() > 0) return;
 
       try {
         await this.browser.pages();
@@ -124,106 +131,110 @@ export default class PuppeteerRenderer extends BrowserRendererBase {
   }
 
   async screenshot(name, data = {}) {
-    await this.waitForScreenshotSlot();
-    if (!await this.browserInit()) return false;
-
-    const prepared = this.prepareScreenshotFile(name, data);
-    if (!prepared) return false;
-
-    const { filePath, pageHeight } = prepared;
-    let ret = [];
-    let page = null;
-    this.shoting.push(name);
-    const start = Date.now();
+    const slot = await this.acquireScreenshotSlot(name, data, this.puppeteerTimeout);
+    if (!slot) return false;
 
     try {
-      page = await this.browser.newPage();
-      if (!page) throw new Error("Failed to create page");
+      if (!await this.browserInit()) return false;
 
-      const sysScale = Number(data.sys?.scale);
-      const viewport = { ...this.viewport };
-      if (Number.isFinite(sysScale) && sysScale > 0) {
-        viewport.deviceScaleFactor = Math.min(Math.max(sysScale, 1), 4);
-      }
-      await page.setViewport(viewport);
+      const prepared = this.prepareScreenshotFile(name, data);
+      if (!prepared) return false;
 
-      const gotoOpts = { timeout: this.puppeteerTimeout, waitUntil: "load", ...data.pageGotoParams };
-      await page.goto(Renderer.toFileUrl(filePath), gotoOpts);
-      await page.evaluate(() => new Promise(r => setTimeout(r, 400)));
+      const { filePath, pageHeight } = prepared;
+      let ret = [];
+      let page = null;
+      const start = Date.now();
 
-      const body = (await page.$("#container")) || (await page.$("body"));
-      if (!body) throw new Error("Content element not found");
+      try {
+        page = await this.browser.newPage();
+        if (!page) throw new Error("Failed to create page");
 
-      const boundingBox = await body.boundingBox();
-      const screenshotOptions = this.buildScreenshotOptions(data);
+        const sysScale = Number(data.sys?.scale);
+        const viewport = { ...this.viewport };
+        if (Number.isFinite(sysScale) && sysScale > 0) {
+          viewport.deviceScaleFactor = Math.min(Math.max(sysScale, 1), 4);
+        }
+        await page.setViewport(viewport);
 
-      let num = 1;
-      if (data.multiPage) {
-        screenshotOptions.type = "jpeg";
-        num = Math.ceil(boundingBox.height / pageHeight) || 1;
-      }
+        const gotoOpts = { timeout: this.puppeteerTimeout, waitUntil: "load", ...data.pageGotoParams };
+        await page.goto(Renderer.toFileUrl(filePath), gotoOpts);
+        await page.evaluate(() => new Promise(r => setTimeout(r, 400)));
 
-      if (!data.multiPage) {
-        const buff = await body.screenshot(screenshotOptions);
-        const buffer = Buffer.isBuffer(buff) ? buff : Buffer.from(buff);
-        this.renderNum++;
-        const kb = (buffer.length / 1024).toFixed(2) + "KB";
-        RuntimeUtil.makeLog("info", `[${name}][${this.renderNum}] ${kb} ${Date.now() - start}ms`, this.logTag);
-        ret.push(buffer);
-      } else {
-        if (num > 1) {
-          await page.setViewport({
-            width: Math.ceil(boundingBox.width),
-            height: Math.min(pageHeight + 100, 2000),
-          });
+        const body = (await page.$("#container")) || (await page.$("body"));
+        if (!body) throw new Error("Content element not found");
+
+        const boundingBox = await body.boundingBox();
+        const screenshotOptions = this.buildScreenshotOptions(data);
+
+        let num = 1;
+        if (data.multiPage) {
+          screenshotOptions.type = "jpeg";
+          num = Math.ceil(boundingBox.height / pageHeight) || 1;
         }
 
-        for (let i = 1; i <= num; i++) {
-          if (i !== 1 && i === num) {
-            const remainingHeight = Math.min(parseInt(boundingBox.height) - pageHeight * (num - 1), 2000);
-            await page.setViewport({
-              width: Math.ceil(boundingBox.width),
-              height: remainingHeight > 0 ? remainingHeight : 100,
-            });
-          }
-
-          if (i !== 1) {
-            await page.evaluate(scrollY => window.scrollTo(0, scrollY), pageHeight * (i - 1));
-            await new Promise(resolve => setTimeout(resolve, 100));
-          }
-
-          const buff = num === 1
-            ? await body.screenshot(screenshotOptions)
-            : await page.screenshot(screenshotOptions);
+        if (!data.multiPage) {
+          const buff = await body.screenshot(screenshotOptions);
           const buffer = Buffer.isBuffer(buff) ? buff : Buffer.from(buff);
           this.renderNum++;
           const kb = (buffer.length / 1024).toFixed(2) + "KB";
-          RuntimeUtil.makeLog("debug", `[${name}][${i}/${num}] ${kb}`, this.logTag);
+          RuntimeUtil.makeLog("info", `[${name}][${this.renderNum}] ${kb} ${Date.now() - start}ms`, this.logTag);
           ret.push(buffer);
+        } else {
+          if (num > 1) {
+            await page.setViewport({
+              width: Math.ceil(boundingBox.width),
+              height: Math.min(pageHeight + 100, 2000),
+            });
+          }
 
-          if (i < num && num > 2) {
-            await new Promise(resolve => setTimeout(resolve, 100));
+          for (let i = 1; i <= num; i++) {
+            if (i !== 1 && i === num) {
+              const remainingHeight = Math.min(parseInt(boundingBox.height) - pageHeight * (num - 1), 2000);
+              await page.setViewport({
+                width: Math.ceil(boundingBox.width),
+                height: remainingHeight > 0 ? remainingHeight : 100,
+              });
+            }
+
+            if (i !== 1) {
+              await page.evaluate(scrollY => window.scrollTo(0, scrollY), pageHeight * (i - 1));
+              await new Promise(resolve => setTimeout(resolve, 100));
+            }
+
+            const buff = num === 1
+              ? await body.screenshot(screenshotOptions)
+              : await page.screenshot(screenshotOptions);
+            const buffer = Buffer.isBuffer(buff) ? buff : Buffer.from(buff);
+            this.renderNum++;
+            const kb = (buffer.length / 1024).toFixed(2) + "KB";
+            RuntimeUtil.makeLog("debug", `[${name}][${i}/${num}] ${kb}`, this.logTag);
+            ret.push(buffer);
+
+            if (i < num && num > 2) {
+              await new Promise(resolve => setTimeout(resolve, 100));
+            }
+          }
+
+          if (num > 1) {
+            RuntimeUtil.makeLog("info", `[${name}] Completed in ${Date.now() - start}ms`, this.logTag);
           }
         }
-
-        if (num > 1) {
-          RuntimeUtil.makeLog("info", `[${name}] Completed in ${Date.now() - start}ms`, this.logTag);
-        }
+      } catch (error) {
+        RuntimeUtil.makeLog("error", `[${name}] Screenshot failed: ${error.message}`, this.logTag);
+        ret = [];
+      } finally {
+        if (page) await page.close().catch(() => {});
       }
-    } catch (error) {
-      RuntimeUtil.makeLog("error", `[${name}] Screenshot failed: ${error.message}`, this.logTag);
-      ret = [];
-    } finally {
-      if (page) await page.close().catch(() => {});
-      this.shoting = this.shoting.filter(item => item !== name);
-    }
 
-    return this.finishScreenshotRun(name, ret, data);
+      return this.finishScreenshotRun(name, ret, data);
+    } finally {
+      this.releaseScreenshotSlot(slot.slotId, slot.userPriority);
+    }
   }
 
   async restart(force = false) {
     if (!this.browser || this.lock) return;
-    if (!force && (this.renderNum % this.restartNum !== 0 || this.shoting.length > 0)) return;
+    if (!force && (this.renderNum % this.restartNum !== 0 || this.activeSlotCount() > 0)) return;
 
     RuntimeUtil.makeLog("warn", `Puppeteer Chromium ${force ? "forced" : "scheduled"} restart...`, this.logTag);
 

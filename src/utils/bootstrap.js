@@ -59,8 +59,13 @@ export class Bootstrap {
 
   async run() {
     try {
-      const skipBootstrap = process.argv[2] === 'server' && process.env.XRK_SKIP_BOOTSTRAP === '1';
-      if (!skipBootstrap) await this.initialize();
+      // 菜单：轻量环境校验；server（含热重启）：始终查依赖
+      const isServer = process.argv[2] === 'server';
+      if (isServer) {
+        await this.initialize();
+      } else {
+        await validateEnvironment();
+      }
       process.env.XRK_FROM_APP = '1';
       await new Promise((r) => setImmediate(r));
       await import('../../start.js');
