@@ -98,3 +98,31 @@ export async function copyText(text) {
   }
 }
 
+/**
+ * 触发浏览器下载 Blob / data URL / blob URL。
+ * @param {Blob|string} data
+ * @param {string} [filename='download']
+ */
+export function downloadBlob(data, filename = 'download') {
+  if (typeof document === 'undefined') return;
+  let href = '';
+  let revoke = false;
+  if (typeof data === 'string') {
+    href = data;
+  } else if (data instanceof Blob) {
+    href = URL.createObjectURL(data);
+    revoke = true;
+  } else {
+    return;
+  }
+  const a = document.createElement('a');
+  a.href = href;
+  a.download = filename || 'download';
+  a.rel = 'noopener';
+  a.style.display = 'none';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  if (revoke) setTimeout(() => URL.revokeObjectURL(href), 2000);
+}
+

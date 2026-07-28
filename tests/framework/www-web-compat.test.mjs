@@ -9,6 +9,7 @@ import {
   abortTimeout,
   deepClone,
   copyText,
+  downloadBlob,
 } from '../../core/system-Core/www/xrk/src/utils/http.js';
 
 const compatPath = path.resolve(
@@ -55,5 +56,9 @@ describe('www/xrk web-compat（http.js）', () => {
 
   it('copyText 空串返回 false', async () => {
     assert.equal(await copyText(''), false);
+  });
+
+  it('downloadBlob 为函数', () => {
+    assert.equal(typeof downloadBlob, 'function');
   });
 });

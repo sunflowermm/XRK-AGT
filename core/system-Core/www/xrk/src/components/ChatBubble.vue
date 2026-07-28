@@ -447,6 +447,53 @@ function onImgError(e) {
 .bubble :deep(.chat-mermaid) {
   margin: 6px 0;
   overflow: auto;
+  border: 1.5px solid color-mix(in srgb, var(--ink) 28%, transparent);
+  border-radius: 8px;
+  background: var(--card);
+}
+.bubble :deep(.chat-mermaid-bar) {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 4px 6px;
+  border-bottom: 1.5px solid color-mix(in srgb, var(--ink) 18%, transparent);
+  background: color-mix(in srgb, var(--paper) 55%, var(--card));
+}
+.bubble :deep(.mmd-act) {
+  margin: 0;
+  border: 1.5px solid color-mix(in srgb, var(--ink) 40%, transparent);
+  border-radius: 5px;
+  background: var(--card);
+  color: var(--ink);
+  font: inherit;
+  font-size: var(--font-xs);
+  font-weight: 700;
+  padding: 3px 8px;
+  cursor: pointer;
+  line-height: 1.2;
+  min-height: 26px;
+  touch-action: manipulation;
+}
+.bubble :deep(.mmd-act:hover) {
+  background: color-mix(in srgb, var(--cyan) 22%, var(--card));
+  border-color: var(--ink);
+}
+.bubble :deep(.mmd-act:active) {
+  transform: translate(1px, 1px);
+}
+.bubble :deep(.mmd-act:disabled) {
+  opacity: 0.85;
+  cursor: default;
+}
+.bubble :deep(.chat-mermaid-canvas) {
+  padding: 8px;
+  overflow: auto;
+  max-width: 100%;
+}
+.bubble :deep(.chat-mermaid-canvas svg) {
+  max-width: 100%;
+  height: auto;
+  display: block;
 }
 .bubble :deep(.chat-mermaid-error) {
   color: #b00020;

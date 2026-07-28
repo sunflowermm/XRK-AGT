@@ -13,7 +13,7 @@
 www/<子目录>/
 ├── 无 sign.json ──────────► 普通静态：URL = /文件夹名，挂目录本体
 └── 有 sign.json ──────────► 前端工程（特殊）
-        ├── enabled: false （或 serve: static）──► 只 build，不启进程，挂 dist
+        ├── enabled: false （或 serve: static）──► 按需 build，不启进程，挂 dist
         └── enabled: true  （或 serve: proxy） ──► 启进程 + 反向代理
 ```
 
@@ -43,11 +43,11 @@ Vite `base` 必须与该 URL 一致。
 
 ### ① 静态：`enabled: false`（推荐日常 / 生产 SPA）
 
-**每次启动都 build**（默认），但不启动前端进程；编完再挂 dist。
+**默认按需 build**（源码比产物新、或没有 `dist/index.html` 才编），不启动前端进程；编完再挂 dist。
 
 | 步骤 | 行为 |
 |------|------|
-| 1 | 执行 `sign.build`（未写则默认 `pnpm build`）——**不论 dist 是否已存在** |
+| 1 | 若需要：执行 `sign.build`（未写则默认 `pnpm build`） |
 | 2 | 主服 `express.static` 挂产物；**Launcher 不拉起** `command` |
 
 ```json
@@ -65,8 +65,10 @@ Vite `base` 必须与该 URL 一致。
 ```
 
 - `command` / `port` 在此模式下**不会用到**（留给切到反代时用）。
-- 不想每次启动都编：`"buildOnStart": false`（自行保证 dist 正确；改源码易挂旧包）。
-- 代价：多开几个前端工程时，启动会串行多等几次 Vite build（通常数秒级）。
+- `buildOnStart`：
+  - 省略 / `"if-stale"`（默认）：比较 `src`/`public`/配置文件与 `dist` 的 mtime，过期才 build
+  - `true` / `"always"`：每次启动都编
+  - `false` / `"never"`：永不自动编（自行保证 dist）
 - `pnpm`/`npm` 经 `#utils/command-spawn.js` 解析（Windows `.cmd`、PATH、`pnpm.cjs`、corepack、`npm exec pnpm`），避免葵子/精简 PATH 下 `spawn pnpm ENOENT`。
 
 ### ② 反代：`enabled: true`
@@ -96,7 +98,7 @@ Vite `base` 必须与该 URL 一致。
 
 | 写法 | 走哪条 |
 |------|--------|
-| `enabled: false` 或 `serve: "static"` | ① 只 build 不启动 |
+| `enabled: false` 或 `serve: "static"` | ① 按需 build、不启动 |
 | `enabled: true` 且非 static（含 `serve: "proxy"` / 未写 serve） | ② 启动 + 反代 |
 
 ---
@@ -105,7 +107,7 @@ Vite `base` 必须与该 URL 一致。
 
 ```
 FrontendLauncher.start()   → 只处理 ② 反代工程
-mountCoreWwwStatic()       → 普通静态 + ①（缺 dist 则先 build 再挂）
+mountCoreWwwStatic()       → 普通静态 + ①（产物过期或缺 dist 才 build，再挂）
 ```
 
 ---
@@ -123,10 +125,10 @@ mountCoreWwwStatic()       → 普通静态 + ①（缺 dist 则先 build 再挂
 
 | 误解 | 实际 |
 |------|------|
-| `enabled: false` 什么都不干 | 会挂静态；缺 dist 时还会 build |
+| `enabled: false` 什么都不干 | 会挂静态；缺/过期 dist 时还会 build |
 | `enabled: false` 仍会起 Vite | 不会；只有 `enabled: true` 才启进程 |
 | 文件夹名 = URL | 有 sign 时看 `proxy.mount` |
-| 每次重启都重新 build | 否；有 dist 就跳过 |
+| 每次重启都重新 build | 否；默认仅源码新于产物时才编 |
 
 ---
 
