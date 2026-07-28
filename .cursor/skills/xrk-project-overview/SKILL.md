@@ -9,7 +9,7 @@ description: 当需要从整体理解 XRK-AGT 的架构、目录、运行流程�
 - 启动链：`docs/startup.md`
 - 目录树：`PROJECT_OVERVIEW.md`、`docs/README.md`
 - **Node 26**：`docs/node-26-runtime.md`、skill **`xrk-node-runtime`**（写 Core 服务端必读）
-- **Core www**：skill **`xrk-www-compat`**（浏览器 ≠ Node 26）
+- **Core www**：skill **`xrk-www-compat`**（浏览器兼容层 / 内联垫片）
 
 ## 要点
 

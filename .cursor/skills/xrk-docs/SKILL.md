@@ -10,8 +10,11 @@ description: 需要快速定位「该看哪份文档/哪段代码/哪份配置�
 | 主题 | 文档 |
 |------|------|
 | **开发首读** | `docs/runtime-surface.md`、`docs/coding-style.md`、`docs/base-classes.md` |
+| **Cursor / 本仓开发入口** | 根 `AGENTS.md`、`.cursor/skills/SKILL_INDEX.md` |
+| **办事助手（群聊/控制台）** | `docs/agents.md`、`agents/README.md` |
 | **写法 / 性能** | `docs/coding-style.md`、skill `xrk-coding-style` |
 | **Node 26** | `docs/node-26-runtime.md`、skill `xrk-node-runtime` |
+| **Core www / 挂载** | skill `xrk-www-compat`、`docs/www-mount.md` |
 | 启动 / 引导 | `docs/startup.md` |
 | 文档规范 | `docs/DOCSTYLE.md` |
 | 数据库 | `docs/database.md` |

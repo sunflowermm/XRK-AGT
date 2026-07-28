@@ -302,7 +302,7 @@ const size = RuntimeUtil.formatFileSize(1024 * 1024 * 5);
   - Tasker在大量网络/文件转换场景中复用 `Buffer/fileType/fileToUrl`。
   - `HttpApiLoader` 与自定义 API 通过 `makeLog` 与 `getTimeDiff` 进行监控与审计。
 
-> **推荐做法**：在需要「基础设施能力」时优先使用 `RuntimeUtil` 封装的方法，而不是在插件或业务代码中直接操作 Node.js 底层 API，以保证行为一致、易于维护和统一审计。
+> **推荐做法**：基础设施能力优先走 `RuntimeUtil` 封装，保持行为一致、便于审计。
 
 ---
 

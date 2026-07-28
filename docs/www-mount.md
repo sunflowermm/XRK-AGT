@@ -255,17 +255,14 @@ mountCoreWwwStatic()       → 零配置静态 + 有 sign 的静态（按需 bui
 
 ---
 
-## 踩坑
+## 要点
 
-| 误解 | 实际 |
-|------|------|
-| 纯静态不能写 sign | 可以；用 `staticRoot: "."` 定制 URL / 缓存 / 限流 |
-| `enabled: false` 什么都不干 | SPA 会按需 build 并挂 dist；无产物且像前端源码树则**跳过挂载** |
-| `enabled: false` 仍会起 Vite | 不会；只有反代模式才启进程 |
-| 文件夹名 = URL | 无 sign 时是；有 sign 时看 `proxy.mount` → `mount` → `id` |
-| 每次重启都重新 build | 否；静态默认仅源码新于产物时才编 |
-| sign 里写了部分 rateLimit | 未写的叶子用主服；已写的以 sign 为准 |
-| `buildOnStart` 在反代和静态一样 | 不一样：静态有 stale 三态；反代只是「有 build 段时要不要先编」 |
+- 纯静态可写 sign；`staticRoot: "."` 可定制 URL、缓存与限流。
+- `enabled: false`：SPA 按需 build 并挂 dist；无产物且目录像前端源码树时跳过挂载。Vite 进程仅在反代理模式启动。
+- URL 映射：无 sign 时文件夹名即 URL；有 sign 时按 `proxy.mount` → `mount` → `id`。
+- 静态 build：默认仅源码新于产物时才重新编。
+- sign 中的 `rateLimit`：已写叶子以 sign 为准，未写叶子继承主服。
+- `buildOnStart`：静态走 stale 三态；反代仅控制「有 build 段时是否先编」。
 
 ---
 

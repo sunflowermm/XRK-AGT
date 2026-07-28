@@ -1,6 +1,6 @@
 ---
 name: xrk-www-compat
-description: 编写或审查 core/*/www 静态页、校园 WebView 兼容、HttpResponse 前端解包时使用。浏览器环境 ≠ Node 26。含零配置静态与有 sign.json（纯静态/产物/反代，sign↔server 合并）挂载。
+description: 编写或审查 core/*/www 静态页、校园 WebView 兼容、HttpResponse 前端解包时使用。Core www 走浏览器兼容层（xrk-www-compat）。含零配置静态与有 sign.json（纯静态/产物/反代，sign↔server 合并）挂载。
 ---
 
 # Core www 浏览器兼容 + 挂载

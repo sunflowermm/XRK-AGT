@@ -50,7 +50,7 @@ alwaysApply: true
   - 流式/SSE：`HttpResponse.streamResponse(res, streamHandler, context)`；MCP：`jsonRpcError` / `jsonRpcSuccess` / `validateJsonRpcRequest`。
 - **约定**：handler 内用 `return HttpResponse.xxx(...)` 提前返回，不要与裸 `res.json()` 混用；兼容端点（如 stdin 原样 JSON）用 `HttpResponse.json(res, body)`。
 
-## Core www（浏览器 ≠ Node 26）
+## Core www（浏览器兼容层）
 
 > skill **`xrk-www-compat`** · `core/system-Core/www/xrk/modules/web-compat.js`
 

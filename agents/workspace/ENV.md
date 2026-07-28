@@ -43,7 +43,7 @@
 
 - 工作区：`data/ai-workspace/{id}/`
 - 技能种子：`agents/skills/standard/`（含 `core/` 基础 + `office-*` 扩展）→ 同步到工作区 `skills/`
-- 项目规则：`agents/rules/` → 注入 system prompt（≠ `.cursor/rules`）
+- 项目规则：`agents/rules/` → 注入 system prompt
 - run 开关：`config/default_config/ai-workflow.yaml` → `tools.file.runEnabled`
 - 技能注入：`agentWorkspace.customSkillRoots`（默认 `agents/skills/standard/core` + `agents/skills/standard`）
 - 开放域检索：`web.web_search`（`ai-workflow.crawl.webSearch` + 13 提供商；无 Key 默认 parallel-free）。查状态：`web.web_search_providers`

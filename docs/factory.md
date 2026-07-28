@@ -715,7 +715,7 @@ console.log(TTSFactory.listProviders());
 
 ### Q: 工厂客户端是单例吗？
 
-A: 不是。每次调用 `createClient()` 都会创建新的客户端实例。如果需要复用，应该缓存客户端实例。
+A: 每次 `createClient()` 返回新实例；需要复用时由调用方缓存。
 
 ---
 

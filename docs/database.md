@@ -127,7 +127,7 @@ withSqliteTransaction((tx) => {
 
 `DatabaseSync` API 均为**同步**（`exec` / `prepare` / `get` / `all` / `run`）；勿包一层无意义的 Promise。详见 Node 文档。
 
-框架内置表：`_xrk_runtime_meta`、`_xrk_runtime_kv`；业务可用 `sqliteKvGet/Set/Del(namespace, key)` 做本地标记（**不是** Redis 替代）。
+框架内置表：`_xrk_runtime_meta`、`_xrk_runtime_kv`；业务可用 `sqliteKvGet/Set/Del(namespace, key)` 做进程本地标记（与 Redis 缓存分工不同）。
 
 ### 就绪面
 

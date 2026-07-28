@@ -13,13 +13,13 @@
 | **业务插件** | 主服控制台 | 子服 `load_plugin_config` / 主服 QQ 插件 | `data/<group>/config.yaml` |
 | **子服进程**（可选） | 部署 / 子服本地 | pyserver 启动 | `data/subserver/config.yaml`（监听地址等，与主服「连哪个端口」无关） |
 
-主服编辑子服 **host/port** 时，改的是 **AiWorkflow → 子服务端**（`subserver.runtimes.pyserver` 等），不是业务插件 yaml。
+主服编辑子服 **host/port**：`ai-workflow.yaml` → `subserver.runtimes.pyserver` 等（AiWorkflow → 子服务端）。业务插件配置见下表「业务插件」行。
 
 ---
 
 ## 业务插件 CommonConfig（与主仓 Core 同模式）
 
-schema 放在子服插件目录下的 **`core/commonconfig/`**，由主服 `CommonConfigRegistry` 扫描——**不是**子服 HTTP API，**不是**主仓 `core/*/commonconfig/` 再写一份。
+schema 放在子服插件目录 **`core/commonconfig/`**，由主服 `CommonConfigRegistry` 扫描加载。
 
 ```
 subserver/pyserver/apis/<group>/

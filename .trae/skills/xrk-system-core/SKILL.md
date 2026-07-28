@@ -19,7 +19,7 @@ description: 当你需要快速理解 system-Core 提供哪些 HTTP API/工作�
 
 ## Node 26
 
-扩展 system-Core **服务端**时遵守 skill **`xrk-node-runtime`**。改 `www/` 时遵守 **`xrk-www-compat`**（浏览器 ≠ Node 26）。
+扩展 system-Core **服务端**时遵守 skill **`xrk-node-runtime`**。改 `www/` 时遵守 **`xrk-www-compat`**（浏览器兼容层）。
 
 ## 常用定位
 

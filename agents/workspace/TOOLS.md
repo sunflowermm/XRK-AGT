@@ -32,7 +32,7 @@ Python、pandoc、本机命令是否可用。缺依赖时助手会降级（例�
 | 环境 | office-env-setup, office-env-workspace, office-env-shell, office-env-web, office-env-desktop |
 | 长文 | office-long-doc, office-tech-writing |
 
-完整列表以对话里的 `<available_skills>` 为准；新技能从仓库 `agents/skills/standard` 同步，**不覆盖**你已改过的副本。
+完整列表以对话里的 `<available_skills>` 为准；新技能从仓库 `agents/skills/standard` 同步，**工作区已有同名技能时保留工作区版本**。
 
 ## 工作区里改文件（助手怎么用）
 

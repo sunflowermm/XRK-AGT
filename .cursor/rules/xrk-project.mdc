@@ -28,7 +28,7 @@ alwaysApply: true
 
 - Node.js ≥ 26.0（Current，2026-10 转 LTS）；包管理仅支持 **pnpm**。
 - **服务端**可使用 Node 25/26 特性：`Error.isError()`、`Map.getOrInsert*`、`Uint8Array.fromBase64/toBase64/toHex`、`AbortSignal.timeout`、全局 `URLPattern`、原生 `fetch`（Undici 8 + `ProxyAgent`）、默认启用的 `Temporal` 与 Web Storage 等。
-- **Core www（浏览器）≠ Node 26**：skill **`xrk-www-compat`**（`/xrk` 用 `./web-compat.js`；产品页**只内联**；勿用根名 `shared`）。
+- **Core www（浏览器兼容层）**：skill **`xrk-www-compat`**（`/xrk` 用 `./web-compat.js`；产品页**只内联**；根名 `shared` 为保留段，产品用自有目录名）。
 - 异步 `exec`：统一 `#utils/exec-async.js`（`util.promisify` 单点封装；26.2 尚无 `node:child_process/promises` 子模块，勿在各文件重复 promisify）。
 - 禁止旧写法（**服务端**）：`instanceof Error` 判错、`node-fetch`、分散的 `util.promisify(exec)`、`import ... child_process/promises`、`AbortController`+`setTimeout` 拼超时、URLPattern/Error 特性检测回退。
 

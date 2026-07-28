@@ -1,4 +1,4 @@
-# Agents 清单：告诉助手有哪些「办事角色」，注入 prompt 用，不是独立子进程
+# Agents 清单：办事角色说明，注入 system prompt 供路由
 # 工作区 data/ai-workspace/{id}/subagents.yaml 若存在则优先
 agents:
   - name: assistant

@@ -6,6 +6,7 @@ description: 当需要理解或扩展基础设施层（加载器、基类、路�
 ## 文档
 
 - 分层与工具模块：`docs/底层架构设计.md`
+- 运行时挂载与裸名约定：`docs/runtime-surface.md`
 - 扩展点总览：`docs/框架可扩展性指南.md`
 
 ## 基类与加载器
@@ -31,10 +32,11 @@ description: 当需要理解或扩展基础设施层（加载器、基类、路�
 | Loader 共享约定 | `docs/infrastructure-shared.md` | 热重载、`FileLoader`、批加载 |
 | 基类契约 | `docs/base-classes.md` | plugin/HttpApi/AiWorkflow/ConfigBase/Event |
 | 配置种子 | `src/infrastructure/config/config-seed.js` | 端口配置模板复制 |
+| 运行时挂载 | `#utils/runtime-globals.js` | `setRuntimeGlobal` / `getRuntimeGlobal` |
 
 ## `#` 别名
 
-`#utils/*`、`#infrastructure/*`、`#factory/*`、`#config/*`、`#data/*`、`#core/*`、`#renderers/*`、`#modules/*`。业务用全局 `msgSegment`，Core 业务用裸名，框架内可 `import { msgSegment } from '#utils/msg-segment.js'`。
+`#utils/*`、`#infrastructure/*`、`#factory/*`、`#config/*`、`#data/*`、`#core/*`、`#renderers/*`、`#modules/*`。业务用裸名 **`msgSegment`**、**`AgentRuntime`**（勿 `global.`）；Core 业务用裸名，框架内可 `import { msgSegment } from '#utils/msg-segment.js'`。
 
 ## 约定
 

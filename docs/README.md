@@ -10,6 +10,8 @@
 | **看实拍** | [README §项目展示](../README.md#-项目展示) |
 | **写业务（先看挂载）** | **[runtime-surface.md](runtime-surface.md)** → [base-classes.md](base-classes.md) |
 | **写法与性能** | **[coding-style.md](coding-style.md)** → [node-26-runtime.md](node-26-runtime.md) |
+| **Cursor / 框架开发约定** | 根 [AGENTS.md](../AGENTS.md) · `.cursor/skills/` |
+| **办事助手（群聊/控制台）** | **[agents.md](agents.md)** · 种子 [agents/](../agents/) |
 | 懂架构 | [底层架构设计](底层架构设计.md) → [startup.md](startup.md) → [database.md](database.md) |
 | 用内置能力 | [system-core.md](system-core.md) |
 | 写插件 / API / 工作流 | [框架可扩展性指南](框架可扩展性指南.md) |
@@ -32,10 +34,11 @@
 | 路径 | 用途 | 是否入库 |
 |------|------|----------|
 | `src/` | 运行时与基础设施（**勿写业务**） | 是 |
-| `core/<name>/` | 业务：plugin / http / stream / tasker / events / commonconfig / www | system-Core 是 |
-| `config/default_config/` | 配置模板 | 是 |
-| `data/` | 运行期数据（按端口分目录） | 否（gitignore） |
-| `agents/` | Agent 面：`workspace/` · `rules/` · `skills/standard/` · `subagents.yaml`（契约 [agents.md](agents.md)、种子 [agents/README.md](../agents/README.md)） | 是 |
+| `core/<name>/` | 业务：plugin / http / workflow / tasker / events / commonconfig / www | system-Core 是 |
+| `config/default_config/` | 配置模板（仅 AGT / 工厂 / system-Core；产品业务 yaml 见 `core/<名>/default/`） | 是 |
+| `data/` | 运行期数据（按端口分目录；办事助手工作区在 `data/ai-workspace/`） | 否（gitignore） |
+| `agents/` | 办事助手种子：`workspace/` · `rules/` · `skills/standard/` · `subagents.yaml`（契约 [agents.md](agents.md)、种子 [agents/README.md](../agents/README.md)） | 是 |
+| 根 `AGENTS.md` | Cursor / 框架开发入口 | 是 |
 | `core/system-Core/www/xrk/` | 内置 Web 控制台 | 是 |
 | `core/system-Core/site/` | 站点根静态（`/`，favicon 等；`paths.www`） | 是 |
 | `.cursor/` | Cursor 技能、规则、命令（**权威副本**） | 是 |
@@ -98,7 +101,7 @@
 
 - **说明**：Node 侧统一通过工作流 + MCP 工具完成能力编排；如需 Python 侧能力，请在子服务端按 `apis/<group>/*.py` 扩展自定义接口。
 - **[底层架构设计](底层架构设计.md)** - AI 主链路、AiWorkflow 链路、子服务端职责边界（权威）
-- **[Agents 运行时面](agents.md)** - 工作区注入、Agents 清单、文件工具改写契约
+- **[办事助手说明](agents.md)** - 怎么用、改哪里、工作区注入、Agents 清单、实现索引；框架写码见根 [AGENTS.md](../AGENTS.md)
 - **[MCP 完整指南](mcp-guide.md)** - MCP 工具注册与连接
 - **[MCP 配置指南](mcp-config-guide.md)** - Cursor、Claude Desktop 等外部平台连接配置
 - **[AiWorkflow 工作流基类文档](ai-workflow.md)** - `AiWorkflow` 基类技术文档，涵盖 Embedding、多提供商支持、Function Calling 与上下文增强（MCP 工具 vs Call Function 见该文档）
@@ -131,11 +134,13 @@
 
 | 角色 | 首读 | 扩展 |
 |------|------|------|
+| Cursor / 框架维护者 | 根 [AGENTS.md](../AGENTS.md) · [runtime-surface.md](runtime-surface.md) · [coding-style.md](coding-style.md) | `.cursor/skills/` · [框架可扩展性指南](框架可扩展性指南.md) |
 | 插件开发者 | **[runtime-surface.md](runtime-surface.md)** · [base-classes.md](base-classes.md) · [框架可扩展性指南](框架可扩展性指南.md) · [plugin-base.md](plugin-base.md) | [plugins-loader.md](plugins-loader.md) · [ai-workflow.md](ai-workflow.md) |
 | Tasker 开发者 | [tasker-loader.md](tasker-loader.md) · [tasker-base-spec.md](tasker-base-spec.md) | [tasker-onebotv11.md](tasker-onebotv11.md) · [agent-runtime.md](agent-runtime.md) |
 | 后端 / API | [http-api.md](http-api.md) · [base-classes.md](base-classes.md) · [agent-runtime.md](agent-runtime.md) · [AUTH.md](AUTH.md) | [api-loader.md](api-loader.md) · [infrastructure-shared.md](infrastructure-shared.md) |
 | 运维 / 配置 | [config-base.md](config-base.md) · [database.md](database.md) · [docker.md](docker.md) | [factory.md](factory.md) · [server.md](server.md) |
-| 前端 / 渲染 | [app-dev.md](app-dev.md) · [renderer.md](renderer.md) | [system-core.md](system-core.md) · [http-api.md](http-api.md) |
+| 前端 / 渲染 | [app-dev.md](app-dev.md) · [www-mount.md](www-mount.md) · [renderer.md](renderer.md) | [system-core.md](system-core.md) · skill `xrk-www-compat` |
+| 办事助手运营 | **[agents.md](agents.md)** · [agents/README.md](../agents/README.md) | `data/ai-workspace/` · [ai-workflow.md](ai-workflow.md)（`agentWorkspace`） |
 
 架构与目录：**[底层架构设计](底层架构设计.md)** · **[PROJECT_OVERVIEW](../PROJECT_OVERVIEW.md)**（目录树）· **[startup.md](startup.md)**（启动链）。
 
@@ -145,7 +150,7 @@
 
 ### 创建自己的 Core 模块
 
-业务均在 `core/` 下按模块开发；每个 core 内含 `plugin/`、`tasker/`、`events/`、`http/`、`stream/`、`commonconfig/`、`www/<目录名>/` 等业务目录（按需创建）。继承对应基类、使用 `#` 别名导入、放置到约定目录即可自动加载。
+业务均在 `core/` 下按模块开发；每个 core 内含 `plugin/`、`tasker/`、`events/`、`http/`、`workflow/`、`commonconfig/`、`www/<目录名>/` 等业务目录（按需创建）。继承对应基类、使用 `#` 别名导入、放置到约定目录即可自动加载。
 
 **完整流程与目录说明**：详见 **[框架可扩展性指南 - Core 模块开发](框架可扩展性指南.md#core-模块开发)** ⭐
 
@@ -169,9 +174,11 @@
 
 1. 阅读 **[AiWorkflow 工作流基类文档](ai-workflow.md)** 了解基类设计
 2. 阅读 **[工厂系统文档](factory.md)** 了解如何选择和使用 LLM 提供商
-3. 在任意 core 目录的 `stream/` 子目录中创建新的工作流文件
+3. 在任意 core 目录的 `workflow/` 子目录中创建新的工作流文件
 4. 基于 `AiWorkflow` 实现自定义工作流逻辑
 5. 在插件或 API 中调用新工作流
+
+配置注入与办事助手工作区见 **[agents.md](agents.md)**（`agentWorkspace`）。
 
 ### 接入新的 AI 服务提供商
 

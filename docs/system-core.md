@@ -379,7 +379,7 @@ const stream = await this.getWorkflow('desktop');
 **实现库**：`src/infrastructure/crawl/`（`PlaywrightAgentSession`、`buildBrowserRuntime` → `toPlaywrightAgentLaunchOptions` / `launchOptionsFromBrowserRuntime`、`createLocalFontScreenshotHelper`；崩溃软关闭与 `using` 整轮重试；SSRF 与 `web_fetch` 同源）  
 **配置**：`ai-workflow.crawl.browser` + **`renderer.playwright`**（`data/server_bots/{port}/renderers/playwright/config.yaml`，见 commonconfig `renderer` 段）。业务启动浏览器须走 launch helper，勿手抄字段。  
 **配置**：浏览器工作流参数以 `core/system-Core/workflow/browser.js` 及其实现代码为准。  
-**MCP 工具**（受控浏览器）：`browser_status`、`browser_start`、`browser_goto`、`browser_tabs`、`browser_tab_*`、`browser_snapshot`、`browser_act`（click|type|wait|evaluate|batch）、`browser_console`、`browser_network`、`browser_dialog_*`、`browser_observed_state`、`browser_page_text`、`browser_screenshot`、`browser_close`。薄包装 `browser_click/type/wait/evaluate` 已移除，统一走 `browser_act`。  
+**MCP 工具**（受控浏览器）：`browser_status`、`browser_start`、`browser_goto`、`browser_tabs`、`browser_tab_*`、`browser_snapshot`、`browser_act`（click|type|wait|evaluate|batch）、`browser_console`、`browser_network`、`browser_dialog_*`、`browser_observed_state`、`browser_page_text`、`browser_screenshot`、`browser_close`。点击、输入、等待、执行脚本统一走 `browser_act`。  
 
 实现库：`src/infrastructure/crawl/` — `ssrf-policy.js`（DNS pinning）、`fetch-guard.js`、`ssrf-ip-policy.js`、`playwright-session.js`、`pw-page-state.js`、`pw-role-snapshot.js`、`pw-ref-locator.js`、`browser-navigation-guard.js`（`page.route` 导航拦截）、`act-policy.js`。  
 
@@ -453,7 +453,7 @@ flowchart LR
 
 ## 业务层与插件架构
 
-在 `system-Core` 中，**绝大部分业务逻辑都通过插件业务层实现**，而不是写在底层基础设施里：
+在 `system-Core` 中，业务逻辑放在插件业务层：
 
 - **业务承载位置**：
   - `core/system-Core/plugin/*.js`：具体业务插件（命令、管理功能、日志、状态查询等）

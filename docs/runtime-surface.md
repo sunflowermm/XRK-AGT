@@ -23,7 +23,7 @@
 | 消息段 | 裸名 `msgSegment.image(url)` | `global.msgSegment`；无需从别处 import |
 | **仅** `src/` 挂载点 | `setRuntimeGlobal(name, value)`（`#utils/runtime-globals.js`） | 手写 `global.x = …; globalThis.x = …` 双份 |
 
-**为何文档/源码里仍出现 `global.`？** 历史写法；与裸名等价。框架在 `src/` 用 `setRuntimeGlobal` 统一写入；**`core/` 业务一律裸名或 import，不必加 `global.` 前缀。**
+**`core/` 业务**：裸名或 `import`。**`src/` 挂载**：`setRuntimeGlobal`（`#utils/runtime-globals.js`）。
 
 配置在 `AgentRuntime.run` 完成 `CommonConfigRegistry.load()` **之前**不可用；此前请用 ConfigBase / 默认模板，勿假设 `runtimeConfig` 已就绪。
 
@@ -83,9 +83,9 @@ sequenceDiagram
 | `Renderer` | 渲染器基类 | `renderer/loader.js` | 实现放 `src/renderers/<名>/` |
 | `stdinHandler` | stdin Tasker 实例 | stdin Tasker `init` | 框架内部 |
 
-### `e.bot` ≠ `AgentRuntime`
+### 事件对象上的 `e.bot`
 
-事件对象上的 **`e.bot`**（小写）是**通道账号实例**（OneBot/飞书等 Tasker 注入），不是全局 `AgentRuntime`。业务回消息、查 `uin`/`tasker` 用 `e.bot`；编排 HTTP/加载器/工具代理用全局裸名 `AgentRuntime`。
+**`e.bot`**（小写）是通道账号实例（OneBot/飞书等 Tasker 注入）。回消息、查 `uin`/`tasker` 用 `e.bot`；编排 HTTP、加载器与工具代理用全局裸名 `AgentRuntime`。
 
 ---
 

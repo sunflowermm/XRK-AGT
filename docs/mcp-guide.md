@@ -72,7 +72,7 @@
 - `filePath` (string, 必需): 文件路径
 
 #### `tools.search_replace`
-按精确子串替换文件内容（**改已有文件首选**；勿用已移除的 `modify_file`）。
+按精确子串替换文件内容（**改已有文件首选**）。
 
 **参数**：
 - `filePath` (string, 必需): 文件路径

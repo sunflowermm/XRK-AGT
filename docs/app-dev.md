@@ -277,7 +277,7 @@ Vue 3 SPA（`src/`），构建产物在 `dist/`。本地：`cd core/system-Core/
 
 ### Core www 浏览器兼容
 
-浏览器页 **不等于** Node ≥26。校园 WebView 下勿裸用 `crypto.randomUUID` / `AbortSignal.timeout`；`HttpResponse.success` 对象拍平，勿默认读 `json.data`。
+浏览器页走 **skill `xrk-www-compat`**（`web-compat.js` 或内联垫片）。校园 WebView 下用 `abortTimeout` / `randomId` 等兼容 API；`HttpResponse.success` 对象拍平，前端读顶层或 `unwrapSuccess`。
 
 权威模块：`web-compat.js`（仅 `/xrk` 相对导入）。产品页**只内联**同语义。根名 `shared` 保留。挂载两类规则见 **[www-mount.md](www-mount.md)**、skill **`xrk-www-compat`**。
 

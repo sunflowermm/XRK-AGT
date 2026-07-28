@@ -5,19 +5,23 @@ description: 当你需要理解 XRK-AGT 的运行时核心（AgentRuntime 主类
 
 ## 文档与代码
 
-- 文档：`docs/agent-runtime.md`、`docs/server.md`
-- 代码：`src/agent-runtime.js`
+- 文档：`docs/agent-runtime.md`、`docs/runtime-surface.md`、`docs/server.md`
+- 代码：`src/agent-runtime.js`、`src/utils/runtime-globals.js`
 
 ## 关键职责
 
 - 启动 HTTP/HTTPS/WebSocket 服务器，以及基础中间件（压缩、安全头、CORS、日志、基础认证等）。
 - 初始化加载器：TaskerLoader / HttpApiLoader / AiWorkflowLoader / PluginLoader。
-- 维护全局 `AgentRuntime` 对象：`AgentRuntime`（EventEmitter 实例）、`AgentRuntime[self_id]`（具体 AgentRuntime 会话）、`AgentRuntime.tasker` / `AgentRuntime.wsf` / `AgentRuntime.uin` / `AgentRuntime.em()` / `AgentRuntime.makeLog()`。
+- 维护运行时 `AgentRuntime`（Proxy）：`AgentRuntime[self_id]`、`AgentRuntime.tasker` / `AgentRuntime.wsf` / `AgentRuntime.uin` / `AgentRuntime.em()` / `AgentRuntime.makeLog()`。
 
-## 充分利用 AgentRuntime 对象
+## 全局写法（业务 `core/`）
 
-- 业务代码**不要** `import AgentRuntime` 或 `new AgentRuntime()`；由 `node app` / `start.js` 创建并挂载全局 `AgentRuntime`。
-- **插件 / Tasker / 事件监听器**：直接使用全局 `AgentRuntime`、`AgentRuntime[self_id]`、`AgentRuntime.em()`、`AgentRuntime.tasker`、`AgentRuntime.makeLog()` 等。
-- **HTTP API**：使用注入的 `req.agentRuntime` 或路由 handler 的第三参 `AgentRuntime`，获取 `getServerUrl()`、`callRoute()`、多 AgentRuntime 列表等。
+- **裸名** `AgentRuntime`，勿 `import AgentRuntime`、`new AgentRuntime()`、**勿** `global.AgentRuntime`。
+- HTTP handler：`req.agentRuntime` 或第三参 `AgentRuntime`。
+- 挂载仅在 `src/`：`setRuntimeGlobal('AgentRuntime', runtime)`（`start.js`、`tasker/loader.js`）。
+- 详见 `docs/runtime-surface.md`、`.cursor/rules/xrk-dev-requirements.mdc`。
+
+## 其它
+
 - `callRoute` / 公网探测：全局 `fetch` + `AbortSignal.timeout`（见 `src/agent-runtime.js`）。
-- 详见 `docs/agent-runtime.md`、skill **`xrk-node-runtime`**。
+- Node 26 约定：skill **`xrk-node-runtime`**。

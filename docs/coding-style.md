@@ -23,7 +23,7 @@
 | 二进制 | `buf.toBase64()` / `Uint8Array.fromBase64` | `toString('base64')` 新代码 |
 | 日志 | `RuntimeUtil.makeLog` 或裸 `AgentRuntime.makeLog` | `console.log` 持久化路径 |
 | HTTP 响应 | `HttpResponse.success/error/asyncHandler`；前端 `unwrapSuccess` 或读顶层 | handler 裸 `res.json()`；前端默认 `json.data.字段` |
-| Core www | `www/<app>/` + skill **`xrk-www-compat`** | 假设 Node 26 API |
+| Core www | `www/<app>/` + skill **`xrk-www-compat`**（`web-compat.js` / 内联垫片） | 裸用 Node 26 API |
 | 热路径 I/O | `fs/promises`；`try/catch` 代替反复 `existsSync` | 请求链路里 `readFileSync` / 循环 `existsSync` |
 | 批量加载 | `FileLoader.forEachBatch` + `LOADER_BATCH_SIZE` | 全量 `Promise.all(上千 import)` |
 | Map 默认 | `map.getOrInsert(k, () => v)` | `get \|\| set` 样板（可写时） |
@@ -45,9 +45,9 @@ Core www / WebView 见 skill **`xrk-www-compat`**、[app-dev.md](app-dev.md)「C
 
 独立产品 Core 配置：`core/<名>/default/*.yaml` + `data/<产品>/`（见 `xrk-project` 规则）。勿把业务 yaml 放进 `config/default_config/`。
 
-### 1.1 Core www（浏览器 ≠ Node）
+### 1.1 Core www（浏览器兼容层）
 
-- 环境：校园 WebView、HTTP 非安全上下文；**不要**假设 `crypto.randomUUID` / `AbortSignal.timeout` / `structuredClone` 可用。
+- 环境：校园 WebView、HTTP 非安全上下文；超时 / ID / 克隆用兼容层导出（`abortTimeout` / `randomId` / `deepClone`）。
 - 标准垫片语义：`core/system-Core/www/xrk/modules/web-compat.js`。**仅 `/xrk` 相对导入**；其它产品页**只内联**。
 - 根名 `shared` 保留（`RESERVED_ROOT_SEGMENTS`）；产品用自有目录名（如 `lsy-shared`）。
 - `HttpResponse.success` 对普通对象**拍平**；前端 `unwrapSuccess` 或读顶层。
