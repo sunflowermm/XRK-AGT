@@ -509,6 +509,13 @@ export default class ChatStream extends AiWorkflow {
           case 'mface':
             hasImage = true;
             return '[图片]';
+          case 'video':
+            hasFile = true;
+            return '[视频]';
+          case 'record':
+          case 'audio':
+            hasFile = true;
+            return '[语音]';
           case 'file':
             hasFile = true;
             return `[文件:${segFileName(seg)}]`;
@@ -2423,6 +2430,8 @@ export default class ChatStream extends AiWorkflow {
 
       if (!ChatStream.messageHistory.has(historyKey)) ChatStream.messageHistory.set(historyKey, []);
       const history = ChatStream.messageHistory.get(historyKey);
+      // sync 可能已写入同 message_id，避免末尾重复两条
+      if (history.some((m) => ChatStream.historyEntryId(m) === messageId)) return;
       history.push(msgData);
       if (history.length > 50) ChatStream.messageHistory.set(historyKey, history.slice(-50));
 
@@ -2712,7 +2721,9 @@ export default class ChatStream extends AiWorkflow {
         let text = parts.text;
         if (!text) {
           text = msg.raw_message
-            ? String(msg.raw_message).replace(/\[CQ:(?:image|file|mface|face)[^\]]*\]/gi, '').trim()
+            ? String(msg.raw_message)
+              .replace(/\[CQ:(?:image|file|mface|face|video|record)[^\]]*\]/gi, '')
+              .trim()
             : '';
         }
 
