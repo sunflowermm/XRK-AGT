@@ -28,6 +28,13 @@ import {
   resolveOutgoingMessage,
   splitProtocolParts,
 } from '#utils/chat-reply-protocol.js';
+import {
+  flattenMessageSegs,
+  segFileName,
+  segQq,
+  segReplyId,
+  segText,
+} from '#utils/onebot-message-seg.js';
 import { summarizeToolForHistory } from '#utils/mcp-tool-result-text.js';
 import { readImageBuffer } from '#utils/entry-media.js';
 import {
@@ -363,7 +370,7 @@ export default class ChatStream extends AiWorkflow {
     if (e.message_id != null && String(e.message_id) === id && Array.isArray(e.message)) {
       return {
         message_id: e.message_id,
-        message: e.message,
+        message: flattenMessageSegs(e.message),
         sender: e.sender,
         time: e.time,
         user_id: e.user_id,
@@ -374,11 +381,11 @@ export default class ChatStream extends AiWorkflow {
     const historyKey = ChatStream.getEventHistoryKey(e);
     if (historyKey) {
       const history = ChatStream.messageHistory.get(historyKey) || [];
-      const cached = history.find((m) => String(m.message_id || m.real_id) === id);
+      const cached = history.find((m) => ChatStream.historyEntryId(m) === id);
       if (cached?._rawMessage && Array.isArray(cached._rawMessage) && cached._rawMessage.length > 0) {
         return {
           message_id: cached.message_id,
-          message: cached._rawMessage,
+          message: flattenMessageSegs(cached._rawMessage),
           sender: { user_id: cached.user_id, nickname: cached.nickname },
           time: cached.time,
           raw_message: cached.message,
@@ -390,7 +397,13 @@ export default class ChatStream extends AiWorkflow {
     if (e.bot?.sendApi) {
       try {
         const result = await e.bot.sendApi('get_msg', { message_id: id });
-        if (result?.data) return result.data;
+        if (result?.data) {
+          const data = result.data;
+          return {
+            ...data,
+            message: flattenMessageSegs(data.message)
+          };
+        }
       } catch (err) {
         RuntimeUtil.makeLog('debug', `[ChatStream] get_msg 失败 msgId=${id}: ${err?.message}`, 'ChatStream');
       }
@@ -398,7 +411,12 @@ export default class ChatStream extends AiWorkflow {
     if (typeof e.getReply === 'function' && String(ChatStream.getReplySegmentId(e) || '') === id) {
       try {
         const reply = await e.getReply();
-        if (reply) return reply;
+        if (reply) {
+          return {
+            ...reply,
+            message: flattenMessageSegs(reply.message)
+          };
+        }
       } catch {
         /* ignore */
       }
@@ -407,11 +425,11 @@ export default class ChatStream extends AiWorkflow {
     // 最后回退：仅有历史文本、无段数据（无法再下载媒体，但仍可供引用摘要）
     if (historyKey) {
       const history = ChatStream.messageHistory.get(historyKey) || [];
-      const cached = history.find((m) => String(m.message_id || m.real_id) === id);
+      const cached = history.find((m) => ChatStream.historyEntryId(m) === id);
       if (cached) {
         return {
           message_id: cached.message_id,
-          message: cached._rawMessage || [],
+          message: flattenMessageSegs(cached._rawMessage || []),
           sender: { user_id: cached.user_id, nickname: cached.nickname },
           time: cached.time,
           raw_message: cached.message,
@@ -468,6 +486,7 @@ export default class ChatStream extends AiWorkflow {
 
   /**
    * 段 → 历史文本 + 媒体标记（图片/文件用标记；reply 保留 [回复:id]）
+   * 兼容事件扁平段与 get_msg 的 data 嵌套段。
    */
   _segmentsToHistoryParts(segments) {
     if (!Array.isArray(segments)) {
@@ -476,26 +495,30 @@ export default class ChatStream extends AiWorkflow {
     let hasImage = false;
     let hasFile = false;
     let hasFace = false;
-    const text = segments
+    const text = flattenMessageSegs(segments)
       .map((seg) => {
         if (!seg || typeof seg !== 'object') return '';
         switch (seg.type) {
           case 'text':
-            return seg.text || '';
+            return segText(seg);
           case 'image':
           case 'mface':
             hasImage = true;
             return '[图片]';
           case 'file':
             hasFile = true;
-            return `[文件:${seg.name || seg.data?.name || '未知'}]`;
+            return `[文件:${segFileName(seg)}]`;
           case 'face':
             hasFace = true;
             return '[表情]';
-          case 'at':
-            return `@${seg.qq || seg.user_id || ''}`;
-          case 'reply':
-            return `[回复:${seg.id || seg.data?.id || ''}]`;
+          case 'at': {
+            const qq = segQq(seg);
+            return qq ? `@${qq}` : '';
+          }
+          case 'reply': {
+            const id = segReplyId(seg);
+            return id ? `[回复:${id}]` : '';
+          }
           default:
             return '';
         }
@@ -1043,12 +1066,15 @@ export default class ChatStream extends AiWorkflow {
 
     this.registerMCPTool('reply', {
       description:
-        '向当前会话发送文字（立即发到 QQ）。content：| 分句；[回复:消息ID] 引用（可省略，默认引用 [当前消息]）；群聊 [at:数字QQ]。禁止 @QQ/@昵称，发表情用 emotion。',
+        '向当前会话发文字（立即到 QQ）。默认普通发言、不引用。仅当要挂引用气泡时：content 写 [回复:消息ID]，或填 messageId。| 分句；群聊 [at:数字QQ]。禁止 @QQ/@昵称；表情用 emotion。',
       inputSchema: {
         type: 'object',
         properties: {
-          content: { type: 'string', description: '正文（必填）' },
-          messageId: { type: 'string', description: '可选，显式引用消息 ID（一般不必填）' },
+          content: { type: 'string', description: '正文（必填）。普通说话不要写 [回复:…]' },
+          messageId: {
+            type: 'string',
+            description: '仅在要引用某条消息时填写；省略则不引用',
+          },
         },
         required: ['content']
       },
@@ -1064,10 +1090,10 @@ export default class ChatStream extends AiWorkflow {
           return { success: false, error: '[at:QQ] 仅群聊可用' };
         }
 
+        // 仅显式 messageId / content 内 [回复:ID] 才挂引用；绝不默认挂 [当前消息]
         const explicitMid = args.messageId != null ? String(args.messageId).trim() : '';
-        const fallbackId = explicitMid || ChatStream.resolveEventMessageId(e);
         const { replyId, displayText } = resolveOutgoingMessage(rawContent, {
-          fallbackReplyId: fallbackId
+          fallbackReplyId: explicitMid || null
         });
         const where = formatSessionWhere(e);
         if (turn.replyFlushed || turn.queuedReplyContent) {
@@ -1086,6 +1112,7 @@ export default class ChatStream extends AiWorkflow {
         if (!e?.reply) return { success: false, error: '当前环境无法发送消息' };
 
         try {
+          // 已解析的 replyId（显式或 content 内 [回复:…]）；无则不挂引用
           await this.sendMessages(e, rawContent, { fallbackReplyId: replyId });
         } catch (err) {
           return { success: false, error: err?.message || '发送失败' };
@@ -2369,7 +2396,7 @@ export default class ChatStream extends AiWorkflow {
 
       const userId = e.user_id ?? e.userId ?? e.user?.id ?? e.sender?.user_id ?? null;
       const nickname = e.sender?.card || e.sender?.nickname || e.user?.name || e.user?.nickname || e.from?.name || '未知';
-      let messageId = e.message_id ?? e.real_id ?? e.messageId ?? e.id;
+      let messageId = e.message_id ?? e.real_id;
       if (!messageId) {
         messageId = `temp_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
         RuntimeUtil.makeLog('debug', `消息ID缺失，使用临时ID: ${messageId}`, 'ChatStream');
@@ -2455,7 +2482,7 @@ export default class ChatStream extends AiWorkflow {
       persona,
       '',
       '## 对用户说话（须调 MCP，勿用文字假装）',
-      '- **reply**：当前会话文字（调用后立即发到 QQ）。`|` 分句 · `[回复:ID]` · 群聊 `[at:QQ]`',
+      '- **reply**：当前会话文字（调用后立即发到 QQ）。默认普通发言、**不要**写 `[回复:ID]`；仅要挂引用气泡时才写 `[回复:那条的ID]` 或填 messageId。`|` 分句 · 群聊 `[at:QQ]`',
       '- **poke** / **emotion** / **send_image** / **send_file** / **emojiReaction**：戳一戳、表情、图文件、表情回应',
       '- **saveMessageAsset**：按消息 ID 把图/文件/自定义表情落到工作区 `downloads/`；成功拿到 `workspacePath` 后再 `send_image`/`send_file`',
       '- **relayPrivate***：向好友私聊传话（正文不在群里露出）',
@@ -2476,7 +2503,7 @@ export default class ChatStream extends AiWorkflow {
       '- **setGroupAvatar**：工作区内图片路径设为当前群头像（先 saveMessageAsset 或已有文件）',
       '',
       '## 记录',
-      '- `昵称(QQ)[ID:xxx]` 为消息 ID；引用写 `[回复:xxx]`；下载媒体用同一 ID',
+      '- `昵称(QQ)[ID:xxx]` 中的 ID 可写进 `[回复:xxx]` 或 saveMessageAsset；日常接话可不引用',
       '',
       '## 工作区与 skills',
       '- 「Workspace context」含 AGENTS / rules / **skills**（按 location 用 tools.read 加载）',
@@ -2497,7 +2524,9 @@ export default class ChatStream extends AiWorkflow {
       : `${botName}｜QQ ${e.self_id}｜私聊 ${e.user_id}`;
     const parts = [`会话：${sessionLine}`, `当前时间：${dateStr}`];
     if (e.isMaster === true) parts.push('当前发言者为主人，指令优先、少反驳。');
-    if (question?.isGlobalTrigger) parts.push('【随机旁观】你闲来无事看群聊，自然接话即可，不必解决问题。');
+    if (question?.isGlobalTrigger) {
+      parts.push('【随机旁观】闲看群聊，想接就接一两句；可随意引用或不引用。勿总结全文、勿逐条点评。');
+    }
     return `【本轮上下文】\n${parts.join('\n')}`;
   }
 
@@ -2606,16 +2635,25 @@ export default class ChatStream extends AiWorkflow {
    */
   static getReplySegmentId(e) {
     const seg = e?.message && Array.isArray(e.message) ? e.message.find(s => s && s.type === 'reply') : null;
-    const id = seg?.id ?? seg?.data?.id ?? e?.source?.message_id ?? e?.source?.id;
-    return id != null && String(id).trim() !== '' ? String(id).trim() : null;
+    const id = segReplyId(seg) || (e?.source?.message_id != null || e?.source?.id != null
+      ? String(e.source.message_id ?? e.source.id).trim()
+      : '');
+    return id || null;
   }
 
-  /** 当前触发消息的消息 ID（[当前消息] 行里的 ID；勿回落到被回复消息 ID） */
+  /** 当前触发消息 ID（NapCat：message_id === real_id；勿用 real_seq / source） */
   static resolveEventMessageId(e) {
     if (!e) return null;
-    const id = e.message_id ?? e.real_id ?? e.messageId ?? e.id;
+    const id = e.message_id ?? e.real_id;
     const s = id != null ? String(id).trim() : '';
     return s || null;
+  }
+
+  /** 历史条目引用 ID（与 resolveEventMessageId 同为 message_id 优先） */
+  static historyEntryId(msg) {
+    if (!msg) return '';
+    const id = msg.message_id ?? msg.real_id;
+    return id != null ? String(id).trim() : '';
   }
 
   /**
@@ -2656,13 +2694,13 @@ export default class ChatStream extends AiWorkflow {
       const newMessages = [];
       for (const msg of Array.isArray(rawHistory) ? rawHistory : []) {
         if (!msg || typeof msg !== 'object') continue;
-        const mid = msg.real_id || msg.message_id || msg.message_seq;
+        const mid = msg.message_id || msg.real_id || msg.message_seq;
         if (!mid) continue;
         const idStr = String(mid);
         if (existingIds.has(idStr)) continue;
 
         const sender = msg.sender || {};
-        const segments = Array.isArray(msg.message) ? msg.message : [];
+        const segments = flattenMessageSegs(msg.message);
         const parts = this._segmentsToHistoryParts(segments);
         let text = parts.text;
         if (!text) {
@@ -2720,7 +2758,7 @@ export default class ChatStream extends AiWorkflow {
    * @returns {string}
    */
   _formatHistoryMessage(msg, e = null) {
-    const msgId = msg.message_id || msg.real_id || '未知';
+    const msgId = ChatStream.historyEntryId(msg) || '未知';
     const raw = stripLegacyToolUsagePrefix((msg.message || '').replace(/\n/g, ' '));
     const selfId = e?.self_id != null ? String(e.self_id) : null;
     const isBot =
@@ -2800,18 +2838,23 @@ export default class ChatStream extends AiWorkflow {
       await this.syncHistoryFromAdapter(e);
       const { historyKey } = source;
       const history = ChatStream.messageHistory.get(historyKey) || [];
-      const currentMsgId = ChatStream.resolveEventMessageId(e) || '未知';
+      const currentMsgId = ChatStream.resolveEventMessageId(e) || '';
 
-      const filteredHistory = history.filter(
-        (msg) => String(msg.message_id) !== String(currentMsgId)
-      );
+      // @/前缀：当前句单独走 [当前消息]，从历史去掉避免重复
+      // 全局旁观：只给历史，且必须留下触发句及其 [ID:…]，否则模型只能乱抓旧 ID
+      const baseHistory = isGlobalTrigger || !currentMsgId
+        ? history
+        : history.filter((msg) => ChatStream.historyEntryId(msg) !== currentMsgId);
+
       const uniqueHistory = [];
       const seenIds = new Set();
-      for (let i = filteredHistory.length - 1; i >= 0; i--) {
-        const msg = filteredHistory[i];
-        const msgId = msg.message_id || msg.real_id;
-        if (msgId && !seenIds.has(String(msgId))) {
-          seenIds.add(String(msgId));
+      for (let i = baseHistory.length - 1; i >= 0; i--) {
+        const msg = baseHistory[i];
+        const msgId = ChatStream.historyEntryId(msg);
+        if (msgId && !seenIds.has(msgId)) {
+          seenIds.add(msgId);
+          uniqueHistory.unshift(msg);
+        } else if (!msgId) {
           uniqueHistory.unshift(msg);
         }
       }
@@ -2820,25 +2863,16 @@ export default class ChatStream extends AiWorkflow {
       const historyLimit = isGlobalTrigger ? 20 : 15;
       const recentMessages = uniqueHistory.slice(-historyLimit);
       const historyFooter = isGlobalTrigger
-        ? ''
-        : '\n\n（说明：以上从上到下由早到晚；【我·工具】= 该步已完成；【我】= 你已回复；**只回应下方 `[当前消息]`**；有 `[引用消息]` 时先认清用户在回谁。）';
+        ? '\n\n（闲聊旁观：想接哪句接哪句，也可不引用直接说话。勿全文总结、勿逐条点评、勿重复【我】已说过的话。）'
+        : '\n\n（说明：以上从上到下由早到晚；【我·工具】= 该步已完成；【我】= 你已回复；**只回应下方 `[当前消息]`**；有 `[引用消息]` 时先认清用户在回谁。普通说话勿带 `[回复:ID]`；要挂引用气泡才写 `[回复:xxx]`。）';
 
       if (recentMessages.length > 0) {
-        if (isGlobalTrigger) {
-          mergedMessages.push({
-            role: 'user',
-            content:
-              `${sectionLabel}\n${recentMessages.map((m) => this._formatHistoryMessage(m, e)).join('\n')}` +
-              '\n\n你闲来无事点开群聊，看到这些发言。请像群里真人一样接一两句：对准气氛或某条发言；勿全文总结、勿逐条点评、勿重复【我】已说过的话。'
-          });
-        } else {
-          mergedMessages.push({
-            role: 'user',
-            content:
-              `${sectionLabel}\n${recentMessages.map((m) => this._formatHistoryMessage(m, e)).join('\n')}` +
-              historyFooter
-          });
-        }
+        mergedMessages.push({
+          role: 'user',
+          content:
+            `${sectionLabel}\n${recentMessages.map((m) => this._formatHistoryMessage(m, e)).join('\n')}` +
+            historyFooter
+        });
       }
     }
 
@@ -2925,7 +2959,8 @@ export default class ChatStream extends AiWorkflow {
 
         const trimmed = this._resolveOutboundText(aiResult.content, turn);
         if (trimmed) {
-          const fallbackReplyId = turn?.queuedReplyMessageId ?? ChatStream.resolveEventMessageId(e);
+          // 无工具拟定的引用时：纯正文发出，不默认挂当前消息引用
+          const fallbackReplyId = turn?.queuedReplyMessageId ?? null;
           await this.sendMessages(e, trimmed, { fallbackReplyId });
           const { displayText } = resolveOutgoingMessage(trimmed, { fallbackReplyId });
           const historyText = displayText || trimmed;

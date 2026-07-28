@@ -98,7 +98,7 @@ export function parseReplyContentSegments(text) {
 
 /**
  * 统一解析对外发送正文：图片内容标记、[回复:ID]、[at:QQ]。
- * fallbackReplyId 为 reply 工具 messageId 或默认引用当前消息。
+ * fallbackReplyId 仅在调用方显式传入时作为引用兜底（如 messageId 参数）；默认不引用。
  */
 export function resolveOutgoingMessage(text, { fallbackReplyId } = {}) {
   const { imageContent, text: withoutImageMark } = parseImageContentMark(text);

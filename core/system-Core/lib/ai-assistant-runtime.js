@@ -2,6 +2,7 @@
  * AI 助手运行时 — 底层走 AGT workflow.process / AiWorkflowLoader.mergeWorkflows
  */
 import AiWorkflowLoader from '#infrastructure/ai-workflow/loader.js';
+import { flattenMessageSegs, segQq, segReplyId, segText } from '#utils/onebot-message-seg.js';
 import ChatStream from '../workflow/chat.js';
 
 export const AI_FULL_PROMPT_DUMP_REGEX = /#?XRK完整AI上下文/;
@@ -47,7 +48,7 @@ export function stripAiFullPromptDumpMark(raw) {
 export function rawMessageTextForAiTrigger(e) {
   if (e?.msg != null && String(e.msg).trim() !== '') return String(e.msg);
   if (!Array.isArray(e?.message)) return '';
-  return e.message.map((seg) => (seg?.type === 'text' ? (seg.text || '') : '')).join('');
+  return flattenMessageSegs(e.message).map((seg) => (seg?.type === 'text' ? segText(seg) : '')).join('');
 }
 
 /**
@@ -87,26 +88,28 @@ export async function shouldTriggerAI(e, config) {
   return false;
 }
 
-/** 从段里取 reply 目标消息 ID（不依赖 e.source；AGT OneBot 通常无 source） */
+/** 从段里取 reply 目标消息 ID（事件扁平段；勿用 real_seq） */
 function replyTargetIdFromEvent(e) {
   const seg = Array.isArray(e?.message)
     ? e.message.find((s) => s && s.type === 'reply')
     : null;
-  const id = seg?.id ?? seg?.data?.id ?? e?.source?.message_id ?? e?.source?.id;
-  return id != null && String(id).trim() !== '' ? String(id).trim() : null;
+  const fromSeg = segReplyId(seg);
+  if (fromSeg) return fromSeg;
+  const fromSource = e?.source?.message_id ?? e?.source?.id;
+  return fromSource != null && String(fromSource).trim() !== '' ? String(fromSource).trim() : null;
 }
 
 function summarizeReplyRaw(reply) {
   if (!reply) return '';
   if (reply.raw_message) return String(reply.raw_message).replace(/\s+/g, ' ').trim();
   if (!Array.isArray(reply.message)) return '';
-  return reply.message
+  return flattenMessageSegs(reply.message)
     .map((seg) => {
       if (!seg || typeof seg !== 'object') return '';
-      if (seg.type === 'text') return seg.text || '';
+      if (seg.type === 'text') return segText(seg);
       if (seg.type === 'image' || seg.type === 'mface') return '[图片]';
       if (seg.type === 'file') return `[文件:${seg.name || '未知'}]`;
-      if (seg.type === 'at') return `@${seg.qq || seg.user_id || ''}`;
+      if (seg.type === 'at') return `@${segQq(seg)}`;
       return '';
     })
     .join('')
@@ -114,7 +117,7 @@ function summarizeReplyRaw(reply) {
     .trim();
 }
 
-export async function processMessageContent(e, config) {
+export async function processMessageContent(e, _config) {
   const fallback = e.msg || '';
   const message = e.message;
   if (!Array.isArray(message)) return stripAiFullPromptDumpMark(String(fallback));
@@ -122,7 +125,6 @@ export async function processMessageContent(e, config) {
   try {
     let content = '';
     const replyId = replyTargetIdFromEvent(e);
-    // 轻量标记；完整「引用消息」块由 ChatStream.mergeMessageHistory 注入
     if (replyId) content += `[回复:${replyId}] `;
     if (replyId && typeof e.getReply === 'function') {
       try {
@@ -135,21 +137,20 @@ export async function processMessageContent(e, config) {
       } catch { /* ignore */ }
     }
 
-    for (const seg of message) {
+    for (const seg of flattenMessageSegs(message)) {
       if (!seg || seg.type === 'reply') continue;
-      if (seg.type === 'text') content += seg.text || seg.data?.text || '';
+      if (seg.type === 'text') content += segText(seg);
       else if (seg.type === 'at') {
-        const qq = seg.qq ?? seg.user_id ?? seg.data?.qq ?? seg.data?.user_id;
-        if (qq != null && String(qq) !== String(e.self_id)) {
-          content += `@${qq} `;
+        const qqStr = segQq(seg);
+        if (!qqStr) continue;
+        if (qqStr === String(e.self_id) || qqStr === 'all') {
+          content += `@机器人(${e.self_id}) `;
+        } else {
+          content += `@${qqStr} `;
         }
       } else if (seg.type === 'image' || seg.type === 'mface') content += '[图片] ';
-      else if (seg.type === 'file') {
-        content += `[文件:${seg.name || seg.data?.name || '未知'}] `;
-      } else if (seg.type === 'face') content += '[表情] ';
-    }
-    if (config?.prefix) {
-      content = content.replace(new RegExp(`^${config.prefix}`), '');
+      else if (seg.type === 'file') content += `[文件:${seg.name || '未知'}] `;
+      else if (seg.type === 'face') content += '[表情] ';
     }
     return stripAiFullPromptDumpMark(content.trim());
   } catch (err) {
