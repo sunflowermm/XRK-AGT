@@ -38,7 +38,7 @@ system-Core 是 XRK-AGT 的内置核心模块，提供了开箱即用的完整�
 
 ## HTTP API 模块
 
-system-Core 提供了 **12 个** HTTP API 模块，覆盖系统管理的各个方面。
+system-Core 提供了 **11 个** HTTP API 模块，覆盖系统管理的各个方面。
 
 > **鉴权**：路径以 `/api/` 开头的路由默认需要系统 API Key（`HttpApi` 自动注入，见 [AUTH.md](AUTH.md)）；仅显式 `systemAuth: false` 的端点可匿名访问。`127.0.0.0/8` 回环地址可免 Key。
 

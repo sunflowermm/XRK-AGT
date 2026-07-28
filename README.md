@@ -33,7 +33,7 @@ XRK-AGT 是由向日葵开发、各大学志同道合的学生联合研制的 **
 - **🌐 多平台消息接入**：OneBotv11 / QBQBot / GSUIDCORE / stdin / 自定义 Tasker
 - **🔌 插件与工作流**：指令插件 + AI 工作流 (AiWorkflow)
 - **🌐 Web 与 HTTP/API**：内置 Web 控制台 + REST API + WebSocket
-- **⭐ system-Core**：12 HTTP API、7 工作流（80 MCP 工具）、15 插件、4 Tasker、4 events、Web 控制台（`/xrk/`）
+- **⭐ system-Core**：11 HTTP API、7 工作流（80 MCP 工具）、15 插件、4 Tasker、4 events、Web 控制台（`/xrk/`）
 - **🎨 渲染**：默认 Playwright；Chromium 经启动菜单或 `pnpm run setup:browsers` 安装
 
 ---
@@ -270,7 +270,7 @@ XRK-AGT 支持 MCP（Model Context Protocol）协议，可在 Cursor 等 AI 编�
 | 质量与发布 | [框架测试指南](docs/框架测试指南.md)、[代码审查清单](docs/代码审查清单.md)、[文档审查清单](docs/文档审查清单.md) |
 | 概览与运行 | [运行时挂载面](docs/runtime-surface.md)、[底层写法规范](docs/coding-style.md)、[底层架构设计](docs/底层架构设计.md)、[启动与引导](docs/startup.md)、[database](docs/database.md)、[AgentRuntime](docs/agent-runtime.md)、[Server](docs/server.md) |
 | 开发契约 | [base-classes](docs/base-classes.md)、[infrastructure-shared](docs/infrastructure-shared.md)、[DOCSTYLE](docs/DOCSTYLE.md) |
-| system-Core | [system-core.md](docs/system-core.md)（12 HTTP / 7 stream / 15 plugin / 4 tasker / 4 events） |
+| system-Core | [system-core.md](docs/system-core.md)（11 HTTP / 7 workflow / 15 plugin / 4 tasker / 4 events） |
 | 生态索引 | [AGT-Cores-Tools-Index](https://github.com/sunflowermm/AGT-Cores-Tools-Index) |
 | 任务与事件 | [Tasker 底层规范](docs/tasker-base-spec.md)、[OneBotv11 Tasker 文档](docs/tasker-onebotv11.md)、[Tasker 加载器文档](docs/tasker-loader.md)、[事件系统标准化文档](docs/事件系统标准化文档.md)（包含事件监听器开发指南） |
 | 插件 | [插件基类文档](docs/plugin-base.md)、[插件加载器文档](docs/plugins-loader.md) |
