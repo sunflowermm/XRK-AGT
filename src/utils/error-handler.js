@@ -150,7 +150,7 @@ export class ErrorHandler {
    */
   recordError(error) {
     const key = `${error.code}`;
-    const stats = this.errorStats.getOrInsert(key, () => ({
+    const stats = this.errorStats.getOrInsertComputed(key, () => ({
       count: 0,
       firstOccurrence: Date.now(),
       lastOccurrence: Date.now(),

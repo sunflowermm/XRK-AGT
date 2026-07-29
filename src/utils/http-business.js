@@ -460,7 +460,7 @@ export class ProxyManager {
     }
 
     const key = `${domain}-${upstreamUrl}`;
-    const stat = this._stats.upstreamStats.getOrInsert(key, () => ({
+    const stat = this._stats.upstreamStats.getOrInsertComputed(key, () => ({
       requests: 0,
       failures: 0,
       totalResponseTime: 0,
@@ -699,7 +699,7 @@ export class ProxyManager {
    */
   _selectRoundRobin(upstreams, domain) {
     const key = `round-robin-${domain}`;
-    const currentIndex = this._roundRobinIndex.getOrInsert(key, () => 0);
+    const currentIndex = this._roundRobinIndex.getOrInsert(key, 0);
     const selected = upstreams[currentIndex % upstreams.length];
     this._roundRobinIndex.set(key, currentIndex + 1);
     

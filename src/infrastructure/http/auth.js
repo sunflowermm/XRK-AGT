@@ -72,9 +72,9 @@ export function shouldForceAuthOnLoopbackWhenToolsRun() {
   return runtimeConfig.server?.auth?.requireLoopbackAuthWhenToolsRun !== false;
 }
 
-/** @returns {object|undefined} 未通过时返回 error 响应 */
+/** @returns {object|undefined} 未通过时返回 401 响应 */
 export function ensureSystemCoreAuth(req, res, bot, context = 'system-Core') {
   if (!bot?.checkApiAuthorization?.(req)) {
-    return HttpResponse.error(res, new Error('未授权'), 401, context);
+    return HttpResponse.unauthorized(res, '未授权');
   }
 }
