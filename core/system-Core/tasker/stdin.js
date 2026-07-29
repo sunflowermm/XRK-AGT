@@ -5,13 +5,14 @@
 import { createInterface } from 'readline';
 import fs from 'fs';
 import os from 'os';
-import { exec } from 'child_process';
+import { execFile } from 'child_process';
 import path from 'path';
 import { ulid } from 'ulid';
 import crypto from 'crypto';
 import RuntimeUtil from '#utils/runtime-util.js';
 import paths from '#utils/paths.js';
 import { setRuntimeGlobal, getRuntimeGlobal } from '#utils/runtime-globals.js';
+import { isPathInside } from '#utils/path-guards.js';
 
 const LOG_TAG = 'StdinTasker';
 const tempDir = path.join(paths.data, 'stdin');
@@ -26,6 +27,7 @@ function cleanupTempFiles() {
       const files = fs.readdirSync(dir);
       files.forEach(file => {
         const filePath = path.join(dir, file);
+        if (!isPathInside(dir, filePath)) return;
         try {
           const stats = fs.statSync(filePath);
           if (now - stats.mtimeMs > 3600000) {
@@ -147,6 +149,7 @@ export default class StdinTasker {
       } else throw new Error('不支持的文件格式');
       fileName = fileName.replace(/[^a-zA-Z0-9._-]/g, '_');
       const targetPath = path.join(mediaDir, fileName);
+      if (!isPathInside(mediaDir, targetPath)) throw new Error('路径遍历被拒绝');
       await fs.promises.writeFile(targetPath, buffer);
       const url = `${baseUrl}/media/${fileName}`;
       RuntimeUtil.makeLog('debug', `文件已保存: ${targetPath} -> ${url}`, LOG_TAG);
@@ -279,9 +282,9 @@ export default class StdinTasker {
 
   openImageFile(filePath) {
     try {
-      const commands = { win32: `start "" "${filePath}"`, darwin: `open "${filePath}"`, linux: `xdg-open "${filePath}"` };
+      const commands = { win32: ['cmd', ['/c', 'start', '', filePath]], darwin: ['open', [filePath]], linux: ['xdg-open', [filePath]] };
       const platform = os.platform();
-      if (commands[platform]) exec(commands[platform]);
+      if (commands[platform]) execFile(commands[platform][0], commands[platform][1]);
     } catch (error) {
       RuntimeUtil.makeLog('error', `打开图片失败: ${error.message}`, LOG_TAG);
     }
