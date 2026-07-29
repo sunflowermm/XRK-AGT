@@ -86,7 +86,7 @@ const boolValue = computed(() => Boolean(props.modelValue));
     <ConfigTagsEditor
       v-else-if="ctrl === 'tags'"
       :model-value="modelValue"
-      :placeholder="schema.placeholder || '输入后回车添加'"
+      :placeholder="schema.placeholder || '输入后点添加'"
       @update:model-value="set"
     />
     <ConfigKvEditor

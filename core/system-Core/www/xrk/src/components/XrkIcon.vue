@@ -126,6 +126,9 @@ defineProps({
     <template v-else-if="name === 'plus'">
       <path d="M12 5v14M5 12h14" />
     </template>
+    <template v-else-if="name === 'check'">
+      <path d="M5 12.5 10 17.5 19 7" />
+    </template>
     <template v-else-if="name === 'upload'">
       <path d="M12 16V5M8 9l4-4 4 4" />
       <path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3" />
