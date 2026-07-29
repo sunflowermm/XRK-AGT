@@ -27,8 +27,10 @@ export class Help extends PluginBase {
             { cmd: '#帮助', desc: '本帮助页' },
             { cmd: '#状态', desc: '系统状态' },
             { cmd: '#更新', desc: '更新 Core' },
-            { cmd: '#重启', desc: '重启服务(主人)' },
-            { cmd: '#关机/#开机', desc: '停机/恢复(主人)' }
+            { cmd: '#重启', desc: '热重启服务(主人)' },
+            { cmd: '#热关机/#停机', desc: '停消息/可#开机(主人)' },
+            { cmd: '#关机', desc: '真关机回菜单(主人)' },
+            { cmd: '#开机', desc: '解除热关机(主人)' }
           ]
         },
         {

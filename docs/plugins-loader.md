@@ -393,7 +393,7 @@ await PluginLoader.watch(true);
    - 查看工作流执行日志
 
 4. **系统状态检查**：
-   - 通过 Redis（键前缀 `AGT:count:`、`AGT:shutdown:`）确认运行状态
+   - 通过 Redis（键前缀 `AGT:count:`、`AGT:shutdown:` 热关机标记）确认运行状态
    - 查看 AgentRuntime 运行日志
    - 检查 HTTP API 是否正常
 

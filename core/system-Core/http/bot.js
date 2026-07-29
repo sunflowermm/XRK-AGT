@@ -1,6 +1,7 @@
 import { collectBotInventory } from '#infrastructure/http/utils/botInventory.js';
 import { InputValidator } from '#utils/input-validator.js';
 import { HttpResponse } from '#utils/http-utils.js';
+import { EXIT_STOP } from '#utils/process-signals.js';
 
 
 /**
@@ -135,13 +136,17 @@ export default {
         const { getRedis } = await import('#infrastructure/database/index.js');
         const redis = getRedis();
         if (!redis) return HttpResponse.error(res, new Error('Redis未初始化'), 503, 'bot.control');
-        if (action === 'shutdown') {
+        if (action === 'shutdown' || action === 'hot_shutdown') {
           await redis.set(`AGT:shutdown:${uin}`, 'true');
-          return HttpResponse.success(res, null, '已关机');
+          return HttpResponse.success(res, null, '已热关机');
         }
         if (action === 'startup') {
           await redis.del(`AGT:shutdown:${uin}`);
           return HttpResponse.success(res, null, '已开机');
+        }
+        if (action === 'poweroff') {
+          setTimeout(() => process.exit(EXIT_STOP), 500);
+          return HttpResponse.success(res, null, '正在关机，返回菜单');
         }
         return HttpResponse.validationError(res, '不支持的操作');
       }, 'bot.control')

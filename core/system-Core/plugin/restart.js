@@ -1,3 +1,5 @@
+import { EXIT_RESTART, EXIT_STOP } from '#utils/process-signals.js'
+
 const RESTART_KEY = 'AGT:restart'
 const SHUTDOWN_KEY = 'AGT:shutdown'
 
@@ -5,12 +7,13 @@ export class Restart extends PluginBase {
   constructor(e = '') {
     super({
       name: '重启与关机',
-      dsc: '#重启 #关机 #停机 #开机',
+      dsc: '#重启 #热关机 #停机 #关机 #开机',
       event: 'message',
       priority: 10,
       rule: [
         { reg: '^#重启$', fnc: 'restart', permission: 'master' },
-        { reg: '^#(停机|关机)$', fnc: 'stop', permission: 'master' },
+        { reg: '^#(热关机|停机)$', fnc: 'hotStop', permission: 'master' },
+        { reg: '^#关机$', fnc: 'powerOff', permission: 'master' },
         { reg: '^#开机$', fnc: 'start', permission: 'master' },
       ],
     })
@@ -74,15 +77,24 @@ export class Restart extends PluginBase {
       user_id: this.e.user_id,
     }), { EX: 300 })
     logger.mark(`[重启] 保存重启信息到 ${RESTART_KEY}:${uin}`)
-    setTimeout(() => process.exit(1), 1000)
+    setTimeout(() => process.exit(EXIT_RESTART), 1000)
     return true
   }
 
-  async stop() {
+  /** Redis 标记停机：进程仍在，仅忽略消息；`#开机` 恢复 */
+  async hotStop() {
     const uin = this._uin()
     await redis.set(`${SHUTDOWN_KEY}:${uin}`, 'true')
-    await this.e.reply('关机成功，已停止运行。发送"#开机"可恢复运行')
-    logger.mark(`[关机][${uin}] 机器人已关机`)
+    await this.e.reply('热关机成功，已停止处理消息。发送"#开机"可恢复运行')
+    logger.mark(`[热关机][${uin}] 机器人已热关机`)
+    return true
+  }
+
+  /** 真关机：子进程 exit(0)，菜单守护回菜单 */
+  async powerOff() {
+    await this.e.reply('正在关机，返回菜单…')
+    logger.mark('[关机] 进程退出，返回菜单')
+    setTimeout(() => process.exit(EXIT_STOP), 1000)
     return true
   }
 

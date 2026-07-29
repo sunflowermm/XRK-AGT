@@ -481,10 +481,10 @@ export const dealMethods = {
         }
       }
 
-      // 检查关机状态
+      // 热关机：进程仍在，仅忽略业务消息（#开机 仍放行）
       const shutdownStatus = await redis.get(`AGT:shutdown:${botUin}`)
       if (shutdownStatus === 'true') {
-        logger.debug(`[关机状态] 忽略消息: ${e.plainText || ''}`)
+        logger.debug(`[热关机] 忽略消息: ${e.plainText || ''}`)
         return false
       }
 
