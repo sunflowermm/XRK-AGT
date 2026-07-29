@@ -120,6 +120,15 @@ export async function displayStartupSummary(runtime, loadTime, startTime, timing
     console.log(chalk.yellow('\n▶ 认证配置：'));
     console.log(`    ${chalk.cyan('•')} API密钥：${chalk.white(maskSensitive(runtime.apiKey))}`);
     console.log(chalk.gray('    使用 X-API-Key 请求头进行认证'));
+    if (authConfig.loopbackExempt === true) {
+      console.log(chalk.red('    ⚠ loopbackExempt=true：满足本机 Host+127 条件时免 Key（公网反代勿开）'));
+    } else {
+      console.log(chalk.gray('    loopbackExempt=false：所有客户端均须 API Key（推荐）'));
+    }
+    const wl = Array.isArray(authConfig.whitelist) ? authConfig.whitelist : [];
+    if (wl.some((x) => String(x || '').trim() === '/' || String(x || '').trim() === '/api' || String(x || '').trim() === '/api*')) {
+      console.log(chalk.red('    ⚠ 白名单含「/」或「/api」类危险项，启动时会忽略；请清空后保存'));
+    }
   }
 
   await displayAccessUrls(runtime, 'http', runtime.actualPort);

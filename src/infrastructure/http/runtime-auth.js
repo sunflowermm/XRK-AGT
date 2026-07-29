@@ -90,9 +90,12 @@ export function checkApiAuthorization(runtime, req, options = {}) {
   }
 
   const forceAuth = options.forceAuth === true || shouldForceAuthOnLoopbackWhenToolsRun();
-  // 仅「Host 为本机 + TCP 对端为 127.* + 无公网反代客户端头」才免 Key。
-  // 公网域名/IP 经 nginx/frp 转到 127 时 socket 仍是回环，旧逻辑会误放行。
-  if (!forceAuth && isLoopbackAuthExempt(req)) {
+  // 本机免 Key 必须显式打开 server.auth.loopbackExempt（默认 false）。
+  // 历史上仅凭 socket===127 放行，nginx/frp/Host 被改写时会导致公网裸奔。
+  const loopbackExempt = typeof options.loopbackExempt === 'boolean'
+    ? options.loopbackExempt
+    : runtimeConfig.server?.auth?.loopbackExempt === true;
+  if (!forceAuth && loopbackExempt && isLoopbackAuthExempt(req)) {
     return true;
   }
 
@@ -139,7 +142,58 @@ export function isApiWhitelistPath(runtime, requestPath) {
   const rules = getAuthWhitelistRules(runtime);
   if (rules.length === 0) return false;
   const p = String(requestPath || '').split('?')[0].split('#')[0];
-  return rules.some((rule) => rule.type === 'regex' ? rule.value.test(p) : p.startsWith(rule.value));
+  return rules.some((rule) => matchWhitelistRule(rule, p));
+}
+
+/** @param {{ type: string, value: RegExp|string }} rule @param {string} path */
+export function matchWhitelistRule(rule, path) {
+  if (!rule || !path) return false;
+  if (rule.type === 'regex') return rule.value.test(path);
+  if (rule.type === 'prefix') return path === rule.value || path.startsWith(rule.value);
+  // exact：本路径或其子路径（/health 不匹配 /healthz）
+  return path === rule.value || path.startsWith(`${rule.value}/`);
+}
+
+/**
+ * `/`、`/api` 等前缀会放行全部或全部 API，直接丢弃。
+ * @param {string} base 已去掉尾部 * 的路径
+ */
+export function isDangerousAuthWhitelistPrefix(base) {
+  const p = String(base || '').trim().replace(/\/+$/, '') || '/';
+  return p === '/' || p === '/api';
+}
+
+/**
+ * @param {string} pattern
+ * @returns {{ type: 'regex'|'prefix'|'exact', value: RegExp|string }|null}
+ */
+export function compileAuthWhitelistRule(pattern) {
+  const raw = String(pattern || '').trim();
+  if (!raw) return null;
+
+  if (raw.startsWith('^') || raw.startsWith('regex:')) {
+    const src = raw.startsWith('regex:') ? raw.slice(6) : raw;
+    try {
+      return { type: 'regex', value: new RegExp(src) };
+    } catch {
+      RuntimeUtil.makeLog('warn', `[Auth] 忽略无效白名单正则: ${raw}`, '认证');
+      return null;
+    }
+  }
+
+  const starred = raw.endsWith('*');
+  const base = starred ? raw.slice(0, -1) : raw;
+  if (isDangerousAuthWhitelistPrefix(base)) {
+    RuntimeUtil.makeLog(
+      'warn',
+      `[Auth] 忽略危险白名单「${raw}」（会放行全部或全部 /api）；静态页/health 本就不走 API Key`,
+      '认证',
+    );
+    return null;
+  }
+
+  if (starred) return { type: 'prefix', value: base };
+  return { type: 'exact', value: base };
 }
 
 /**
@@ -154,17 +208,8 @@ export function getAuthWhitelistRules(runtime) {
   const rules = [];
   if (Array.isArray(list)) {
     for (const item of list) {
-      const pattern = String(item || '').trim();
-      if (!pattern) continue;
-      if (pattern.startsWith('^')) {
-        try {
-          rules.push({ type: 'regex', value: new RegExp(pattern) });
-        } catch {
-          // ignore invalid regex
-        }
-      } else {
-        rules.push({ type: 'prefix', value: pattern });
-      }
+      const rule = compileAuthWhitelistRule(item);
+      if (rule) rules.push(rule);
     }
   }
 

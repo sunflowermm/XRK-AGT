@@ -723,10 +723,19 @@ export const serverConfig = {
                 default: true,
                 component: 'Switch'
               },
+              loopbackExempt: {
+                type: 'boolean',
+                label: '本机回环免 API Key',
+                description:
+                  '仅当 Host 为本机且 TCP 对端为 127.*、且无公网反代头时免 Key。默认关闭。公网/nginx/frp 部署务必保持关闭，否则可能裸奔',
+                default: false,
+                component: 'Switch'
+              },
               whitelist: {
                 type: 'array',
                 label: '白名单路径（免 API Key）',
-                description: '支持前缀或 regex: 正则字面量字符串；命中后跳过 API Key 鉴权',
+                description:
+                  '仅作用于走 API Key 的 /api 路由。勿填「/」或「/api」（会放行全部，启动时忽略）。/health、/status、/xrk 静态页本就不校验 Key，无需列入。尾部 * 表示前缀；或以 ^ / regex: 写正则',
                 itemType: 'string',
                 default: [],
                 component: 'Tags'

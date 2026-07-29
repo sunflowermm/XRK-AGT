@@ -25,14 +25,16 @@
 除此之外，Server 不会基于 URL 前缀自动放行/拒绝；是否需要 Key、如何校验，完全交给上层模块处理。  
 当上层调用 `AgentRuntime.checkApiAuthorization(req)` 时，底层会统一执行（实现：`runtime-auth.js` + `auth.js`）：
 
-- **本机回环免 Key**（须同时满足，见 `isLoopbackAuthExempt`）：
-  - `Host` 为本机（`127.*` / `localhost`）；
-  - TCP 对端为 `127.*`（含 `::ffff:127.*`）；
-  - 无指向公网客户端的反代头（`X-Forwarded-For` / `X-Real-IP` / `CF-Connecting-IP` 等），且 `req.ip` 亦非公网。
-- **公网域名或公网 IP 的 Host**（即便经 nginx / frp 转到本机 127 端口）**必须**带 API Key；不得仅因 `socket.remoteAddress === 127.*` 放行。
-- **例外**：当 `ai-workflow.tools.file.runEnabled === true`（或同类危险能力开启）时，本机回环 **也强制** API Key（可用 `server.auth.requireLoopbackAuthWhenToolsRun: false` 显式关闭，不推荐）；
-- **可选白名单**：若 `server.auth.whitelist` 配置了前缀/正则规则，命中时免鉴权；
-- 其余来源按 API Key 规则严格校验。
+- **默认**：凡启用 API Key，**所有客户端**（含本机 127）均须携带有效 Key。
+- **可选本机免 Key**：仅当 `server.auth.loopbackExempt === true` 时，才走 `isLoopbackAuthExempt`（须同时：`Host` 为本机、`socket` 为 `127.*`、无公网反代客户端头）。公网 / nginx / frp 部署**必须保持 false**。
+- **例外**：当 `ai-workflow.tools.file.runEnabled === true` 时，即便开启了 `loopbackExempt`，本机也强制 Key（可用 `requireLoopbackAuthWhenToolsRun: false` 关闭，不推荐）。
+- **可选白名单**：`server.auth.whitelist` 命中时免鉴权。匹配规则：
+  - 普通路径：精确匹配或子路径（`/health` 不匹配 `/healthz`）
+  - 尾部 `*`：前缀匹配（`/api/public*` → `/api/public/...`）
+  - `^...` 或 `regex:...`：正则
+  - **禁止** `/`、`/api`（会放行全部或全部 API；编译时丢弃并打警告）
+  - `/health`、`/status`、静态 `/xrk` **本就不走** `HttpApi` Key 校验，不必列入白名单
+- **`enabled === false`**：关闭 API Key 时校验恒通过（含远程；生产勿关）。
 
 默认 `tools.file.runEnabled: false`（见 `config/default_config/ai-workflow.yaml`）。
 

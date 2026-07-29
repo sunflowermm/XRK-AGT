@@ -72,7 +72,7 @@ describe('限流 skip：私网/回环（与鉴权 127-only 刻意不同）', () 
   });
 });
 
-describe('HTTP 鉴权：反代/frp 不得因 socket=127 免 Key', () => {
+describe('HTTP 鉴权：isLoopbackAuthExempt 条件', () => {
   it('公网 Host + socket 回环 → 不免', () => {
     assert.equal(
       isLoopbackAuthExempt(mockReq({ host: '115.190.181.211:11451', remoteAddress: '127.0.0.1' })),
@@ -80,7 +80,7 @@ describe('HTTP 鉴权：反代/frp 不得因 socket=127 免 Key', () => {
     );
   });
 
-  it('本机 Host + socket 回环 → 免', () => {
+  it('本机 Host + socket 回环 → 条件满足', () => {
     assert.equal(
       isLoopbackAuthExempt(mockReq({ host: '127.0.0.1:11451', remoteAddress: '127.0.0.1' })),
       true,
@@ -97,14 +97,24 @@ describe('HTTP 鉴权：反代/frp 不得因 socket=127 免 Key', () => {
       false,
     );
   });
+});
 
-  it('checkApiAuthorization：公网 Host 缺 Key 拒绝', () => {
+describe('HTTP 鉴权：默认强制 Key / loopbackExempt', () => {
+  it('默认本机也缺 Key 拒绝', () => {
     const runtime = mockRuntime();
-    const req = mockReq({ host: '115.190.181.211:11451', remoteAddress: '127.0.0.1' });
-    assert.equal(runtimeAuth.checkApiAuthorization(runtime, req), false);
+    assert.equal(
+      runtimeAuth.checkApiAuthorization(runtime, mockReq(), { loopbackExempt: false }),
+      false,
+    );
   });
 
-  it('checkApiAuthorization：公网 Host 正确 Key 通过', () => {
+  it('公网 Host 缺 Key 拒绝', () => {
+    const runtime = mockRuntime();
+    const req = mockReq({ host: '115.190.181.211:11451', remoteAddress: '127.0.0.1' });
+    assert.equal(runtimeAuth.checkApiAuthorization(runtime, req, { loopbackExempt: false }), false);
+  });
+
+  it('公网 Host 正确 Key 通过', () => {
     const key = 'a'.repeat(32);
     const runtime = mockRuntime(key);
     const req = mockReq({
@@ -112,19 +122,55 @@ describe('HTTP 鉴权：反代/frp 不得因 socket=127 免 Key', () => {
       remoteAddress: '127.0.0.1',
       headers: { 'x-api-key': key },
     });
-    assert.equal(runtimeAuth.checkApiAuthorization(runtime, req), true);
+    assert.equal(runtimeAuth.checkApiAuthorization(runtime, req, { loopbackExempt: false }), true);
+  });
+
+  it('loopbackExempt 选项开启且条件满足时本机免 Key', () => {
+    const runtime = mockRuntime();
+    assert.equal(
+      runtimeAuth.checkApiAuthorization(runtime, mockReq(), {
+        loopbackExempt: true,
+        forceAuth: false,
+      }),
+      !shouldForceAuthOnLoopbackWhenToolsRun(),
+    );
+  });
+
+  it('白名单「/」「/api」编译为 null；普通路径可匹配', () => {
+    assert.equal(runtimeAuth.isDangerousAuthWhitelistPrefix('/'), true);
+    assert.equal(runtimeAuth.isDangerousAuthWhitelistPrefix('/api'), true);
+    assert.equal(runtimeAuth.compileAuthWhitelistRule('/'), null);
+    assert.equal(runtimeAuth.compileAuthWhitelistRule('/api'), null);
+    assert.equal(runtimeAuth.compileAuthWhitelistRule('/api*'), null);
+
+    const health = runtimeAuth.compileAuthWhitelistRule('/health');
+    assert.equal(health?.type, 'exact');
+    assert.equal(runtimeAuth.matchWhitelistRule(health, '/health'), true);
+    assert.equal(runtimeAuth.matchWhitelistRule(health, '/healthz'), false);
+    assert.equal(runtimeAuth.matchWhitelistRule(health, '/api/system/overview'), false);
+
+    const pub = runtimeAuth.compileAuthWhitelistRule('/api/public*');
+    assert.equal(pub?.type, 'prefix');
+    assert.equal(runtimeAuth.matchWhitelistRule(pub, '/api/public/x'), true);
+    assert.equal(runtimeAuth.matchWhitelistRule(pub, '/api/system/overview'), false);
+  });
+
+  it('错误 Key（如 111）拒绝', () => {
+    const runtime = mockRuntime('a'.repeat(32));
+    const req = mockReq({
+      host: '115.190.181.211:11451',
+      remoteAddress: '8.8.8.8',
+      ip: '8.8.8.8',
+      headers: { 'x-api-key': '111' },
+    });
+    assert.equal(runtimeAuth.checkApiAuthorization(runtime, req, { loopbackExempt: false }), false);
   });
 });
 
-describe('HTTP 鉴权：forceAuth / runtime-auth', () => {
-  it('shouldForceAuthOnLoopbackWhenToolsRun 返回 boolean', () => {
-    assert.equal(typeof shouldForceAuthOnLoopbackWhenToolsRun(), 'boolean');
-  });
-
+describe('HTTP 鉴权：forceAuth', () => {
   it('forceAuth 时 loopback 缺 Key 拒绝', () => {
     const runtime = mockRuntime();
-    const req = mockReq();
-    assert.equal(runtimeAuth.checkApiAuthorization(runtime, req, { forceAuth: true }), false);
+    assert.equal(runtimeAuth.checkApiAuthorization(runtime, mockReq(), { forceAuth: true }), false);
   });
 
   it('forceAuth 时正确 Key 通过', () => {
@@ -132,13 +178,5 @@ describe('HTTP 鉴权：forceAuth / runtime-auth', () => {
     const runtime = mockRuntime(key);
     const req = mockReq({ headers: { 'x-api-key': key } });
     assert.equal(runtimeAuth.checkApiAuthorization(runtime, req, { forceAuth: true }), true);
-  });
-
-  it('无 forceAuth 时 loopback 免 Key', () => {
-    const runtime = mockRuntime();
-    const req = mockReq();
-    if (!shouldForceAuthOnLoopbackWhenToolsRun()) {
-      assert.equal(runtimeAuth.checkApiAuthorization(runtime, req), true);
-    }
   });
 });

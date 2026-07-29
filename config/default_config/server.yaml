@@ -242,14 +242,15 @@ auth:
   # NapCat 反向 WS（/OneBotv11）：true 时 127.* 也须 Bearer/access_token
   onebot:
     requireLoopbackAuth: true
+  # 是否允许「本机 Host + 127 对端」免 API Key。默认 false（公网/反代安全）。
+  # 仅本机开发且确认无反代把公网流量转到 127 时，才可设为 true。
+  loopbackExempt: false
   # ai-workflow.tools.file.runEnabled=true 时，loopback 也强制 API Key（默认开启该强制）
   requireLoopbackAuthWhenToolsRun: true
-  # API 鉴权白名单路径（支持前缀、正则字面量字符串）
-  # 示例：
-  # - "/health"
-  # - "/robots.txt"
-  # - "regex:^/api/public/.*$"
-  # 留空表示不放行任何额外路径（更安全）
+  # API 鉴权白名单（仅影响 /api 的 Key 校验）
+  # 禁止填 "/" 或 "/api"（会放行全部，代码会忽略并打警告）
+  # /health、/status、静态 /xrk 本就不走 API Key，无需列入
+  # 示例： "/api/public/"、"/api/hooks/xxx"、"^/api/open/.*"
   whitelist: []
 
 # ----------------------------------------

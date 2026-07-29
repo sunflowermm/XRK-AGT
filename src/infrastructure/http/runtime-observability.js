@@ -52,6 +52,7 @@ export function handleStatus(runtime, req, res) {
     },
     auth: {
       apiKeyEnabled: runtimeConfig.server?.auth?.apiKey?.enabled !== false,
+      loopbackExempt: runtimeConfig.server?.auth?.loopbackExempt === true,
     },
   };
 
