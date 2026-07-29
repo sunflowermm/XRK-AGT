@@ -6,6 +6,13 @@
   <title>{{ title }}</title>
   <base href="{{ _baseUrl }}/">
   <style>
+    @font-face {
+      font-family: "Genshin";
+      src: url("resources/fonts/Genshin.ttf") format("truetype");
+      font-weight: 400;
+      font-style: normal;
+      font-display: swap;
+    }
     :root {
       --bg: #0f1210;
       --sheet: #171b17;
@@ -17,13 +24,15 @@
     }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
-      font-family: "Cascadia Mono", "Sarasa Mono SC", "Consolas", "Microsoft YaHei UI", monospace;
+      /* 项目本地字体；勿混 Cascadia/Consolas（无 CJK）+ 系统黑体假粗 */
+      font-family: "Genshin", "Microsoft YaHei", "PingFang SC", sans-serif;
+      font-weight: 400;
       background: var(--bg);
       color: var(--ink);
       min-height: 100vh;
       padding: 24px;
       font-size: 13px;
-      line-height: 1.4;
+      line-height: 1.45;
       -webkit-font-smoothing: antialiased;
     }
     #container {
@@ -42,7 +51,7 @@
     .mast h1 {
       font-size: 20px;
       letter-spacing: 0.06em;
-      font-weight: 700;
+      font-weight: 400;
       color: #f5f8f1;
     }
     .mast h1 i {
@@ -63,7 +72,7 @@
       margin-bottom: 10px;
       color: var(--head);
       font-size: 11px;
-      font-weight: 700;
+      font-weight: 400;
       letter-spacing: 0.16em;
     }
     .name::before {
@@ -87,7 +96,7 @@
     }
     .cmd {
       color: var(--cmd);
-      font-weight: 700;
+      font-weight: 400;
       font-size: 12.5px;
       white-space: nowrap;
     }
@@ -107,7 +116,7 @@
       font-size: 11px;
       letter-spacing: 0.04em;
     }
-    .foot b { color: var(--cmd); font-weight: 700; }
+    .foot b { color: var(--cmd); font-weight: 400; }
   </style>
 </head>
 <body>
