@@ -9,9 +9,21 @@ const PROXY_FIELDS = {
   description: '仅影响本端点的 HTTP 请求',
   component: 'SubForm',
   fields: {
-    enabled: { type: 'boolean', label: '启用代理', default: false, component: 'Switch' },
-    url: { type: 'string', label: '代理地址', default: '', component: 'Input' }
-  }
+    enabled: {
+      type: 'boolean',
+      label: '启用代理',
+      description: '关闭则直连，不走下方地址',
+      default: false,
+      component: 'Switch',
+    },
+    url: {
+      type: 'string',
+      label: '代理地址',
+      description: '如 http://127.0.0.1:7890',
+      default: '',
+      component: 'Input',
+    },
+  },
 };
 
 const HEADERS_FIELD = {
@@ -198,6 +210,7 @@ function baseProviderEntryFields(options = {}) {
     tokenField: {
       type: 'string',
       label: 'Token 字段名',
+      description: '发往 OpenAI 兼容接口时用 max_tokens / max_completion_tokens / 两者都写',
       enum: ['max_tokens', 'max_completion_tokens', 'both'],
       component: 'Select'
     },
@@ -216,8 +229,22 @@ function baseProviderEntryFields(options = {}) {
       min: 0,
       component: 'InputNumber'
     },
-    presencePenalty: { type: 'number', label: 'presence_penalty', min: -2, max: 2, component: 'InputNumber' },
-    frequencyPenalty: { type: 'number', label: 'frequency_penalty', min: -2, max: 2, component: 'InputNumber' },
+    presencePenalty: {
+      type: 'number',
+      label: 'presence_penalty',
+      description: 'OpenAI Chat：降低已出现 token 再出现的倾向，-2～2',
+      min: -2,
+      max: 2,
+      component: 'InputNumber'
+    },
+    frequencyPenalty: {
+      type: 'number',
+      label: 'frequency_penalty',
+      description: 'OpenAI Chat：按出现频次惩罚，-2～2',
+      min: -2,
+      max: 2,
+      component: 'InputNumber'
+    },
     thinkingType: {
       type: 'string',
       label: 'thinking.type',
@@ -235,6 +262,7 @@ function baseProviderEntryFields(options = {}) {
     responseFormat: {
       type: 'string',
       label: 'response_format.type',
+      description: 'json_object 时模型须输出合法 JSON',
       enum: ['text', 'json_object'],
       component: 'Select'
     },
@@ -261,17 +289,29 @@ function baseProviderEntryFields(options = {}) {
       component: 'Select',
       layout: 'half'
     },
-    promptCacheKey: { type: 'string', label: 'prompt_cache_key', component: 'Input' },
+    promptCacheKey: {
+      type: 'string',
+      label: 'prompt_cache_key',
+      description: 'OpenAI 提示缓存路由键，相同键更易命中缓存',
+      component: 'Input'
+    },
     promptCacheRetention: {
       type: 'string',
       label: 'prompt_cache_retention',
+      description: '缓存保留：in-memory 或 24h',
       enum: ['in-memory', '24h'],
       component: 'Select'
     },
-    safetyIdentifier: { type: 'string', label: 'safety_identifier', component: 'Input' },
+    safetyIdentifier: {
+      type: 'string',
+      label: 'safety_identifier',
+      description: 'OpenAI 安全追踪用终端用户标识（勿填明文隐私）',
+      component: 'Input'
+    },
     reasoningEffort: {
       type: 'string',
       label: 'reasoning_effort',
+      description: '推理强度：none～xhigh（依模型支持）',
       enum: ['none', 'minimal', 'low', 'medium', 'high', 'xhigh'],
       component: 'Select'
     },
@@ -282,12 +322,50 @@ function baseProviderEntryFields(options = {}) {
       min: 1,
       component: 'InputNumber'
     },
-    timeout: { type: 'number', label: '超时(ms)', min: 1000, default: 360000, component: 'InputNumber' },
-    enableTools: { type: 'boolean', label: '启用 MCP 工具', default: true, component: 'Switch' },
-    toolChoice: { type: 'string', label: 'tool_choice', default: 'auto', component: 'Input' },
-    parallelToolCalls: { type: 'boolean', label: 'parallel_tool_calls', default: true, component: 'Switch' },
-    maxToolRounds: { type: 'number', label: '最大工具轮次', min: 1, default: 7, component: 'InputNumber' },
-    enableStream: { type: 'boolean', label: '启用流式', default: true, component: 'Switch' },
+    timeout: {
+      type: 'number',
+      label: '超时(ms)',
+      description: '单次请求 AbortSignal 超时',
+      min: 1000,
+      default: 360000,
+      component: 'InputNumber'
+    },
+    enableTools: {
+      type: 'boolean',
+      label: '启用 MCP 工具',
+      description: '关闭则本端点不挂工具，仅纯补全',
+      default: true,
+      component: 'Switch'
+    },
+    toolChoice: {
+      type: 'string',
+      label: 'tool_choice',
+      description: 'auto / none / required，或指定工具名（依协议）',
+      default: 'auto',
+      component: 'Input'
+    },
+    parallelToolCalls: {
+      type: 'boolean',
+      label: 'parallel_tool_calls',
+      description: '是否允许模型一轮并行多个工具调用',
+      default: true,
+      component: 'Switch'
+    },
+    maxToolRounds: {
+      type: 'number',
+      label: '最大工具轮次',
+      description: '工具→模型→工具的最大循环次数',
+      min: 1,
+      default: 7,
+      component: 'InputNumber'
+    },
+    enableStream: {
+      type: 'boolean',
+      label: '启用流式',
+      description: 'SSE/流式输出；部分网关不支持时关闭',
+      default: true,
+      component: 'Switch'
+    },
     headers: HEADERS_FIELD,
     extraBody: EXTRA_BODY_FIELD,
     proxy: PROXY_FIELDS,

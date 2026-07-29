@@ -1,20 +1,20 @@
 <script setup>
 /**
- * 动态键对象（map / keyedObject）：表单新增条目 + 字段翻译编辑，可切 JSON
- * 对齐 ArrayForm / LLM 工厂交互；值模板来自 itemFields 或 example 推断
+ * 动态键对象（map / keyedObject）
+ * UI 壳与 ConfigArrayForm 共用 config-chrome.css
  */
 import { computed, ref, watch } from 'vue';
-import { NButton, NInput, NSpace, useMessage } from 'naive-ui';
+import { NButton, NInput, useMessage } from 'naive-ui';
 import {
   buildDefaultsFromFields,
   getNestedValue,
   inferFieldsFromExample,
-  isFieldFullSpan,
+  isConfigEntryFieldFull,
   resolveFieldControl,
   setNestedValue,
 } from '@/config/flat';
 import { useConfirmDialog } from '@/composables/useConfirmDialog';
-import { randomId } from '@/utils/http';
+import { deepClone, randomId } from '@/utils/http';
 import ConfigFieldControl from '@/components/ConfigFieldControl.vue';
 import ConfigJsonEditor from '@/components/ConfigJsonEditor.vue';
 import XrkIcon from '@/components/XrkIcon.vue';
@@ -33,10 +33,11 @@ const emit = defineEmits(['update:modelValue']);
 const message = useMessage();
 const { confirm } = useConfirmDialog();
 
-const viewMode = ref('form'); // form | json
+const viewMode = ref('form');
 const draftKey = ref('');
 const rowKeys = ref([]);
 const entryOrder = ref([]);
+const rootEl = ref(null);
 
 const resolvedFields = computed(() => {
   const fromProp = props.itemFields && typeof props.itemFields === 'object' ? props.itemFields : {};
@@ -78,28 +79,8 @@ function fieldControl(schema) {
   return resolveFieldControl(schema);
 }
 
-function asFieldMeta(key, schema) {
-  return {
-    path: key,
-    type: schema?.type || 'string',
-    component: String(schema?.component || '').toLowerCase(),
-    layout: schema?.layout,
-    span: schema?.span,
-    fields: schema?.fields,
-  };
-}
-
 function isFull(key, schema) {
-  const ctrl = fieldControl(schema);
-  return (
-    isFieldFullSpan(asFieldMeta(key, schema)) ||
-    ctrl === 'json' ||
-    ctrl === 'kv' ||
-    ctrl === 'textarea' ||
-    ctrl === 'nested' ||
-    ctrl === 'tags' ||
-    ctrl === 'keyed'
-  );
+  return isConfigEntryFieldFull(key, schema);
 }
 
 function emitObj(next) {
@@ -121,13 +102,13 @@ function commitEntries(list) {
 }
 
 function renameKey(i, nextKey) {
-  const list = entries.value.map((e) => ({ ...e, value: deepCloneObj(e.value) }));
+  const list = entries.value.map((e) => ({ ...e, value: deepClone(e.value) }));
   list[i] = { ...list[i], key: nextKey };
   commitEntries(list);
 }
 
 function patchValue(i, relPath, value) {
-  const list = entries.value.map((e) => ({ ...e, value: deepCloneObj(e.value) }));
+  const list = entries.value.map((e) => ({ ...e, value: deepClone(e.value) }));
   const cur = list[i].value && typeof list[i].value === 'object' ? list[i].value : {};
   list[i] = {
     ...list[i],
@@ -138,17 +119,6 @@ function patchValue(i, relPath, value) {
 
 function readValue(item, relPath) {
   return getNestedValue(item || {}, relPath);
-}
-
-function deepCloneObj(v) {
-  if (v && typeof v === 'object') {
-    try {
-      return structuredClone(v);
-    } catch {
-      return JSON.parse(JSON.stringify(v));
-    }
-  }
-  return v;
 }
 
 function addEntry() {
@@ -165,8 +135,7 @@ function addEntry() {
     message.warning(`${props.keyLabel || '键'}「${key}」已存在`);
     return;
   }
-  const blank = hasSchema.value ? buildDefaultsFromFields(resolvedFields.value) : {};
-  obj[key] = blank;
+  obj[key] = hasSchema.value ? buildDefaultsFromFields(resolvedFields.value) : {};
   draftKey.value = '';
   rowKeys.value = [...rowKeys.value, randomId()];
   entryOrder.value = [...entryOrder.value, key];
@@ -204,50 +173,61 @@ async function applyExample() {
     });
     if (!ok) return;
   }
-  emitObj(deepCloneObj(ex));
+  emitObj(deepClone(ex));
 }
 
-function onJsonUpdate(v) {
-  emitObj(v && typeof v === 'object' && !Array.isArray(v) ? v : {});
+function setAllOpen(open) {
+  rootEl.value?.querySelectorAll('details.card').forEach((el) => {
+    el.open = open;
+  });
 }
 </script>
 
 <template>
-  <div class="keyed-form" :class="{ dense }">
+  <div ref="rootEl" class="cfg-entry-list keyed-form" :class="{ dense }">
     <div class="bar">
       <span class="count">{{ entries.length }} 项</span>
-      <NSpace size="small">
-        <NButton
-          size="tiny"
-          :type="viewMode === 'form' ? 'primary' : 'default'"
-          secondary
-          @click="viewMode = 'form'"
-        >
-          表单
-        </NButton>
-        <NButton
-          size="tiny"
-          :type="viewMode === 'json' ? 'primary' : 'default'"
-          secondary
-          @click="viewMode = 'json'"
-        >
-          JSON
-        </NButton>
+      <div class="cfg-tb-tools">
+        <div class="cfg-tb-group" role="group" aria-label="编辑模式">
+          <NButton
+            size="tiny"
+            class="cfg-tb-btn"
+            :type="viewMode === 'form' ? 'primary' : 'default'"
+            :quaternary="viewMode !== 'form'"
+            @click="viewMode = 'form'"
+          >
+            表单
+          </NButton>
+          <NButton
+            size="tiny"
+            class="cfg-tb-btn"
+            :type="viewMode === 'json' ? 'primary' : 'default'"
+            :quaternary="viewMode !== 'json'"
+            @click="viewMode = 'json'"
+          >
+            JSON
+          </NButton>
+        </div>
+        <div v-if="entries.length > 1 && viewMode === 'form'" class="cfg-tb-group" role="group" aria-label="折叠">
+          <NButton size="tiny" quaternary class="cfg-tb-btn" @click="setAllOpen(false)">全部折叠</NButton>
+          <NButton size="tiny" quaternary class="cfg-tb-btn" @click="setAllOpen(true)">全部展开</NButton>
+        </div>
         <NButton
           v-if="example && typeof example === 'object' && !Array.isArray(example)"
           size="tiny"
           quaternary
+          class="cfg-tb-btn"
           @click="applyExample"
         >
           填入示例
         </NButton>
-      </NSpace>
+      </div>
     </div>
 
     <ConfigJsonEditor
       v-if="viewMode === 'json'"
       :model-value="modelValue && typeof modelValue === 'object' ? modelValue : {}"
-      @update:model-value="onJsonUpdate"
+      @update:model-value="(v) => emitObj(v && typeof v === 'object' && !Array.isArray(v) ? v : {})"
     />
 
     <template v-else>
@@ -259,7 +239,7 @@ function onJsonUpdate(v) {
           :placeholder="keyPlaceholder || keyLabel"
           @keyup.enter="addEntry"
         />
-        <NButton size="small" type="primary" class="ico-btn" @click="addEntry">
+        <NButton size="small" type="primary" class="cfg-tb-btn cfg-tb-save" @click="addEntry">
           <XrkIcon name="plus" :size="14" />
           <span>新增{{ label }}</span>
         </NButton>
@@ -275,17 +255,19 @@ function onJsonUpdate(v) {
       <details v-for="(row, i) in entries" :key="rowKeys[i] || row.key" class="card" open>
         <summary class="card-head">
           <span class="card-title">{{ row.key || `(未命名 #${i + 1})` }}</span>
-          <NButton
-            size="tiny"
-            tertiary
-            type="error"
-            class="ico-btn"
-            title="删除"
-            @click.stop.prevent="removeEntry(i)"
-          >
-            <XrkIcon name="trash" :size="13" />
-            <span>删除</span>
-          </NButton>
+          <div class="card-acts" @click.stop>
+            <NButton
+              size="tiny"
+              tertiary
+              type="error"
+              class="ico-btn"
+              title="删除"
+              @click.prevent="removeEntry(i)"
+            >
+              <XrkIcon name="trash" :size="13" />
+              <span>删除</span>
+            </NButton>
+          </div>
         </summary>
         <div class="card-body">
           <div class="key-edit">
@@ -300,17 +282,14 @@ function onJsonUpdate(v) {
 
           <div v-if="hasSchema" class="field-grid">
             <template v-for="[fk, schema] in Object.entries(resolvedFields)" :key="fk">
-              <div
-                v-if="fieldControl(schema) === 'nested'"
-                class="field full nested"
-              >
+              <div v-if="fieldControl(schema) === 'nested'" class="field full nested">
                 <div class="nested-title">{{ schema.label || fk }}</div>
                 <div class="field-grid">
                   <div
                     v-for="[nk, ns] in Object.entries(schema.fields || {})"
                     :key="nk"
                     class="field"
-                    :class="{ full: isFull(nk, ns), switch: fieldControl(ns) === 'switch' }"
+                    :class="{ full: isFull(nk, ns) }"
                   >
                     <label :title="ns.description || nk">{{ ns.label || nk }}</label>
                     <ConfigFieldControl
@@ -324,10 +303,17 @@ function onJsonUpdate(v) {
               <div
                 v-else
                 class="field"
-                :class="{ full: isFull(fk, schema), switch: fieldControl(schema) === 'switch' }"
+                :class="{ full: isFull(fk, schema) }"
               >
                 <label :title="schema.description || fk">{{ schema.label || fk }}</label>
-                <p v-if="schema.description" class="desc">{{ schema.description }}</p>
+                <p
+                  v-if="schema.description"
+                  class="desc"
+                  :class="{ compact: !isFull(fk, schema) }"
+                  :title="schema.description"
+                >
+                  {{ schema.description }}
+                </p>
                 <ConfigFieldControl
                   :schema="schema"
                   :model-value="readValue(row.value, fk)"
@@ -348,126 +334,3 @@ function onJsonUpdate(v) {
     </template>
   </div>
 </template>
-
-<style scoped>
-.keyed-form {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  width: 100%;
-}
-.bar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-.count {
-  font-size: var(--font-xs);
-  font-weight: 800;
-  color: var(--muted);
-}
-.add-row {
-  display: flex;
-  gap: 6px;
-  align-items: center;
-}
-.add-key {
-  flex: 1;
-  min-width: 0;
-}
-.empty {
-  margin: 0;
-  font-size: var(--font-sm);
-  color: var(--muted);
-}
-.card {
-  border: 1.5px solid var(--ink);
-  border-radius: 8px;
-  background: var(--card);
-  overflow: hidden;
-}
-.card-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 8px 10px;
-  background: color-mix(in srgb, var(--cyan) 14%, var(--card));
-  font-weight: 800;
-  cursor: pointer;
-  list-style: none;
-}
-.card-head::-webkit-details-marker {
-  display: none;
-}
-.card-title {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-family: var(--mono);
-  font-size: var(--font-sm);
-}
-.card-body {
-  padding: 10px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-.key-edit {
-  display: grid;
-  gap: 4px;
-}
-.key-edit label {
-  font-size: var(--font-sm);
-  font-weight: 700;
-}
-.field-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px 12px;
-}
-.dense .field-grid {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-}
-.field {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  min-width: 0;
-}
-.field.full {
-  grid-column: 1 / -1;
-}
-.field.switch {
-  flex-direction: row;
-  align-items: center;
-  justify-content: space-between;
-}
-.field label {
-  font-size: var(--font-sm);
-  font-weight: 700;
-}
-.desc {
-  margin: 0;
-  font-size: var(--font-xs);
-  color: var(--muted);
-}
-.nested {
-  border: 1px dashed color-mix(in srgb, var(--ink) 30%, transparent);
-  border-radius: 6px;
-  padding: 6px;
-}
-.nested-title {
-  font-weight: 800;
-  font-size: var(--font-sm);
-  margin-bottom: 4px;
-}
-.ico-btn {
-  display: inline-flex !important;
-  align-items: center;
-  gap: 4px;
-  font-weight: 700 !important;
-}
-</style>

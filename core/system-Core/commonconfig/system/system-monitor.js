@@ -10,13 +10,14 @@ export const monitorConfig = {
           enabled: {
             type: 'boolean',
             label: '监控总开关',
+            description: '关闭后不再定时采样与告警',
             default: true,
             component: 'Switch'
           },
           interval: {
             type: 'number',
             label: '监控检查间隔',
-            description: '监控检查间隔（毫秒）',
+            description: '定时检查间隔（毫秒）',
             min: 1000,
             default: 300000,
             component: 'InputNumber'
@@ -24,6 +25,7 @@ export const monitorConfig = {
           browser: {
             type: 'object',
             label: '浏览器进程监控',
+            description: '扫描浏览器进程；杀进程须显式开启',
             component: 'SubForm',
             fields: {
               enabled: {
@@ -36,6 +38,7 @@ export const monitorConfig = {
               maxInstances: {
                 type: 'number',
                 label: '最大浏览器实例数',
+                description: '超过则按策略清理旧实例',
                 min: 1,
                 default: 5,
                 component: 'InputNumber'
@@ -43,7 +46,7 @@ export const monitorConfig = {
               memoryThreshold: {
                 type: 'number',
                 label: '内存阈值（%）',
-                description: '内存阈值（%）触发清理',
+                description: '单实例内存占比超阈值触发清理',
                 min: 0,
                 max: 100,
                 default: 90,
@@ -52,6 +55,7 @@ export const monitorConfig = {
               reserveNewest: {
                 type: 'boolean',
                 label: '保留最新实例',
+                description: '清理时优先保留最近启动的实例',
                 default: true,
                 component: 'Switch'
               }
@@ -60,11 +64,13 @@ export const monitorConfig = {
           memory: {
             type: 'object',
             label: '系统内存监控',
+            description: '系统/Node 堆观察与本进程 GC',
             component: 'SubForm',
             fields: {
               enabled: {
                 type: 'boolean',
                 label: '启用内存监控',
+                description: '关闭则不做内存采样与 GC',
                 default: true,
                 component: 'Switch'
               },
@@ -96,6 +102,7 @@ export const monitorConfig = {
               gcInterval: {
                 type: 'number',
                 label: 'GC最小间隔（毫秒）',
+                description: '两次 GC 之间的最短间隔',
                 min: 1000,
                 default: 600000,
                 component: 'InputNumber'
@@ -103,18 +110,20 @@ export const monitorConfig = {
               leakDetection: {
                 type: 'object',
                 label: '内存泄漏检测',
+                description: '观察堆增长趋势',
                 component: 'SubForm',
                 fields: {
                   enabled: {
                     type: 'boolean',
                     label: '启用泄漏检测',
+                    description: '关闭则不做泄漏趋势判断',
                     default: true,
                     component: 'Switch'
                   },
                   threshold: {
                     type: 'number',
                     label: '泄漏阈值',
-                    description: '10%增长视为潜在泄漏',
+                    description: '相对增长超过该比例视为潜在泄漏（如 0.1=10%）',
                     min: 0,
                     max: 1,
                     default: 0.1,

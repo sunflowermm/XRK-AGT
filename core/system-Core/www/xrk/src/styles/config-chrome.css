@@ -1,0 +1,292 @@
+/**
+ * 配置页共用控件壳：顶栏工具组 + 条目列表（ArrayForm / KeyedMapForm）
+ */
+
+/* —— 工具按钮：禁止短字折行 —— */
+.cfg-tb-btn,
+.tb-btn {
+  display: inline-flex !important;
+  align-items: center;
+  gap: 4px;
+  font-weight: 700 !important;
+  flex-shrink: 0;
+  white-space: nowrap !important;
+}
+.cfg-tb-btn .n-button__content,
+.tb-btn .n-button__content {
+  display: inline-flex !important;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: nowrap !important;
+  white-space: nowrap !important;
+}
+.cfg-tb-btn span,
+.tb-btn span {
+  display: inline !important;
+  white-space: nowrap !important;
+  word-break: keep-all;
+  line-height: 1.2;
+}
+
+.cfg-tb-tools,
+.editor-toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  max-width: 100%;
+}
+
+.cfg-tb-group,
+.tb-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+  padding: 1px;
+  border: 1.5px solid color-mix(in srgb, var(--ink) 70%, transparent);
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--paper-2) 35%, var(--card));
+}
+
+.cfg-tb-group .cfg-tb-btn,
+.cfg-tb-group .tb-btn,
+.tb-group .tb-btn,
+.tb-group .cfg-tb-btn {
+  --n-border: none !important;
+  --n-border-hover: none !important;
+  box-shadow: none !important;
+  margin: 0 !important;
+  height: 26px;
+  padding: 0 8px !important;
+  border-radius: 5px !important;
+}
+
+.cfg-tb-group .cfg-tb-btn:active,
+.cfg-tb-group .tb-btn:active,
+.tb-group .tb-btn:active {
+  transform: none;
+}
+
+.cfg-tb-sep,
+.tb-sep {
+  width: 1px;
+  height: 18px;
+  flex: 0 0 auto;
+  align-self: center;
+  background: var(--ink);
+  opacity: 0.28;
+}
+
+.cfg-tb-save,
+.tb-save {
+  height: 28px !important;
+  padding: 0 12px !important;
+  box-shadow: var(--shadow) !important;
+  font-weight: 800 !important;
+}
+
+/* —— 条目列表（工厂数组 / 动态键 map） —— */
+.cfg-entry-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+}
+
+.cfg-entry-list .bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.cfg-entry-list .count {
+  font-size: var(--font-xs);
+  font-weight: 800;
+  color: var(--muted);
+}
+
+.cfg-entry-list .empty {
+  margin: 0;
+  font-size: var(--font-sm);
+  color: var(--muted);
+}
+
+.cfg-entry-list .add-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  width: 100%;
+}
+
+.cfg-entry-list .add-key {
+  flex: 1;
+  min-width: 0;
+}
+
+.cfg-entry-list .card {
+  border: 1.5px solid var(--ink);
+  border-radius: 8px;
+  background: var(--card);
+  overflow: hidden;
+}
+
+.cfg-entry-list .card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 8px;
+  cursor: pointer;
+  list-style: none;
+  font-weight: 800;
+  font-size: var(--font-sm);
+  background: color-mix(in srgb, var(--yellow) 18%, var(--card));
+  border-bottom: 1px solid color-mix(in srgb, var(--ink) 22%, transparent);
+}
+
+.cfg-entry-list .card-head::-webkit-details-marker {
+  display: none;
+}
+
+.cfg-entry-list .card-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--mono);
+  font-size: var(--font-sm);
+}
+
+.cfg-entry-list .card-acts {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.cfg-entry-list .card-body {
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.cfg-entry-list .key-edit {
+  display: grid;
+  gap: 4px;
+}
+
+.cfg-entry-list .key-edit label {
+  font-size: var(--font-sm);
+  font-weight: 700;
+}
+
+.cfg-entry-list .field-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 14px;
+  align-items: start;
+  contain: layout style;
+}
+
+.cfg-entry-list.dense .field-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px 12px;
+}
+
+.cfg-entry-list .field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  padding: 4px 0;
+  contain: layout;
+}
+
+.cfg-entry-list .field.full {
+  grid-column: 1 / -1;
+}
+
+.cfg-entry-list .field label {
+  font-size: var(--font-sm);
+  font-weight: 700;
+  line-height: 1.3;
+  white-space: normal;
+  word-break: keep-all;
+  overflow-wrap: break-word;
+}
+
+.cfg-entry-list .desc {
+  margin: 0;
+  font-size: var(--font-xs);
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.cfg-entry-list .desc.compact {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.cfg-entry-list .nested {
+  border: 1px dashed color-mix(in srgb, var(--ink) 28%, transparent);
+  border-radius: 6px;
+  padding: 6px;
+  background: color-mix(in srgb, var(--paper) 50%, var(--card));
+}
+
+.cfg-entry-list .nested-title {
+  font-size: var(--font-sm);
+  font-weight: 800;
+  margin-bottom: 4px;
+}
+
+.cfg-entry-list .section {
+  margin-bottom: 8px;
+  border: 1px dashed color-mix(in srgb, var(--ink) 28%, transparent);
+  border-radius: 6px;
+  padding: 6px;
+}
+
+.cfg-entry-list .section-head {
+  font-size: var(--font-sm);
+  font-weight: 800;
+  cursor: pointer;
+  list-style: none;
+  margin-bottom: 6px;
+  padding: 2px 0 2px 6px;
+  border-left: 3px solid var(--cyan);
+}
+
+.cfg-entry-list .section-head.static {
+  cursor: default;
+}
+
+.cfg-entry-list .section-head::-webkit-details-marker {
+  display: none;
+}
+
+.cfg-entry-list .ico-btn {
+  display: inline-flex !important;
+  align-items: center;
+  gap: 4px;
+  font-weight: 700 !important;
+  white-space: nowrap !important;
+}
+
+.cfg-entry-list .ico-btn .n-button__content {
+  display: inline-flex !important;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap !important;
+  flex-wrap: nowrap !important;
+}
+
+.cfg-entry-list .ico-only {
+  min-width: 28px;
+  padding: 0 4px !important;
+}

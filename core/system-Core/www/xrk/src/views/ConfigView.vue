@@ -8,7 +8,6 @@ import {
   NButton,
   NEmpty,
   NInput,
-  NSpace,
   NSpin,
   NTag,
   useDialog,
@@ -78,7 +77,7 @@ const groups = computed(() => groupFields(fields.value));
 const showGroupHeaders = computed(() => {
   if (groups.value.length !== 1) return true;
   const only = groups.value[0]?.label;
-  return only !== '基础' && only !== '__default__';
+  return only !== '基础';
 });
 const selectedConfig = computed(() => configs.value.find((c) => c.name === selected.value) || null);
 const isSystem = computed(() => selected.value === 'system');
@@ -626,43 +625,70 @@ onMounted(loadList);
           </NTag>
           <span v-if="dirtySummary && !isMobile" class="dirty-hint" :title="dirtySummary">{{ dirtySummary }}</span>
         </div>
-        <NSpace size="small" wrap>
-          <NButton size="small" :type="mode === 'form' ? 'primary' : 'default'" class="tb-btn" @click="setMode('form')">
-            <XrkIcon name="form" :size="14" />
-            <span>表单</span>
-          </NButton>
-          <NButton size="small" :type="mode === 'json' ? 'primary' : 'default'" class="tb-btn" @click="setMode('json')">
-            <XrkIcon name="json" :size="14" />
-            <span>JSON</span>
-          </NButton>
-          <NButton
-            size="small"
-            secondary
-            class="tb-btn"
-            :type="dense ? 'primary' : 'default'"
-            :title="dense ? '舒适布局（一行两列）' : '紧凑布局（一行三列）'"
-            @click="toggleDense"
-          >
-            <XrkIcon :name="dense ? 'comfortable' : 'dense'" :size="14" />
-            <span>{{ dense ? '舒适' : '紧凑' }}</span>
-          </NButton>
-          <NButton size="small" class="tb-btn" :loading="loading" @click="loadOne(selected)">
-            <XrkIcon name="reload" :size="14" />
-            <span>重载</span>
-          </NButton>
-          <NButton size="small" secondary class="tb-btn" @click="backup">
-            <XrkIcon name="backup" :size="14" />
-            <span>备份</span>
-          </NButton>
-          <NButton size="small" secondary class="tb-btn" @click="resetCfg">
-            <XrkIcon name="reset" :size="14" />
-            <span>重置</span>
-          </NButton>
-          <NButton size="small" type="primary" class="tb-btn" :loading="saving" @click="save">
+        <div class="editor-toolbar" role="toolbar" aria-label="配置操作">
+          <div class="tb-group" role="group" aria-label="编辑模式">
+            <NButton
+              size="small"
+              :type="mode === 'form' ? 'primary' : 'default'"
+              class="tb-btn"
+              :quaternary="mode !== 'form'"
+              @click="setMode('form')"
+            >
+              <XrkIcon name="form" :size="14" />
+              <span>表单</span>
+            </NButton>
+            <NButton
+              size="small"
+              :type="mode === 'json' ? 'primary' : 'default'"
+              class="tb-btn"
+              :quaternary="mode !== 'json'"
+              @click="setMode('json')"
+            >
+              <XrkIcon name="json" :size="14" />
+              <span>JSON</span>
+            </NButton>
+          </div>
+
+          <span class="tb-sep" aria-hidden="true" />
+
+          <div class="tb-group" role="group" aria-label="布局密度">
+            <NButton
+              size="small"
+              class="tb-btn"
+              :type="dense ? 'primary' : 'default'"
+              :quaternary="!dense"
+              :title="dense ? '当前紧凑（三列），点击切换舒适' : '当前舒适（两列），点击切换紧凑'"
+              @click="toggleDense"
+            >
+              <XrkIcon :name="dense ? 'dense' : 'comfortable'" :size="14" />
+              <span>{{ dense ? '紧凑' : '舒适' }}</span>
+            </NButton>
+          </div>
+
+          <span class="tb-sep" aria-hidden="true" />
+
+          <div class="tb-group" role="group" aria-label="文件操作">
+            <NButton size="small" quaternary class="tb-btn" :loading="loading" @click="loadOne(selected)">
+              <XrkIcon name="reload" :size="14" />
+              <span>重载</span>
+            </NButton>
+            <NButton size="small" quaternary class="tb-btn" @click="backup">
+              <XrkIcon name="backup" :size="14" />
+              <span>备份</span>
+            </NButton>
+            <NButton size="small" quaternary class="tb-btn" @click="resetCfg">
+              <XrkIcon name="reset" :size="14" />
+              <span>重置</span>
+            </NButton>
+          </div>
+
+          <span class="tb-sep" aria-hidden="true" />
+
+          <NButton size="small" type="primary" class="tb-btn tb-save" :loading="saving" @click="save">
             <XrkIcon name="save" :size="14" />
             <span>保存</span>
           </NButton>
-        </NSpace>
+        </div>
       </header>
 
       <div class="editor-body ink-scroll">
@@ -719,13 +745,12 @@ onMounted(loadList);
                   class="field"
                   :class="{
                     full: isFieldFullSpan(f),
-                    switch: fieldControl(f) === 'switch',
                     dirty: isDirty(f.path),
                     invalid: validateErrorPaths.includes(f.path),
                   }"
                   :title="f.path"
                 >
-                  <div class="meta" :class="{ 'has-hint': !!f.description }">
+                  <div class="meta">
                     <label :for="`f-${f.path}`" :title="f.description || f.path">
                       {{ f.label }}
                       <span v-if="f.required" class="req">*</span>
@@ -734,7 +759,7 @@ onMounted(loadList);
                       {{ f.description }}
                     </p>
                   </div>
-                  <div class="ctrl" :class="{ 'ctrl-switch': fieldControl(f) === 'switch' }">
+                  <div class="ctrl">
                     <ConfigArrayForm
                       v-if="fieldControl(f) === 'array'"
                       v-model="values[f.path]"
@@ -764,12 +789,19 @@ onMounted(loadList);
                         class="field nested-item"
                         :class="{
                           full: isFieldFullSpan({ ...ns, path: `${f.path}.${nk}` }),
-                          switch: fieldControl(ns) === 'switch',
                         }"
                       >
                         <div class="meta">
                           <label :title="ns.description || nk">{{ ns.label || nk }}</label>
-                          <p v-if="ns.description" class="desc compact">{{ ns.description }}</p>
+                          <p
+                            v-if="ns.description"
+                            class="desc"
+                            :class="{
+                              compact: !isFieldFullSpan({ ...ns, path: `${f.path}.${nk}` }),
+                            }"
+                          >
+                            {{ ns.description }}
+                          </p>
                         </div>
                         <ConfigFieldControl
                           :schema="ns"
@@ -973,8 +1005,8 @@ onMounted(loadList);
 header {
   display: flex;
   justify-content: space-between;
-  align-items: flex-start;
-  gap: 6px;
+  align-items: center;
+  gap: 10px;
   margin-bottom: 8px;
   flex-wrap: wrap;
   flex-shrink: 0;
@@ -983,9 +1015,10 @@ header {
 }
 .hdr-left {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: 8px;
   min-width: 0;
+  flex: 1 1 auto;
 }
 .hdr-titles { min-width: 0; }
 header h2 {
@@ -1000,11 +1033,8 @@ header h2 {
   line-height: 1.4;
   max-width: 52ch;
 }
-.tb-btn {
-  display: inline-flex !important;
-  align-items: center;
-  gap: 4px;
-  font-weight: 700 !important;
+.editor-toolbar {
+  flex: 0 1 auto;
 }
 .form-wrap,
 .json-wrap {
@@ -1029,12 +1059,11 @@ header h2 {
 }
 .group {
   position: relative;
-  margin-bottom: 14px;
-  border: 2px solid var(--ink);
-  border-radius: 8px;
+  margin-bottom: 8px;
+  border: 1.5px solid var(--ink);
+  border-radius: 7px;
   padding: 0;
   background: var(--card);
-  box-shadow: var(--shadow);
   overflow: hidden;
 }
 .group::before {
@@ -1043,24 +1072,24 @@ header h2 {
   left: 0;
   top: 0;
   bottom: 0;
-  width: 5px;
+  width: 3px;
   background: var(--cyan);
-  border-right: 2px solid var(--ink);
+  border-right: 1.5px solid var(--ink);
   z-index: 1;
 }
-.group + .group { margin-top: 4px; }
+.group + .group { margin-top: 2px; }
 .group-h {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 10px;
+  gap: 8px;
   margin: 0;
-  padding: 10px 12px 10px 16px;
-  background: color-mix(in srgb, var(--yellow) 55%, var(--paper-2));
-  border-bottom: 3px solid var(--ink);
+  padding: 6px 10px 6px 12px;
+  background: color-mix(in srgb, var(--yellow) 40%, var(--paper-2));
+  border-bottom: 1.5px solid var(--ink);
 }
 .group-rail {
-  height: 3px;
+  height: 2px;
   background: var(--ink);
 }
 .group-h-text { min-width: 0; flex: 1; }
@@ -1087,20 +1116,21 @@ header h2 {
   line-height: 1.6;
   background: var(--card);
 }
-.group .field-grid { padding: 0 10px 4px 14px; }
+.group .field-grid { padding: 4px 10px 8px 14px; }
 .field-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   column-gap: 16px;
-  row-gap: 0;
-  align-items: stretch;
+  row-gap: 4px;
+  align-items: start;
 }
 .field {
   display: flex;
   flex-direction: column;
+  gap: 6px;
   min-width: 0;
-  padding: 9px 4px;
-  border-bottom: 2px solid var(--config-divider);
+  padding: 10px 4px;
+  border-bottom: 1px solid var(--config-divider);
   contain: layout;
 }
 .field.full { grid-column: 1 / -1; }
@@ -1116,9 +1146,6 @@ header h2 {
 .field-grid {
   contain: layout style;
 }
-.ctrl {
-  min-height: 30px;
-}
 .dirty-hint {
   font-size: var(--font-xs);
   opacity: 0.65;
@@ -1133,48 +1160,48 @@ header h2 {
   flex-direction: column;
   gap: 8px;
   width: 100%;
-  border: 1.5px dashed color-mix(in srgb, var(--ink) 35%, transparent);
-  border-radius: 8px;
+  border: 1px dashed color-mix(in srgb, var(--ink) 28%, transparent);
+  border-radius: 6px;
   padding: 8px;
   box-sizing: border-box;
 }
 .nested-item {
-  display: grid;
-  gap: 4px;
-}
-.field:not(.full) { min-height: 100%; }
-.field:not(.full) .ctrl { margin-top: auto; padding-top: 4px; }
-/* 紧凑 = 仅 2 列 → 3 列，不改高度 */
-.dense .field-grid {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  column-gap: 10px;
-}
-.meta {
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  flex: 0 0 auto;
+  gap: 6px;
 }
+/* 上标签+注释，下控件 */
 .meta label {
   display: block;
   font-size: var(--font-sm);
   font-weight: 700;
   line-height: 1.3;
   margin: 0;
+  word-break: keep-all;
+  overflow-wrap: break-word;
+}
+.dense .field-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  column-gap: 12px;
+}
+.meta {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 0 0 auto;
 }
 .req { color: var(--red); }
 .meta .desc {
   margin: 0;
   font-size: var(--font-xs);
   color: var(--muted);
-  line-height: 1.4;
+  line-height: 1.45;
 }
 .meta .desc.compact {
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
-  max-height: 2.8em;
 }
 .ctrl {
   flex: 0 0 auto;
@@ -1182,12 +1209,6 @@ header h2 {
   display: flex;
   flex-direction: column;
   justify-content: center;
-}
-.ctrl-switch {
-  flex-direction: row;
-  align-items: center;
-  justify-content: flex-start;
-  min-height: 28px;
 }
 .example {
   margin-top: 6px;
@@ -1292,9 +1313,9 @@ header h2 {
     top: max(48px, env(safe-area-inset-top) + 44px);
     bottom: calc(var(--shell-tabbar-h, 52px) + env(safe-area-inset-bottom));
   }
-  .config.is-mobile-page .tb-btn span {
-    display: inline;
-    font-size: 11px;
+  .config.is-mobile-page .tb-btn span,
+  .config.is-mobile-page .cfg-tb-btn span {
+    font-size: var(--font-xs);
   }
   .editor {
     flex: 1;
@@ -1325,12 +1346,14 @@ header h2 {
     overflow: hidden;
     max-width: none;
   }
-  header :deep(.n-space) {
+  .editor-toolbar {
     grid-column: 1 / -1;
     width: 100%;
-  }
-  .tb-btn span {
-    display: none;
+    gap: 6px;
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    padding-bottom: 2px;
+    -webkit-overflow-scrolling: touch;
   }
 }
 </style>

@@ -56,6 +56,7 @@ const boolValue = computed(() => Boolean(props.modelValue));
       :id="inputId || undefined"
       :value="modelValue"
       size="small"
+      button-placement="both"
       :min="schema.min"
       :max="schema.max"
       :step="schema.step || 1"
@@ -85,7 +86,7 @@ const boolValue = computed(() => Boolean(props.modelValue));
     <ConfigTagsEditor
       v-else-if="ctrl === 'tags'"
       :model-value="modelValue"
-      placeholder="逐项添加，回车确认"
+      :placeholder="schema.placeholder || '输入后回车添加'"
       @update:model-value="set"
     />
     <ConfigKvEditor
@@ -112,13 +113,17 @@ const boolValue = computed(() => Boolean(props.modelValue));
 <style scoped>
 .cfg-ctrl {
   width: 100%;
-  min-height: 30px;
+  min-height: 28px;
   display: flex;
-  align-items: flex-start;
-}
-.cfg-ctrl[data-ctrl='switch'] {
   align-items: center;
-  min-height: 30px;
+}
+.cfg-ctrl[data-ctrl='textarea'],
+.cfg-ctrl[data-ctrl='array'],
+.cfg-ctrl[data-ctrl='json'],
+.cfg-ctrl[data-ctrl='kv'],
+.cfg-ctrl[data-ctrl='nested'],
+.cfg-ctrl[data-ctrl='keyed'] {
+  align-items: stretch;
 }
 .cfg-ctrl :deep(.num) {
   width: 100%;

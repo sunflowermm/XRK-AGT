@@ -85,17 +85,18 @@ export function normalizeFlatFields(flat) {
     }
   }
 
-  // 子字段归入最近容器的 label 分组（对齐原 buildFieldTree subGroups）
+  // 子字段归入最近「浅层」容器（避免 viewport 等深层 SubForm 拆成碎分区）
   for (const f of list) {
     if (f.container) continue;
     let best = '';
     for (const cpath of containers.keys()) {
-      if (f.path.startsWith(`${cpath}.`) && cpath.length > best.length) best = cpath;
+      if (!f.path.startsWith(`${cpath}.`)) continue;
+      if (!best || cpath.length < best.length) best = cpath;
     }
     if (!best) continue;
     const info = containers.get(best);
     // 仅覆盖默认「基础」；显式 meta.group 保留
-    if (!f.group || f.group === '基础' || f.group === '__default__') {
+    if (!f.group || f.group === '基础') {
       f.group = info?.label || best.split('.').pop() || best;
     }
     if (!f.groupDesc && info?.description) f.groupDesc = info.description;
@@ -372,7 +373,7 @@ export function collectObjectFromFlat(flat, path) {
 }
 
 /**
- * Yunzai 形根级覆盖：从 flat 收集「非 excludeKeys」的顶层键 → 对象
+ * chatbot 根级群号覆盖：从 flat 收集「非 excludeKeys」的顶层键 → 对象
  * （如 chatbot 根级 123456.xxx，排除 master/default 等固定键）
  * @param {Record<string, any>} flat
  * @param {string[]} excludeKeys
@@ -397,13 +398,11 @@ export function collectKeyedSiblingsFromFlat(flat, excludeKeys = []) {
 const FULL_COMPONENTS = new Set([
   'textarea',
   'text-area',
-  'tags',
   'arrayform',
   'subform',
   'inputpassword',
   'json',
   'keyedobject',
-  'multiselect',
 ]);
 
 const FULL_KEY_PATTERN =
@@ -465,8 +464,8 @@ function hasChoiceOptions(field) {
 }
 
 /**
- * 对齐原 config-page.resolveFieldSpanClass：
- * 半宽进两列网格；全宽占满一行。
+ * 半宽进网格；全宽占满一行。
+ * 字符串 Tags 与 Input/Select 同级，不强制整行。
  */
 export function isFieldFullSpan(field) {
   if (!field) return true;
@@ -480,15 +479,28 @@ export function isFieldFullSpan(field) {
   const key = path.split('.').pop() || path;
   const ctrl = resolveFieldControl(meta);
 
+  if (ctrl === 'tags') return false;
   if (FULL_COMPONENTS.has(component)) return true;
-  if (ctrl === 'tags' || ctrl === 'textarea' || ctrl === 'array' || ctrl === 'json' || ctrl === 'kv' || ctrl === 'nested' || ctrl === 'keyed') {
+  if (ctrl === 'textarea' || ctrl === 'array' || ctrl === 'json' || ctrl === 'kv' || ctrl === 'nested' || ctrl === 'keyed') {
     return true;
   }
-  if (type.startsWith('array') || type === 'object' || type === 'map' || type === 'array<object>') {
+  if (type === 'object' || type === 'map' || type === 'array<object>') {
     return true;
   }
   if (FULL_KEY_PATTERN.test(key)) return true;
   return false;
+}
+
+/** ArrayForm / KeyedMapForm：条目内子字段是否全宽 */
+export function isConfigEntryFieldFull(key, schema) {
+  return isFieldFullSpan({
+    path: key,
+    type: schema?.type || 'string',
+    component: String(schema?.component || '').toLowerCase(),
+    layout: schema?.layout,
+    span: schema?.span,
+    fields: schema?.fields,
+  });
 }
 
 export function normalizeOptions(opts) {
@@ -564,7 +576,7 @@ export function groupFields(fields) {
 }
 
 export function formatGroupLabel(label) {
-  if (!label || label === '基础' || label === '__default__') return '基础设置';
+  if (!label || label === '基础') return '基础设置';
   return String(label).replace(/_/g, ' ');
 }
 

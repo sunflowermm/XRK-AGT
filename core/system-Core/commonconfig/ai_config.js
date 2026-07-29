@@ -26,8 +26,10 @@ export default class AIConfig extends ConfigBase {
         enabled: {
           type: 'boolean',
           label: '启用 AI 助手',
+          description: '总开关；关闭后不响应群/私聊触发',
           default: true,
           component: 'Switch',
+          group: '触发',
         },
         persona: {
           type: 'string',
@@ -35,6 +37,7 @@ export default class AIConfig extends ConfigBase {
           description: '传入 chat 工作流的角色描述',
           default: '你是群里一起聊天的伙伴：像真人一样接话，听得懂玩笑和气氛，该正经说清、该闲聊就短打。',
           component: 'Textarea',
+          group: '人设',
         },
         prefix: {
           type: 'string',
@@ -42,13 +45,16 @@ export default class AIConfig extends ConfigBase {
           description: '白名单内消息以此开头时触发（留空则仅 @ 或随机）',
           default: '',
           component: 'Input',
+          group: '触发',
         },
         groups: {
           type: 'array',
           label: '白名单群号',
+          description: '仅这些群可触发；空=不限制群（仍受其它策略约束）',
           itemType: 'string',
           default: [],
           component: 'Tags',
+          group: '触发',
         },
         users: {
           type: 'array',
@@ -57,22 +63,26 @@ export default class AIConfig extends ConfigBase {
           itemType: 'string',
           default: [],
           component: 'Tags',
+          group: '触发',
         },
         cooldown: {
           type: 'number',
           label: '随机触发冷却（秒）',
+          description: '随机插话两次之间的最短间隔',
           min: 0,
           default: 300,
           component: 'InputNumber',
+          group: '触发',
         },
         chance: {
           type: 'number',
           label: '随机触发概率',
-          description: '0～1',
+          description: '0～1，非前缀/@ 时的随机插话概率',
           min: 0,
           max: 1,
           default: 0.1,
           component: 'InputNumber',
+          group: '触发',
         },
         mergeWorkflows: {
           type: 'array',
@@ -82,6 +92,7 @@ export default class AIConfig extends ConfigBase {
           itemType: 'string',
           default: ['memory', 'database', 'tools'],
           component: 'Tags',
+          group: '工作流',
         },
       },
     };

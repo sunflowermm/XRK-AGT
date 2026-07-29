@@ -10,6 +10,7 @@ export const agtConfig = {
           logging: {
             type: 'object',
             label: '日志配置',
+            description: '控制台日志等级、头样式与对象打印',
             component: 'SubForm',
             fields: {
               level: {
