@@ -11,7 +11,7 @@
 | **写业务（先看挂载）** | **[runtime-surface.md](runtime-surface.md)** → [base-classes.md](base-classes.md) |
 | **写法与性能** | **[coding-style.md](coding-style.md)** → [node-26-runtime.md](node-26-runtime.md) |
 | **Cursor / 框架开发约定** | 根 [AGENTS.md](../AGENTS.md) · `.cursor/skills/` |
-| **办事助手（群聊/控制台）** | **[agents.md](agents.md)** · 种子 [agents/](../agents/) |
+| **办事助手（群聊/控制台）** | **[agents.md](agents.md)** · **[agent-context.md](agent-context.md)** · 种子 [agents/](../agents/) |
 | 懂架构 | [底层架构设计](底层架构设计.md) → [startup.md](startup.md) → [database.md](database.md) |
 | 用内置能力 | [system-core.md](system-core.md) |
 | 写插件 / API / 工作流 | [框架可扩展性指南](框架可扩展性指南.md) |
@@ -102,9 +102,10 @@
 - **说明**：Node 侧统一通过工作流 + MCP 工具完成能力编排；如需 Python 侧能力，请在子服务端按 `apis/<group>/*.py` 扩展自定义接口。
 - **[底层架构设计](底层架构设计.md)** - AI 主链路、AiWorkflow 链路、子服务端职责边界（权威）
 - **[办事助手说明](agents.md)** - 怎么用、改哪里、工作区注入、Agents 清单、实现索引；框架写码见根 [AGENTS.md](../AGENTS.md)
+- **[Agent 运行链与上下文](agent-context.md)** - **概念地图** + mergeWorkflows、消息三层、Workspace/rules/skills、工具环契约 ⭐
 - **[MCP 完整指南](mcp-guide.md)** - MCP 工具注册与连接
 - **[MCP 配置指南](mcp-config-guide.md)** - Cursor、Claude Desktop 等外部平台连接配置
-- **[AiWorkflow 工作流基类文档](ai-workflow.md)** - `AiWorkflow` 基类技术文档，涵盖 Embedding、多提供商支持、Function Calling 与上下文增强（MCP 工具 vs Call Function 见该文档）
+- **[AiWorkflow 工作流基类文档](ai-workflow.md)** - `AiWorkflow` 基类；Embedding、Function Calling；**禁止文本假 ReAct**；跑通契约见 agent-context
 - **[工厂系统文档](factory.md)** - LLM（含多模态）/ASR/TTS 工厂系统，统一管理多厂商 AI 服务提供商
 - **[子服务端 API 文档](subserver-api.md)** - Python 子服务端底层系统接口与扩展装载说明
 
@@ -140,7 +141,7 @@
 | 后端 / API | [http-api.md](http-api.md) · [base-classes.md](base-classes.md) · [agent-runtime.md](agent-runtime.md) · [AUTH.md](AUTH.md) | [api-loader.md](api-loader.md) · [infrastructure-shared.md](infrastructure-shared.md) |
 | 运维 / 配置 | [config-base.md](config-base.md) · [database.md](database.md) · [docker.md](docker.md) | [factory.md](factory.md) · [server.md](server.md) |
 | 前端 / 渲染 | [app-dev.md](app-dev.md) · [www-mount.md](www-mount.md) · [renderer.md](renderer.md) | [system-core.md](system-core.md) · skill `xrk-www-compat` |
-| 办事助手运营 | **[agents.md](agents.md)** · [agents/README.md](../agents/README.md) | `data/ai-workspace/` · [ai-workflow.md](ai-workflow.md)（`agentWorkspace`） |
+| 办事助手运营 | **[agents.md](agents.md)** · [agents/README.md](../agents/README.md) | [agent-context.md](agent-context.md) · `data/ai-workspace/` · [ai-workflow.md](ai-workflow.md) |
 
 架构与目录：**[底层架构设计](底层架构设计.md)** · **[PROJECT_OVERVIEW](../PROJECT_OVERVIEW.md)**（目录树）· **[startup.md](startup.md)**（启动链）。
 

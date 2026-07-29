@@ -9,6 +9,7 @@
 | **本文件** | Cursor / 框架与 Core 开发 | 放码、配置归属、本仓 skill 路由 |
 | `~/.cursor/AGENTS.md` | 本机所有项目 | 全局技能、代理、PCB、生图/视频等 |
 | [`docs/agents.md`](docs/agents.md) | 用户 / 运维 / 维护者 | 运行时对话 Agent（办事助手） |
+| [`docs/agent-context.md`](docs/agent-context.md) | 框架 / Core / 运维 | Agent 跑通契约：概念地图、消息三层、Workspace、工具环 |
 | `agents/workspace/AGENTS.md` → `data/ai-workspace/{id}/` | 办事助手模型 | 注入 prompt 的办事规则 |
 | `core/<core>/AGENTS.md`（若有） | 产品 Agent | 该产品工作区与工具边界 |
 
@@ -46,8 +47,8 @@
 | HTTP API / handler / 响应形状 | `xrk-http-api`；前端解包见 `xrk-www-compat` |
 | 新增/改 YAML 字段、schema、模板路径 | `xrk-config` |
 | 插件 / Loader / 基类扩展点 | `xrk-infrastructure` · `xrk-plugins` |
-| AI 工作流 / MCP / 工具环 | `xrk-ai-workflow` · `xrk-mcp` |
-| 办事助手种子 / 工作区注入 | [`docs/agents.md`](docs/agents.md) · `src/utils/agent-workspace.js` |
+| AI 工作流 / MCP / 工具环 | `xrk-ai-workflow` · `xrk-mcp` · [`docs/agent-context.md`](docs/agent-context.md) |
+| 办事助手种子 / 工作区注入 | [`docs/agents.md`](docs/agents.md) · [`docs/agent-context.md`](docs/agent-context.md) · `src/utils/agent-workspace.js` |
 | LLM 工厂 / 代理 fetch | `xrk-llm` · `xrk-v3-api` |
 | Tasker / OneBot | `xrk-tasker` |
 | 子服 / 第三方 `apis/` | `xrk-subserver` · `xrk-third-party-plugins` |

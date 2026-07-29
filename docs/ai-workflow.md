@@ -2,6 +2,7 @@
 
 > **文件位置**：`src/infrastructure/ai-workflow/ai-workflow.js`  
 > **说明**：本文档描述 Node 侧 `AiWorkflow` 基类与 LLM/MCP 集成方式。  
+> **一次 Agent 跑通（消息三层 / Workspace / 工具环）**：**[agent-context.md](agent-context.md)**（契约真源）  
 > **底层基线**：[底层架构设计](底层架构设计.md) · **基类契约**：[base-classes.md](base-classes.md) · **Loader 模式**：[infrastructure-shared.md](infrastructure-shared.md)
 
 `AiWorkflow` 是 XRK-AGT 的工作流基类，用于统一处理：
@@ -9,6 +10,8 @@
 - LLM 调用（经 `LLMFactory`）
 - MCP 工具调用（tool calling）
 - 记忆/知识增强（按已加载工作流能力）
+
+**工具环语义**：多轮 `tool_calls` + MCP 中游执行；**禁止**解析文本假函数 / 旧式文本 ReAct。步数预算与出站见 [agent-context.md](agent-context.md) §5。
 
 ---
 
@@ -34,7 +37,7 @@
 - `llm.retry.*`
 - `embedding.enabled` / `embedding.maxContexts`
 - `mcp.*`
-- `agentWorkspace.*`（注入与预算；完整契约见 [agents.md](agents.md)）
+- `agentWorkspace.*`（注入与预算；运营见 [agents.md](agents.md)；**运行链与消息三层**见 [agent-context.md](agent-context.md)）
 - `tools.file.*`
 
 说明：

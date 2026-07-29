@@ -8,13 +8,31 @@
 | 文件 | 读者 | 内容 |
 |------|------|------|
 | **本文** | 用户 / 运维 / 维护者 | 办事助手怎么用、改哪里、实现索引 |
+| **[agent-context.md](agent-context.md)** | 框架 / Core / 运维 | 概念地图 + 消息三层 + Workspace + 工具环（契约真源） |
 | 仓库根 [`AGENTS.md`](../AGENTS.md) | Cursor / Core 开发 | 框架与业务代码约定、`xrk-*` skill |
 | `~/.cursor/AGENTS.md` | 本机所有项目 | 全局工程师技能、代理、生图等 |
 | `agents/workspace/AGENTS.md` → `data/ai-workspace/{id}/AGENTS.md` | 办事助手模型 | 注入 prompt 的办事规则 |
 | `core/<core>/AGENTS.md`（若有） | 产品 Agent | 该产品人格与工具边界 |
 
 调办事助手行为：工作区或 `agents/` 种子（见「想改助手行为时」）。  
-写框架 / Core：根 [`AGENTS.md`](../AGENTS.md)。
+写框架 / Core：根 [`AGENTS.md`](../AGENTS.md)。  
+**一次 Agent 跑通、消息三层、Workspace/rules/skills 注入**：见 **[agent-context.md](agent-context.md)**（工程契约真源）。
+
+---
+
+## 上下文怎么进模型（摘要）
+
+完整链路与代码落点见 [agent-context.md](agent-context.md)。运营侧只需记住：
+
+| 进 system 的块 | 来源 | 改哪里 |
+|----------------|------|--------|
+| 人设 / MCP 说话纪律 | chat 工作流 | `ai_config.persona` · chat 协议文案 |
+| 工作区人格与记忆 | `data/ai-workspace/{id}/` | AGENTS / USER / MEMORY… |
+| 行为规则全文 | `agents/rules/` | 回复结构、安全、群聊 |
+| 技能目录 | `agents/skills/standard/` + 工作区 `skills/` | 细则靠 `tools.read`，非全文常驻 |
+| 角色路由提示 | `subagents.yaml` | 不启隔离子会话 |
+
+工具并集：`ai_config.mergeWorkflows`（+ 框架自动并入的 web/browser/remote-mcp）。
 
 ---
 
@@ -133,6 +151,7 @@
 |------|------|
 | 仓库种子 | `agents/` · [agents/README.md](../agents/README.md) |
 | 运行时工作区 | `data/ai-workspace/{id}/` |
+| 运行链 / 上下文组成 | **[agent-context.md](agent-context.md)** |
 | 注入逻辑 | `src/utils/agent-workspace.js` |
 | 路径常量 | `src/utils/agent-workspace-paths.js` |
 | 配置默认 | `config/default_config/ai-workflow.yaml` → `agentWorkspace` |
@@ -145,4 +164,4 @@
 | 工作流基类 | [ai-workflow.md](ai-workflow.md) |
 | 框架开发 | 根 [AGENTS.md](../AGENTS.md) · `.cursor/skills/xrk-*` |
 
-Prompt 注入顺序与 `include*` 门控：`agent-workspace.js`、`ai-workflow.yaml`。
+Prompt 注入顺序与 `include*` 门控：见 [agent-context.md](agent-context.md)；实现 `agent-workspace.js`、`ai-workflow.yaml`。

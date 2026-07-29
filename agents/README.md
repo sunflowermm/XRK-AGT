@@ -5,6 +5,7 @@
 | 文档 | 路径 |
 |------|------|
 | 用户 / 运维 / 维护者 | [docs/agents.md](../docs/agents.md) |
+| Agent 跑通契约 | [docs/agent-context.md](../docs/agent-context.md) |
 | 模型注入规则（模板） | [workspace/AGENTS.md](workspace/AGENTS.md) |
 | 框架 / Core 开发 | 仓库根 [AGENTS.md](../AGENTS.md) |
 
@@ -27,4 +28,4 @@
 | 注入规则 | `agents/rules/`（[rules/README.md](rules/README.md)） |
 | 技能 | `agents/skills/standard/<name>/SKILL.md`，再同步到工作区 |
 
-配置：`ai-workflow.yaml` → `agentWorkspace`。实现索引：[docs/agents.md](../docs/agents.md) 文末。
+配置：`ai-workflow.yaml` → `agentWorkspace`。工程契约：[docs/agent-context.md](../docs/agent-context.md)。运营说明：[docs/agents.md](../docs/agents.md)。
