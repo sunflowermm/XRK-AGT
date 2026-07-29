@@ -9,6 +9,7 @@
  */
 import path from 'node:path';
 import fsSync from 'node:fs';
+import os from 'node:os';
 import { spawn } from 'node:child_process';
 import RuntimeUtil from '#utils/runtime-util.js';
 import {
@@ -16,6 +17,9 @@ import {
   resolveCommandSpawn,
 } from '#utils/command-spawn.js';
 import { resolveWwwStaticRoot, isWwwSignedStaticRootOk } from '#infrastructure/http/www-app-resolve.js';
+
+/** ≤ 此物理内存视为低配（2c2g 等）；AGT+Vite 同机易 OOM */
+export const WWW_LOW_MEM_BYTES = 2.5 * 1024 * 1024 * 1024;
 
 const BUILD_WALK_SKIP = new Set([
   'node_modules',
@@ -28,6 +32,52 @@ const BUILD_WALK_SKIP = new Set([
   'dist-ssr',
 ]);
 
+/**
+ * @param {number} [totalBytes]
+ */
+export function isWwwLowMemHost(totalBytes = os.totalmem()) {
+  const n = Number(totalBytes);
+  return Number.isFinite(n) && n > 0 && n <= WWW_LOW_MEM_BYTES;
+}
+
+/**
+ * 合并 NODE_OPTIONS，低配时补 --max-old-space-size（已有则不覆盖）。
+ * @param {string} [existing]
+ * @param {number} mb
+ */
+export function ensureMaxOldSpaceSize(existing, mb) {
+  const cur = String(existing || '').trim();
+  if (/--max-old-space-size=\d+/i.test(cur)) return cur;
+  const flag = `--max-old-space-size=${mb}`;
+  return cur ? `${cur} ${flag}` : flag;
+}
+
+/**
+ * 子进程构建环境：低配机限制堆/线程，避免拖垮同进程树里的 AGT。
+ * sign.build.env 与显式 XRK_WWW_BUILD_LOW_MEM=1 可强制开启。
+ *
+ * @param {Record<string, string>} [signEnv]
+ * @param {{ totalmem?: number }} [opts]
+ */
+export function resolveWwwBuildChildEnv(signEnv = {}, opts = {}) {
+  const env = { ...signEnv };
+  const force =
+    env.XRK_WWW_BUILD_LOW_MEM === '1' ||
+    process.env.XRK_WWW_BUILD_LOW_MEM === '1';
+  const low = force || isWwwLowMemHost(opts.totalmem ?? os.totalmem());
+  if (!low) return env;
+
+  env.XRK_WWW_BUILD_LOW_MEM = '1';
+  env.UV_THREADPOOL_SIZE = env.UV_THREADPOOL_SIZE || '2';
+  env.GOMAXPROCS = env.GOMAXPROCS || '1';
+  env.OMP_NUM_THREADS = env.OMP_NUM_THREADS || '1';
+  const mergedNodeOpts = ensureMaxOldSpaceSize(
+    env.NODE_OPTIONS || process.env.NODE_OPTIONS,
+    768,
+  );
+  env.NODE_OPTIONS = mergedNodeOpts;
+  return env;
+}
 /**
  * @param {unknown} raw
  * @param {string} appDir
@@ -303,6 +353,14 @@ export async function runSignedStaticBuild(appDir, sign, label = appDir) {
   }
 
   const display = `${spec.command} ${spec.args.join(' ')}`.trim();
+  const childEnv = resolveWwwBuildChildEnv(spec.env);
+  if (childEnv.XRK_WWW_BUILD_LOW_MEM === '1') {
+    RuntimeUtil.makeLog(
+      'warn',
+      `${label}: 低内存主机，前端构建将限制堆/并行（仍可能很慢）。2c2g 建议本机或 CI 预编 dist，并设 sign.buildOnStart=false`,
+      'AgentRuntime',
+    );
+  }
   RuntimeUtil.makeLog(
     'info',
     `前端工程静态模式：构建产物（不启进程）: ${label} (${display})`,
@@ -312,7 +370,7 @@ export async function runSignedStaticBuild(appDir, sign, label = appDir) {
   try {
     const { stdout, stderr } = await runResolvedCommand(spec.command, spec.args, {
       cwd: spec.cwd,
-      env: spec.env,
+      env: childEnv,
     });
     if (stdout?.trim()) {
       RuntimeUtil.makeLog('debug', `build stdout (${label}): ${stdout.trim().slice(-800)}`, 'AgentRuntime');

@@ -5,7 +5,7 @@
   "serve": "static",
   "staticRoot": "dist",
   "build": { "command": "pnpm", "args": ["build"] },
-  "_note": "enabled=false：产物过期或缺 dist 才 build。强制每次：buildOnStart true。跳过：false。开发 HMR：enabled=true + serve=proxy。",
+  "_note": "enabled=false：产物过期或缺 dist 才 build。2c2g 勿在启动时编：本机/CI 预编 dist 后设 buildOnStart=false。强制每次：buildOnStart true。开发 HMR：enabled=true + serve=proxy。",
   "command": "pnpm",
   "args": ["dev"],
   "port": 5177,

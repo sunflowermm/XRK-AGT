@@ -6,6 +6,7 @@ import runtimeConfig from '#infrastructure/config/config.js';
 import { execFile } from '#utils/exec-async.js';
 import { resolveCommandSpawn } from '#utils/command-spawn.js';
 import { shouldProxyFrontend, resolveWwwPublicMountPath } from '#infrastructure/http/www-app-resolve.js';
+import { resolveWwwBuildChildEnv } from '#infrastructure/http/www-static-build.js';
 
 /**
  * FrontendLauncher
@@ -491,7 +492,8 @@ class FrontendLauncher {
     const buildCmd = isProd && config.build?.command ? config.build.command : null;
     const buildArgs = isProd && Array.isArray(config.build?.args) ? config.build.args : [];
     const buildCwd = isProd && config.build?.cwd ? config.build.cwd : config.cwd;
-    const buildEnv = isProd && config.build?.env ? { ...childEnv, ...config.build.env } : childEnv;
+    const buildEnvRaw = isProd && config.build?.env ? { ...childEnv, ...config.build.env } : childEnv;
+    const buildEnv = resolveWwwBuildChildEnv(buildEnvRaw);
     const shouldBuild = Boolean(buildCmd) && config.buildOnStart !== false;
 
     const baseInfo = `${config.id} (${runCmd} ${runArgs.join(' ')}) @ ${runCwd}`;
