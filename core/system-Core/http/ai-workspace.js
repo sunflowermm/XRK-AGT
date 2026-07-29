@@ -3,6 +3,8 @@ import fs from 'node:fs/promises';
 import multer from 'multer';
 import runtimeConfig from '#infrastructure/config/config.js';
 import { HttpResponse } from '#utils/http-utils.js';
+import { decodeMulterFilename } from '#utils/multipart-filename.js';
+import { resolveClientBaseUrl } from '#utils/client-base-url.js';
 import {
   normalizePresetId,
   getConfiguredDefaultWorkspaceId,
@@ -30,17 +32,12 @@ function parsePresetId(req) {
   return normalizePresetId(String(raw ?? '').trim() || getConfiguredDefaultWorkspaceId());
 }
 
-function resolveBaseUrl(AgentRuntime, req) {
-  const raw = AgentRuntime?.url || AgentRuntime?.getServerUrl?.() || `${req.protocol}://${req.get('host')}`;
-  return String(raw).replace(/\/+$/, '');
-}
-
 function createWorkspaceUploader(req, destDir, maxFileSize) {
   const createUploader = req.createMultipartUploader || (() => req.multipartUpload);
   const storage = multer.diskStorage({
     destination: (_req, _file, cb) => cb(null, destDir),
     filename: (_req, file, cb) => {
-      const safe = sanitizeWorkspaceUploadName(file.originalname);
+      const safe = sanitizeWorkspaceUploadName(decodeMulterFilename(file.originalname));
       cb(null, safe);
     }
   });
@@ -138,7 +135,7 @@ export default {
           return HttpResponse.error(res, new Error(e?.message || '上传失败'), 400, 'ai.workspace.upload');
         }
         if (!files.length) return HttpResponse.validationError(res, '没有文件');
-        const baseUrl = resolveBaseUrl(AgentRuntime, req);
+        const baseUrl = resolveClientBaseUrl(req, AgentRuntime);
         const relDir = String(subdir || '').replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
         const uploaded = files.map((f) => {
           const name = path.basename(f.filename || f.originalname || 'file');

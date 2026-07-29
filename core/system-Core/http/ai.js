@@ -11,6 +11,8 @@ import fs from 'fs/promises';
 import paths from '#utils/paths.js';
 import { InputValidator } from '#utils/input-validator.js';
 import { HttpResponse } from '#utils/http-utils.js';
+import { resolveClientBaseUrl } from '#utils/client-base-url.js';
+import { decodeMulterFilename } from '#utils/multipart-filename.js';
 import { bannedWordsService } from '../lib/content-safety/banned-words-service.js';
 import { mergeAgentWorkspaceIntoMessages } from '#utils/agent-workspace.js';
 import {
@@ -168,7 +170,7 @@ async function handleChatCompletionsV3(req, res) {
         storage: multer.diskStorage({
           destination: (_req, _file, cb) => cb(null, mediaDir),
           filename: (_req, file, cb) => {
-        const ext = path.extname(file.originalname || '').slice(0, 20) || '.img';
+            const ext = path.extname(decodeMulterFilename(file.originalname)).slice(0, 20) || '.img';
             cb(null, `${crypto.randomUUID()}${ext}`);
           }
         }),
@@ -219,7 +221,7 @@ async function handleChatCompletionsV3(req, res) {
       
       // 处理上传的图片：落盘为 /media/{uuid} URL，避免 base64 膨胀（OpenAI image_url 标准用法）
       if (files && files.length > 0) {
-        const baseUrl = String(bot?.url || bot?.getServerUrl?.() || `${req.protocol}://${req.get('host')}`).replace(/\/+$/, '');
+        const baseUrl = resolveClientBaseUrl(req, bot);
         for (const file of files) {
           const filename = file.filename || path.basename(file.path);
           uploadedImages.push(`${baseUrl}/media/${filename}`);

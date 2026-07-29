@@ -8,6 +8,8 @@ import RuntimeUtil from '#utils/runtime-util.js';
 import { errorHandler, ErrorCodes } from '#utils/error-handler.js';
 import { InputValidator } from '#utils/input-validator.js';
 import { HttpResponse } from '#utils/http-utils.js';
+import { decodeMulterFilename } from '#utils/multipart-filename.js';
+import { resolveClientBaseUrl } from '#utils/client-base-url.js';
 import runtimeConfig from '#infrastructure/config/config.js';
 import { bannedWordsService } from '../lib/content-safety/banned-words-service.js';
 import { Disposables } from '#utils/disposables.js';
@@ -18,15 +20,10 @@ const mediaDir = path.join(paths.data, 'media');
 const fileMap = new Map();
 let __runtime = null;
 
-function resolveBaseUrl(AgentRuntime, req) {
-  const raw = AgentRuntime?.url || AgentRuntime?.getServerUrl?.() || `${req.protocol}://${req.get('host')}`;
-  return String(raw).replace(/\/+$/, '');
-}
-
 async function hashFileMd5(filePath) {
   const hash = crypto.createHash('md5');
   await new Promise((resolve, reject) => {
-        const stream = createReadStream(filePath);
+    const stream = createReadStream(filePath);
     stream.on('data', (d) => hash.update(d));
     stream.on('end', resolve);
     stream.on('error', reject);
@@ -38,8 +35,9 @@ function createDiskUploader(req, maxFileSize) {
   const createUploader = req.createMultipartUploader || (() => req.multipartUpload);
   const storage = multer.diskStorage({
     destination: async (_req, file, cb) => {
-        try {
-        const ext = path.extname(file.originalname || '');
+      try {
+        const name = decodeMulterFilename(file.originalname);
+        const ext = path.extname(name);
         const isMedia = /\.(jpg|jpeg|png|gif|webp|bmp|svg|mp4|webm|mp3|wav|ogg)$/i.test(ext);
         const targetDir = isMedia ? mediaDir : uploadDir;
         await fs.mkdir(targetDir, { recursive: true });
@@ -49,8 +47,8 @@ function createDiskUploader(req, maxFileSize) {
       }
     },
     filename: (_req, file, cb) => {
-        const id = crypto.randomUUID();
-      const ext = path.extname(file.originalname || '').slice(0, 20) || '.file';
+      const id = crypto.randomUUID();
+      const ext = path.extname(decodeMulterFilename(file.originalname)).slice(0, 20) || '.file';
       cb(null, `${id}${ext}`);
     }
   });
@@ -103,9 +101,10 @@ export default {
           try {
             md5 = await hashFileMd5(f.path);
           } catch {}
+          const originalname = decodeMulterFilename(f.originalname);
           filesWithMd5.push({
             id: path.basename(f.filename || '').split('.')[0],
-            originalname: f.originalname,
+            originalname,
             mimetype: f.mimetype,
             size: f.size,
             filename: f.filename,
@@ -123,7 +122,6 @@ export default {
               RuntimeUtil.makeLog('warn', msg, 'file.upload');
               break;
             }
-            // 拒绝：删除本次上传的文件（避免落盘残留）
             for (const g of filesWithMd5) {
               try { await fs.unlink(g.path); } catch {}
             }
@@ -132,13 +130,12 @@ export default {
         }
 
         const uploadedFiles = [];
-        const baseUrl = resolveBaseUrl(AgentRuntime, req);
+        const baseUrl = resolveClientBaseUrl(req, AgentRuntime);
         for (const file of filesWithMd5) {
           const ext = path.extname(file.originalname) || '.file';
           const isMedia = /\.(jpg|jpeg|png|gif|webp|bmp|svg|mp4|webm|mp3|wav|ogg)$/i.test(ext);
           const filename = file.filename || `${file.id}${ext}`;
           const targetDir = isMedia ? mediaDir : uploadDir;
-          // multer 给出的 path 为绝对路径；校验必须落在 uploads/media 内
           const safePath = InputValidator.validatePath(file.path, targetDir);
           const fileInfo = {
             id: file.id,
