@@ -25,6 +25,7 @@ export async function apiFetch(path, opts = {}) {
   try {
     const res = await fetch(`${getServerUrl()}${path}`, {
       ...rest,
+      cache: rest.cache ?? 'no-store',
       headers: authHeaders(headers),
       signal: abortTimeout(timeoutMs),
     });

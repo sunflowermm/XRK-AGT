@@ -36,6 +36,9 @@ export class HttpResponse {
         response.data = data
       }
     }
+    if (!res.headersSent) {
+      res.setHeader('Cache-Control', 'no-store')
+    }
     return res.json(response)
   }
 
@@ -46,6 +49,9 @@ export class HttpResponse {
    * @param {number} [statusCode=200]
    */
   static json(res, body, statusCode = 200) {
+    if (!res.headersSent) {
+      res.setHeader('Cache-Control', 'no-store')
+    }
     return res.status(statusCode).json(body)
   }
 
@@ -106,6 +112,9 @@ export class HttpResponse {
    * @returns {Object} Express响应
    */
   static unauthorized(res, message = '未授权') {
+    if (!res.headersSent) {
+      res.setHeader('Cache-Control', 'no-store')
+    }
     return res.status(401).json({
       success: false,
       message,

@@ -99,7 +99,6 @@ export const useAuthStore = defineStore('auth', () => {
 
   function noteAuthorized() {
     serverAuth.value = 'ok';
-    void probeAuthEnforcement();
   }
 
   function noteUnauthorized() {
@@ -108,29 +107,23 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   /**
-   * 故意不带 Key 打一枪：401 → 鉴权生效；200 → 旁路（公网致命）。
+   * 故意不带 Key 打一枪：401 → 鉴权生效；200 → 旁路。
+   * 只在启动 / 改 Key 时调用，勿挂在每次业务成功上（否则日志会被无 Key 的 401 刷屏）。
    * @param {{ force?: boolean }} [opts]
    */
   async function probeAuthEnforcement(opts = {}) {
-    const now = Date.now();
+    if (!opts.force && authEnforced.value !== 'unknown') return authEnforced.value;
     if (!opts.force && probeInflight) return probeInflight;
-    if (!opts.force && now - probeAt < 15000 && authEnforced.value !== 'unknown') {
-      return authEnforced.value;
-    }
 
     probeInflight = (async () => {
       try {
         const res = await fetch(`${window.location.origin}/api/system/status`, {
           method: 'GET',
-          // 故意不带 X-API-Key
-          signal: abortTimeout(8000),
           cache: 'no-store',
+          signal: abortTimeout(8000),
         });
-        if (res.status === 401) {
-          authEnforced.value = 'enforced';
-        } else if (res.ok) {
-          authEnforced.value = 'bypass';
-        }
+        if (res.status === 401) authEnforced.value = 'enforced';
+        else if (res.ok) authEnforced.value = 'bypass';
       } catch {
         /* 网络失败不改状态 */
       } finally {
