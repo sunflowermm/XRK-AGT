@@ -8,22 +8,23 @@ import { isPathInside, realpathSyncOrResolve } from './path-guards.js';
  */
 export class InputValidator {
   /**
-   * 验证文件路径
-   * 防止路径遍历攻击
+   * 验证文件路径落在 baseDir 内。
+   * 相对路径相对 baseDir 解析；绝对路径允许，但必须仍在 baseDir 内
+   *（multer / sendFile 等场景给出的就是绝对路径）。
+   * 真正防穿越靠 isPathInside，勿把「绝对路径」或文件名里的 `..` 子串当成穿越。
    */
   static validatePath(filePath, baseDir = process.cwd()) {
     if (!filePath || typeof filePath !== 'string') {
       throw new RuntimeError('路径必须是字符串', ErrorCodes.INVALID_INPUT);
     }
 
-    // 解码 %2e/%2f 等编码穿越，再规范化
     let candidate = filePath;
     try {
       candidate = decodeURIComponent(filePath);
     } catch {
       candidate = filePath;
     }
-    if (/[\0]/.test(candidate)) {
+    if (/\0/.test(candidate)) {
       throw new RuntimeError(
         `无效的路径: ${filePath} (检测到非法字符)`,
         ErrorCodes.PATH_TRAVERSAL
@@ -31,23 +32,12 @@ export class InputValidator {
     }
 
     const normalized = path.normalize(candidate);
+    const baseResolved = realpathSyncOrResolve(baseDir);
+    const resolved = path.isAbsolute(normalized)
+      ? realpathSyncOrResolve(normalized)
+      : realpathSyncOrResolve(path.resolve(baseResolved, normalized));
 
-    // 防止路径遍历攻击
-    if (normalized.includes('..') || path.isAbsolute(normalized)) {
-      throw new RuntimeError(
-        `无效的路径: ${filePath} (检测到路径遍历尝试)`,
-        ErrorCodes.PATH_TRAVERSAL
-      );
-    }
-
-    // 检查是否在基础目录内（含尾部分隔，避免 prefix 误判）
-    const resolved = path.resolve(baseDir, normalized);
-    const baseResolved = path.resolve(baseDir);
-    const basePrefix = baseResolved.endsWith(path.sep)
-      ? baseResolved
-      : `${baseResolved}${path.sep}`;
-
-    if (resolved !== baseResolved && !resolved.startsWith(basePrefix)) {
+    if (!isPathInside(baseResolved, resolved)) {
       throw new RuntimeError(
         `路径超出允许范围: ${filePath}`,
         ErrorCodes.INVALID_PATH

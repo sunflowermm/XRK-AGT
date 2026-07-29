@@ -138,11 +138,12 @@ export default {
           const isMedia = /\.(jpg|jpeg|png|gif|webp|bmp|svg|mp4|webm|mp3|wav|ogg)$/i.test(ext);
           const filename = file.filename || `${file.id}${ext}`;
           const targetDir = isMedia ? mediaDir : uploadDir;
-          InputValidator.validatePath(file.path, targetDir);
+          // multer 给出的 path 为绝对路径；校验必须落在 uploads/media 内
+          const safePath = InputValidator.validatePath(file.path, targetDir);
           const fileInfo = {
             id: file.id,
             name: file.originalname,
-            path: file.path,
+            path: safePath,
             url: `${baseUrl}/${isMedia ? 'media' : 'uploads'}/${filename}`,
             download_url: `${baseUrl}/api/file/${file.id}?download=true`,
             preview_url: isMedia ? `${baseUrl}/api/file/${file.id}` : null,
@@ -189,9 +190,8 @@ export default {
               const files = await fs.readdir(dir);
               const file = files.find(f => f.includes(id));
               if (file) {
-                // 路径验证
-                const safeFile = InputValidator.validatePath(file, dir);
-                const filePath = path.join(dir, safeFile);
+                // validatePath 已返回落在 dir 内的绝对路径，勿再 path.join(dir, …)
+                const filePath = InputValidator.validatePath(file, dir);
                 
                 if (download === 'true') {
                   return res.download(filePath, file);
@@ -217,13 +217,16 @@ export default {
           return HttpResponse.notFound(res, '文件不存在');
         }
 
-        InputValidator.validatePath(fileInfo.path, fileInfo.is_media ? mediaDir : uploadDir);
-        await fs.access(fileInfo.path);
-        if (download === 'true') res.download(fileInfo.path, fileInfo.name);
+        const safePath = InputValidator.validatePath(
+          fileInfo.path,
+          fileInfo.is_media ? mediaDir : uploadDir,
+        );
+        await fs.access(safePath);
+        if (download === 'true') res.download(safePath, fileInfo.name);
         else {
           res.setHeader('Content-Type', fileInfo.mime);
           res.setHeader('Cache-Control', 'public, max-age=3600');
-          res.sendFile(fileInfo.path);
+          res.sendFile(safePath);
         }
       }, 'file.get')
     },
@@ -241,9 +244,11 @@ export default {
 
         if (fileInfo) {
           try {
-            // 路径验证
-            InputValidator.validatePath(fileInfo.path, fileInfo.is_media ? mediaDir : uploadDir);
-            await fs.unlink(fileInfo.path);
+            const safePath = InputValidator.validatePath(
+              fileInfo.path,
+              fileInfo.is_media ? mediaDir : uploadDir,
+            );
+            await fs.unlink(safePath);
             fileMap.delete(id);
           } catch (err) {
             errorHandler.handle(
