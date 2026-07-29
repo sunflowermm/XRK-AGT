@@ -1,0 +1,135 @@
+<script setup>
+/**
+ * 统一配置字段控件（顶层表单 / 数组项 / 嵌套子表共用）
+ */
+import { computed } from 'vue';
+import { NInput, NInputNumber, NSelect, NSwitch } from 'naive-ui';
+import { normalizeOptions, resolveFieldControl } from '@/config/flat';
+import ConfigTagsEditor from '@/components/ConfigTagsEditor.vue';
+import ConfigKvEditor from '@/components/ConfigKvEditor.vue';
+import ConfigJsonEditor from '@/components/ConfigJsonEditor.vue';
+
+const props = defineProps({
+  schema: { type: Object, default: () => ({}) },
+  modelValue: { type: null, default: undefined },
+  inputId: { type: String, default: '' },
+  /** 覆盖 resolveFieldControl（少用） */
+  control: { type: String, default: '' },
+});
+
+const emit = defineEmits(['update:modelValue']);
+
+const ctrl = computed(() => props.control || resolveFieldControl(props.schema));
+
+const selectOptions = computed(() =>
+  normalizeOptions(props.schema?.options || props.schema?.enum || props.schema?.choices),
+);
+
+function set(v) {
+  emit('update:modelValue', v);
+}
+
+const boolValue = computed(() => Boolean(props.modelValue));
+</script>
+
+<template>
+  <div class="cfg-ctrl" :data-ctrl="ctrl">
+    <NSwitch
+      v-if="ctrl === 'switch'"
+      :id="inputId || undefined"
+      :value="boolValue"
+      size="small"
+      @update:value="set"
+    />
+    <NSelect
+      v-else-if="ctrl === 'select'"
+      :id="inputId || undefined"
+      :value="modelValue"
+      size="small"
+      :options="selectOptions"
+      clearable
+      filterable
+      @update:value="set"
+    />
+    <NInputNumber
+      v-else-if="ctrl === 'number'"
+      :id="inputId || undefined"
+      :value="modelValue"
+      size="small"
+      :min="schema.min"
+      :max="schema.max"
+      :step="schema.step || 1"
+      class="num"
+      @update:value="set"
+    />
+    <NInput
+      v-else-if="ctrl === 'password'"
+      :id="inputId || undefined"
+      :value="modelValue == null ? '' : String(modelValue)"
+      type="password"
+      show-password-on="click"
+      size="small"
+      :placeholder="schema.placeholder"
+      @update:value="set"
+    />
+    <NInput
+      v-else-if="ctrl === 'textarea'"
+      :id="inputId || undefined"
+      :value="modelValue == null ? '' : String(modelValue)"
+      type="textarea"
+      size="small"
+      :rows="3"
+      :placeholder="schema.placeholder"
+      @update:value="set"
+    />
+    <ConfigTagsEditor
+      v-else-if="ctrl === 'tags'"
+      :model-value="modelValue"
+      placeholder="逐项添加，回车确认"
+      @update:model-value="set"
+    />
+    <ConfigKvEditor
+      v-else-if="ctrl === 'kv'"
+      :model-value="modelValue && typeof modelValue === 'object' && !Array.isArray(modelValue) ? modelValue : {}"
+      @update:model-value="set"
+    />
+    <ConfigJsonEditor
+      v-else-if="ctrl === 'json'"
+      :model-value="modelValue"
+      @update:model-value="set"
+    />
+    <NInput
+      v-else
+      :id="inputId || undefined"
+      :value="modelValue == null ? '' : String(modelValue)"
+      size="small"
+      :placeholder="schema.placeholder"
+      @update:value="set"
+    />
+  </div>
+</template>
+
+<style scoped>
+.cfg-ctrl {
+  width: 100%;
+  min-height: 30px;
+  display: flex;
+  align-items: flex-start;
+}
+.cfg-ctrl[data-ctrl='switch'] {
+  align-items: center;
+  min-height: 30px;
+}
+.cfg-ctrl :deep(.num) {
+  width: 100%;
+}
+.cfg-ctrl :deep(.n-input),
+.cfg-ctrl :deep(.n-base-selection),
+.cfg-ctrl :deep(.n-input-number) {
+  width: 100%;
+}
+.cfg-ctrl :deep(textarea.n-input__textarea-el) {
+  resize: vertical;
+  min-height: 52px;
+}
+</style>

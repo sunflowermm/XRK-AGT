@@ -215,16 +215,15 @@ export default class OneBotEnhancer extends EnhancerBase {
 
     const groupCfg = runtimeConfig.getGroup(e.group_id) || {}
     const onlyReplyAt = groupCfg.onlyReplyAt ?? 0
+    const aliases = this.normalizeAliasList(groupCfg.botAlias)
 
-    // 未启用或未配置别名，允许回复
-    if (onlyReplyAt === 0 || !groupCfg.botAlias) return true
-    
-    // 主人权限或已使用别名或@了机器人，允许回复
+    // 未启用或别名为空，不拦截（空数组 [] 也视为未配置）
+    if (onlyReplyAt === 0 || !aliases.length) return true
+
     if (onlyReplyAt === 2 && e.isMaster) return true
     if (e.hasAlias) return true
     if (e.atBot === true) return true
 
-    // 其他情况跳过
     return 'return'
   }
 

@@ -42,7 +42,9 @@ export async function generateApiKey(runtime) {
   try {
     if (fsSync.statSync(apiKeyPath).isFile()) {
       const keyData = JSON.parse(await fs.readFile(apiKeyPath, 'utf8'));
-      runtime.apiKey = keyData.key;
+      const loaded = typeof keyData?.key === 'string' ? keyData.key.trim() : '';
+      if (!loaded) throw new Error('empty key');
+      runtime.apiKey = loaded;
       RuntimeUtil.apiKey = runtime.apiKey;
       RuntimeUtil.makeLog('debug', '从文件加载API密钥', '服务器');
       return runtime.apiKey;
@@ -80,6 +82,11 @@ export function checkApiAuthorization(runtime, req, options = {}) {
   if (!req) {
     RuntimeUtil.makeLog('debug', '[Auth] checkApiAuthorization: req 为空', '认证');
     return false;
+  }
+
+  // 关闭 API Key 时远程也应放行（原先 enabled=false 仍因无密钥一律拒绝）
+  if (runtimeConfig.server?.auth?.apiKey?.enabled === false) {
+    return true;
   }
 
   const forceAuth = options.forceAuth === true || shouldForceAuthOnLoopbackWhenToolsRun();
@@ -205,43 +212,18 @@ export function extractApiKeyFromAuthHeader(headerValue) {
 export function extractApiKeyFromRequest(req) {
   const headers = req?.headers || {};
   const query = req?.query || {};
-  const body = req?.body || {};
 
-  const headerCandidates = [
+  for (const candidate of [
     headers['x-api-key'],
     headers['api-key'],
-    headers['x-auth-token'],
-    headers['x-access-token'],
     extractApiKeyFromAuthHeader(headers.authorization),
-    extractApiKeyFromAuthHeader(headers['proxy-authorization']),
-  ];
-  for (const candidate of headerCandidates) {
+  ]) {
     const key = normalizeApiKeyCandidate(candidate);
     if (key) return key;
   }
 
-  const queryCandidates = [
-    query.api_key,
-    query.apiKey,
-    query.apikey,
-    query.access_token,
-    query.token,
-    query.key,
-  ];
-  for (const candidate of queryCandidates) {
-    const key = normalizeApiKeyCandidate(candidate);
-    if (key) return key;
-  }
-
-  const bodyCandidates = [
-    body.api_key,
-    body.apiKey,
-    body.apikey,
-    body.access_token,
-    body.token,
-    body.key,
-  ];
-  for (const candidate of bodyCandidates) {
+  // WS / 兼容：仅 api_key|apiKey；勿收 token/key/body（易进日志、易撞字段）
+  for (const candidate of [query.api_key, query.apiKey]) {
     const key = normalizeApiKeyCandidate(candidate);
     if (key) return key;
   }

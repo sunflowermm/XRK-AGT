@@ -5,35 +5,16 @@ import lodash from "lodash"
 import crypto from "crypto"
 import { HotReloadBase } from '#utils/hot-reload-base.js'
 import { isHttpRef, isEntryMediaRelPath, readImageBuffer, persistEntryMedia } from '#utils/entry-media.js'
+import { collectForwardIds } from '#utils/onebot-message-seg.js'
 import { inlineBinaryFromRef, isPathLike } from '#utils/media-ref.js'
 
 export const messageMap = {}
 export const bannedWordsMap = {}
 
-const ENTRY_MEDIA_TYPES = new Set(['image', 'video', 'record'])
+const ENTRY_MEDIA_TYPES = new Set(['image', 'video', 'record', 'file'])
 
 /** 添加词条上下文超时（秒），展开嵌套聊天记录可能较慢 */
 const ADD_CONTEXT_TIMEOUT = 300
-
-/** 收集 forward 段所有可用的 message_id（兼容 OneBot / NapCat 等字段） */
-function collectForwardIds(seg, contextMessageId) {
-  const ids = []
-  if (contextMessageId != null && contextMessageId !== '') ids.push(String(contextMessageId))
-  if (seg == null) return [...new Set(ids)]
-  if (typeof seg !== 'object') {
-    ids.push(String(seg))
-    return [...new Set(ids)]
-  }
-  for (const k of ['message_id', 'id']) {
-    if (seg[k] != null && seg[k] !== '') ids.push(String(seg[k]))
-  }
-  if (seg.data && typeof seg.data === 'object') {
-    for (const k of ['message_id', 'id']) {
-      if (seg.data[k] != null && seg.data[k] !== '') ids.push(String(seg.data[k]))
-    }
-  }
-  return [...new Set(ids)]
-}
 
 /** 规范化转发节点元信息 */
 function normalizeNodeMeta(node) {

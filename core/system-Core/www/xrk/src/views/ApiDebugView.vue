@@ -17,8 +17,12 @@ import {
 import { authHeaders, getServerUrl } from '@/api/client';
 import FileDropZone from '@/components/FileDropZone.vue';
 import XrkIcon from '@/components/XrkIcon.vue';
+import { useListPaneWidth } from '@/composables/useListPaneWidth';
+import { useViewport } from '@/composables/useViewport';
 import { copyText } from '@/utils/http';
 
+const { isMobile } = useViewport();
+const { width: listPaneW, startResize } = useListPaneWidth();
 const message = useMessage();
 const catalog = ref({ apiGroups: [] });
 const activeId = ref(localStorage.getItem('lastApiId') || '');
@@ -424,7 +428,11 @@ function paramControl(p) {
 </script>
 
 <template>
-  <div class="api" :class="{ 'list-open': listOpen }">
+  <div
+    class="api"
+    :class="{ 'list-open': listOpen, 'is-mobile-page': isMobile }"
+    :style="{ '--list-pane-w': `${listPaneW}px` }"
+  >
     <div v-if="listOpen" class="scrim" @click="listOpen = false" />
 
     <aside class="brutal-card side">
@@ -460,6 +468,13 @@ function paramControl(p) {
         </div>
       </div>
       <p class="count">{{ flatApis.length }} APIs</p>
+      <button
+        type="button"
+        class="pane-resizer"
+        aria-label="调整列表宽度"
+        title="拖拽调整宽度"
+        @pointerdown="startResize"
+      />
     </aside>
 
     <section class="brutal-card main ink-scroll">
@@ -693,7 +708,7 @@ function paramControl(p) {
 <style scoped>
 .api {
   display: grid;
-  grid-template-columns: minmax(200px, 26%) minmax(0, 1fr);
+  grid-template-columns: var(--list-pane-w, 260px) minmax(0, 1fr);
   gap: var(--gap);
   height: 100%;
   min-height: 100%;
@@ -709,6 +724,8 @@ function paramControl(p) {
   display: flex;
   flex-direction: column;
   gap: 6px;
+  position: relative;
+  min-width: 0;
 }
 .list {
   flex: 1 1 0;
@@ -960,6 +977,9 @@ function paramControl(p) {
   .side {
     display: none;
   }
+  .api .pane-resizer {
+    display: none;
+  }
   .api.list-open .side {
     display: flex;
     position: fixed;
@@ -969,6 +989,10 @@ function paramControl(p) {
     bottom: max(var(--gap), env(safe-area-inset-bottom));
     width: min(320px, calc(100vw - var(--gap) * 2));
     box-shadow: 4px 4px 0 var(--ink);
+  }
+  .api.is-mobile-page.list-open .side {
+    top: max(48px, env(safe-area-inset-top) + 44px);
+    bottom: calc(var(--shell-tabbar-h, 52px) + env(safe-area-inset-bottom));
   }
   .main {
     flex: 1;

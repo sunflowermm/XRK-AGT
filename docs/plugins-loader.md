@@ -200,8 +200,9 @@ flowchart TB
 
 ### 2. `dealMsg(e)`
 
-- `initMsgProps(e)`：初始化通用消息属性（`e.img/e.video/e.audio/e.msg`）。Tasker特定的属性（如`atList`、`atBot`）由Tasker增强插件处理。
-- `parseMessage(e)`：遍历 `e.message`，只处理通用消息类型（`text/image/video/audio/file`）。Tasker特定的消息类型（如`at`、`reply`、`face`）由Tasker增强插件处理。
+- `initMsgProps(e)`：初始化通用消息属性（`e.img/e.video/e.audio/e.msg`，以及可选的 `e.fileList` / `e.forwardIds`）。Tasker特定的属性（如`atList`、`atBot`）由Tasker增强插件处理。
+- `parseMessage(e)`：遍历 `e.message`，处理通用消息类型（`text/image/mface/video/audio|record/file/forward`）。`mface` 计入 `e.img`；`forward` 的 id 记入 `e.forwardIds`。Tasker特定类型（如`at`、`reply`、`face`）由Tasker增强插件处理。
+- `getSendableMedia`：经 `#utils/entry-media.js` 的 `readMediaBuffer` 拉取 Buffer（`image→get_image`，`file/video/record→get_file` 等）。
 - `setupEventProps(e)`：
   - 标记通用事件类型（`isDevice/isStdin`）。
   - 设置基础 `sender` 信息。

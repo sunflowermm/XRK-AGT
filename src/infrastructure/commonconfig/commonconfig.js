@@ -741,11 +741,15 @@ export default class ConfigBase {
             this._validateArrayField(value, fieldSchema, fieldPath, errors);
           }
 
-          if ((fieldSchema.type === 'object' || fieldSchema.type === 'map') && fieldSchema.fields) {
+          if (fieldSchema.type === 'map' && fieldSchema.fields) {
+            this._validateKeyedMapField(value, fieldSchema, fieldPath, errors);
+          } else if ((fieldSchema.type === 'object' || fieldSchema.type === 'map') && fieldSchema.fields) {
             this._validateObjectField(value, fieldSchema, fieldPath, errors);
           }
         }
       }
+
+      this._validateKeyedSiblingCollections(data, errors);
 
       if (typeof this.customValidate === 'function') {
         const customErrors = await this.customValidate(data);
@@ -824,7 +828,11 @@ export default class ConfigBase {
     const result = {};
     if (!schema?.fields) return result;
     for (const [key, fs] of Object.entries(schema.fields)) {
-      if (fs.type === 'object' || fs.type === 'map') {
+      if (fs.type === 'map') {
+        result[key] = Object.hasOwn(fs, 'default')
+          ? this._cloneDefaultValue(fs.default)
+          : {};
+      } else if (fs.type === 'object') {
         result[key] = this.buildDefaultFromSchema({ fields: fs.fields ?? {} });
       } else if (fs.type === 'array') {
         result[key] = Array.isArray(fs.default) ? [...fs.default] : [];
@@ -875,11 +883,32 @@ export default class ConfigBase {
     if (!schema?.fields) return list;
     for (const [key, fs] of Object.entries(schema.fields)) {
       const path = prefix ? `${prefix}.${key}` : key;
-      if (fs.type === 'object' || fs.type === 'map') {
+      if (fs.type === 'map') {
+        // map：fields 是「每个动态键」的值模板，不能当子路径展开，否则前端只能看到空 JSON
+        const valueFields = fs.fields || fs.itemSchema?.fields || null;
+        const hasValueFields = Boolean(valueFields && Object.keys(valueFields).length > 0);
+        list.push({
+          path,
+          type: 'map',
+          component: fs.component || 'keyedObject',
+          container: false,
+          meta: {
+            ...fs,
+            container: false,
+            fields: valueFields,
+            itemFields: valueFields,
+            keyLabel: fs.keyLabel || fs.meta?.keyLabel,
+            keyPlaceholder: fs.keyPlaceholder || fs.meta?.keyPlaceholder,
+          },
+        });
+        if (hasValueFields) {
+          list.push(...this.getFlatSchema(`${path}[]`, { fields: valueFields }));
+        }
+      } else if (fs.type === 'object') {
         const childFields = fs.fields && typeof fs.fields === 'object' ? fs.fields : null;
         const hasChildren = Boolean(childFields && Object.keys(childFields).length > 0);
         // container=true：仅作分组壳（有子字段已展开），前端勿再渲染空 JSON 编辑器
-        // 无子字段的 object/map/SubForm：前端渲染自由对象编辑器
+        // 无子字段的 object/SubForm：前端渲染自由对象 / keyed 编辑器
         list.push({
           path,
           type: fs.type,
@@ -920,7 +949,58 @@ export default class ConfigBase {
         });
       }
     }
+
+    // meta.collections：根级动态键（如 group 的群号覆盖，与 default 并列）
+    if (!prefix && Array.isArray(schema?.meta?.collections)) {
+      for (const col of schema.meta.collections) {
+        const colType = String(col?.type || col?.component || '').toLowerCase();
+        if (colType !== 'keyedobject' && colType !== 'map') continue;
+        const name = col.name;
+        if (!name) continue;
+        const templateFields = this._resolveCollectionValueFields(col, schema);
+        const excludeKeys = Array.isArray(col.excludeKeys)
+          ? col.excludeKeys
+          : Object.keys(schema.fields || {});
+        const keyedSiblings = col.basePath === '' || col.basePath == null;
+        list.push({
+          path: name,
+          type: 'map',
+          component: col.component || 'keyedObject',
+          container: false,
+          meta: {
+            ...col,
+            type: 'map',
+            container: false,
+            keyedSiblings,
+            excludeKeys,
+            fields: templateFields,
+            itemFields: templateFields,
+            keyLabel: col.keyLabel,
+            keyPlaceholder: col.keyPlaceholder,
+            label: col.label || name,
+            description: col.description || '',
+            group: col.group || col.label || name,
+          },
+        });
+        if (templateFields && Object.keys(templateFields).length) {
+          list.push(...this.getFlatSchema(`${name}[]`, { fields: templateFields }));
+        }
+      }
+    }
     return list;
+  }
+
+  /**
+   * collections 值模板：valueTemplatePath 指向 fields 下某 object 的 fields
+   * @private
+   */
+  _resolveCollectionValueFields(col, schema) {
+    if (col?.fields && typeof col.fields === 'object') return col.fields;
+    if (col?.itemSchema?.fields) return col.itemSchema.fields;
+    const tpl = col?.valueTemplatePath;
+    if (!tpl || !schema?.fields) return null;
+    const node = schema.fields[tpl];
+    return node?.fields && typeof node.fields === 'object' ? node.fields : null;
   }
 
   flattenData(obj, prefix = '') {
@@ -1024,6 +1104,61 @@ export default class ConfigBase {
         this._validateObjectField(normalizedItem, { ...itemSchemaWithType, fields: itemSchema.fields ?? schema.fields }, itemPath, errors);
       }
     });
+  }
+
+  _validateKeyedMapField(value, schema, path, errors) {
+    if (!this._isObject(value)) {
+      errors.push(`字段 ${path} 必须为对象（map）`);
+      return;
+    }
+    const valueSchema = {
+      type: 'object',
+      fields: schema.fields ?? schema.itemSchema?.fields ?? {},
+    };
+    for (const [entryKey, entryVal] of Object.entries(value)) {
+      const entryPath = `${path}.${entryKey}`;
+      if (!this._isObject(entryVal)) {
+        errors.push(`字段 ${entryPath} 必须为对象`);
+        continue;
+      }
+      this._validateObjectField(entryVal, valueSchema, entryPath, errors);
+    }
+  }
+
+  /**
+   * meta.collections 根级动态键（如 chatbot 群号覆盖）：按值模板校验
+   * @private
+   */
+  _validateKeyedSiblingCollections(data, errors) {
+    if (!this._isObject(data)) return;
+    const collections = this.schema?.meta?.collections;
+    if (!Array.isArray(collections) || !collections.length) return;
+
+    for (const col of collections) {
+      const colType = String(col?.type || col?.component || '').toLowerCase();
+      if (colType !== 'keyedobject' && colType !== 'map') continue;
+      if (col.basePath !== '' && col.basePath != null) continue;
+
+      const exclude = new Set(
+        Array.isArray(col.excludeKeys) && col.excludeKeys.length
+          ? col.excludeKeys
+          : Object.keys(this.schema?.fields || {}),
+      );
+      if (col.name) exclude.add(col.name);
+
+      const valueFields = this._resolveCollectionValueFields(col, this.schema);
+      if (!valueFields || !Object.keys(valueFields).length) continue;
+
+      const valueSchema = { type: 'object', fields: valueFields };
+      for (const [key, val] of Object.entries(data)) {
+        if (exclude.has(key)) continue;
+        if (!this._isObject(val)) {
+          errors.push(`字段 ${key} 必须为对象（${col.label || col.name || '动态覆盖'}）`);
+          continue;
+        }
+        this._validateObjectField(val, valueSchema, key, errors);
+      }
+    }
   }
 
   _validateObjectField(value, schema, path, errors) {

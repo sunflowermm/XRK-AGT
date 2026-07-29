@@ -38,7 +38,7 @@ export function castFieldValue(value, type, component) {
     }
     return [];
   }
-  if (t === 'object' || t === 'map' || c === 'json' || c === 'subform') {
+  if (t === 'object' || t === 'map' || c === 'json' || c === 'subform' || c === 'keyedobject' || c === 'keyed') {
     if (value && typeof value === 'object' && !Array.isArray(value)) return value;
     if (typeof value === 'string') {
       try {
@@ -116,13 +116,16 @@ function normalizeOneField(raw) {
     raw.component || meta.component || mapTypeToComponent(type) || 'input',
   ).toLowerCase();
   const itemSchema = meta.itemSchema || raw.itemSchema || null;
-  const itemFields = itemSchema?.fields || meta.fields || raw.fields || null;
+  const fieldsRaw = itemSchema?.fields || meta.fields || raw.fields || null;
+  const fields =
+    fieldsRaw && typeof fieldsRaw === 'object' && !Array.isArray(fieldsRaw) ? fieldsRaw : null;
   const container = Boolean(raw.container ?? meta.container);
   return {
     path,
     type,
     component,
     container,
+    fields,
     label: meta.label || meta.title || raw.label || raw.title || path.split('.').pop(),
     description: meta.description || meta.desc || raw.description || raw.desc || '',
     required: Boolean(meta.required ?? raw.required),
@@ -143,7 +146,17 @@ function normalizeOneField(raw) {
       ? meta.example
       : raw.example,
     itemLabel: meta.itemLabel || raw.itemLabel || '条目',
-    itemFields: itemFields && typeof itemFields === 'object' ? itemFields : null,
+    // 与 fields 同源；数组项 schema 仍读 itemFields
+    itemFields: fields,
+    keyLabel: meta.keyLabel || raw.keyLabel || '',
+    keyPlaceholder: meta.keyPlaceholder || raw.keyPlaceholder || '',
+    // 虚拟 path（如 groupOverrides）：读写根级动态键，不写进 YAML 该 path 本身
+    keyedSiblings: Boolean(meta.keyedSiblings ?? raw.keyedSiblings),
+    excludeKeys: Array.isArray(meta.excludeKeys)
+      ? meta.excludeKeys
+      : Array.isArray(raw.excludeKeys)
+        ? raw.excludeKeys
+        : [],
   };
 }
 
@@ -262,7 +275,7 @@ export function buildDefaultsFromFields(fields = {}) {
     if (ctrl === 'switch') result[key] = false;
     else if (ctrl === 'number') result[key] = null;
     else if (ctrl === 'tags' || ctrl === 'array') result[key] = [];
-    else if (ctrl === 'json' || ctrl === 'nested') result[key] = {};
+    else if (ctrl === 'json' || ctrl === 'kv' || ctrl === 'nested') result[key] = {};
     else if (schema.type === 'array') result[key] = [];
     else result[key] = '';
   }
@@ -283,9 +296,102 @@ function mapTypeToComponent(type) {
   if (t === 'number') return 'number';
   if (t === 'array<object>') return 'arrayform';
   if (t === 'array') return 'tags';
-  if (t === 'object' || t === 'map') return 'json';
+  if (t === 'map') return 'keyedobject';
+  if (t === 'object') return 'json';
   if (t.includes('password')) return 'inputpassword';
   return 'input';
+}
+
+/**
+ * 从 example / 现有值推断「动态键 → 对象」的值字段模板
+ * @param {unknown} sample
+ * @returns {Record<string, object>|null}
+ */
+export function inferFieldsFromExample(sample) {
+  if (!sample || typeof sample !== 'object' || Array.isArray(sample)) return null;
+  const values = Object.values(sample);
+  const firstObj = values.find((v) => v && typeof v === 'object' && !Array.isArray(v));
+  if (!firstObj) return null;
+  /** @type {Record<string, object>} */
+  const fields = {};
+  for (const [k, v] of Object.entries(firstObj)) {
+    if (typeof v === 'boolean') {
+      fields[k] = { type: 'boolean', label: k, component: 'Switch', default: v };
+    } else if (typeof v === 'number') {
+      fields[k] = { type: 'number', label: k, component: 'InputNumber', default: v };
+    } else if (Array.isArray(v)) {
+      fields[k] = {
+        type: 'array',
+        label: k,
+        component: 'Tags',
+        itemType: 'string',
+        default: [...v],
+      };
+    } else if (v && typeof v === 'object') {
+      fields[k] = { type: 'object', label: k, component: 'json', default: deepClone(v) };
+    } else {
+      fields[k] = { type: 'string', label: k, default: v == null ? '' : String(v) };
+    }
+  }
+  return Object.keys(fields).length ? fields : null;
+}
+
+/**
+ * 从扁平 path 字典还原 object/map 整值（兼容 flattenData 拆开的 path.key.sub）
+ * @param {Record<string, any>} flat
+ * @param {string} path
+ */
+export function collectObjectFromFlat(flat, path) {
+  const src = flat && typeof flat === 'object' ? flat : {};
+  if (Object.prototype.hasOwnProperty.call(src, path)) {
+    const v = src[path];
+    if (v && typeof v === 'object') return deepClone(v);
+  }
+  const prefix = `${path}.`;
+  /** @type {Record<string, any>} */
+  const acc = {};
+  let hit = false;
+  for (const [p, v] of Object.entries(src)) {
+    if (!p.startsWith(prefix)) continue;
+    hit = true;
+    const rel = p.slice(prefix.length);
+    if (!rel) continue;
+    const parts = rel.split('.');
+    let cur = acc;
+    for (let i = 0; i < parts.length; i++) {
+      const key = parts[i];
+      if (i === parts.length - 1) {
+        cur[key] = deepClone(v);
+      } else {
+        if (!cur[key] || typeof cur[key] !== 'object' || Array.isArray(cur[key])) cur[key] = {};
+        cur = cur[key];
+      }
+    }
+  }
+  return hit ? acc : {};
+}
+
+/**
+ * Yunzai 形根级覆盖：从 flat 收集「非 excludeKeys」的顶层键 → 对象
+ * （如 chatbot 根级 123456.xxx，排除 master/default 等固定键）
+ * @param {Record<string, any>} flat
+ * @param {string[]} excludeKeys
+ */
+export function collectKeyedSiblingsFromFlat(flat, excludeKeys = []) {
+  const src = flat && typeof flat === 'object' ? flat : {};
+  const exclude = new Set((excludeKeys || []).map(String));
+  const tops = new Set();
+  for (const p of Object.keys(src)) {
+    const top = String(p).split('.')[0];
+    if (!top || exclude.has(top)) continue;
+    tops.add(top);
+  }
+  /** @type {Record<string, any>} */
+  const out = {};
+  for (const k of tops) {
+    out[k] = collectObjectFromFlat(src, k);
+  }
+  return out;
 }
 
 const FULL_COMPONENTS = new Set([
@@ -296,6 +402,7 @@ const FULL_COMPONENTS = new Set([
   'subform',
   'inputpassword',
   'json',
+  'keyedobject',
   'multiselect',
 ]);
 
@@ -304,7 +411,7 @@ const FULL_KEY_PATTERN =
 
 /**
  * 统一字段控件类型（ConfigView / ConfigArrayForm / 嵌套子表共用）
- * @returns {'switch'|'select'|'tags'|'textarea'|'number'|'password'|'array'|'json'|'nested'|'input'}
+ * @returns {'switch'|'select'|'tags'|'textarea'|'number'|'password'|'array'|'json'|'kv'|'nested'|'input'}
  */
 export function resolveFieldControl(field = {}) {
   const c = String(field?.component || '').toLowerCase();
@@ -318,11 +425,35 @@ export function resolveFieldControl(field = {}) {
   }
   if (c === 'inputpassword' || c === 'password') return 'password';
   if (c === 'arrayform' || t === 'array<object>') return 'array';
-  if (c === 'subform' || (t === 'object' && field?.fields && Object.keys(field.fields).length)) {
+  if (c === 'kv') return 'kv';
+  // 动态键 map / keyedObject → 工厂式条目编辑（可切 JSON）
+  if (c === 'keyedobject' || c === 'keyed' || t === 'map') return 'keyed';
+  if (c === 'json') {
+    // 显式 json 但 example 是「键→对象」时，仍走工厂表单
+    if (inferFieldsFromExample(field.example)) return 'keyed';
+    return 'json';
+  }
+
+  const nestedFields = fieldNestedFields(field);
+  const hasNested = Object.keys(nestedFields).length > 0;
+  // example 呈现「键 → 对象」时，fields 是值模板 → 工厂式 keyed（非固定 SubForm）
+  if (hasNested && (c === 'subform' || t === 'object')) {
+    if (inferFieldsFromExample(field.example)) return 'keyed';
     return 'nested';
   }
-  if (c === 'json' || t === 'object' || t === 'map') return 'json';
+  // 无子 schema：若 example 像 keyed map → 工厂；否则 JSON
+  if (c === 'subform' || t === 'object') {
+    if (inferFieldsFromExample(field.example)) return 'keyed';
+    return 'json';
+  }
   return 'input';
+}
+
+/** @param {object} field */
+export function fieldNestedFields(field = {}) {
+  const raw = field.fields || field.itemFields;
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
+  return raw;
 }
 
 function hasChoiceOptions(field) {
@@ -350,7 +481,7 @@ export function isFieldFullSpan(field) {
   const ctrl = resolveFieldControl(meta);
 
   if (FULL_COMPONENTS.has(component)) return true;
-  if (ctrl === 'tags' || ctrl === 'textarea' || ctrl === 'array' || ctrl === 'json' || ctrl === 'nested') {
+  if (ctrl === 'tags' || ctrl === 'textarea' || ctrl === 'array' || ctrl === 'json' || ctrl === 'kv' || ctrl === 'nested' || ctrl === 'keyed') {
     return true;
   }
   if (type.startsWith('array') || type === 'object' || type === 'map' || type === 'array<object>') {
@@ -486,7 +617,7 @@ export function canonicalizeFieldValue(value, type, component) {
   ) {
     return Array.isArray(v) ? v : [];
   }
-  if (t === 'object' || t === 'map' || c === 'json' || c === 'subform') {
+  if (t === 'object' || t === 'map' || c === 'json' || c === 'subform' || c === 'keyedobject' || c === 'keyed') {
     return v && typeof v === 'object' && !Array.isArray(v) ? v : {};
   }
   if (v == null) return '';
@@ -509,6 +640,18 @@ export function sameFieldValue(a, b, type, component) {
 export function buildDirtyFlat(values, original, fields, arraySchemas = {}) {
   const flat = {};
   for (const f of fields) {
+    // 虚拟 path → 展开为 YAML 根级群号键；删除用 null（batch-set 删路径）
+    if (f.keyedSiblings) {
+      const next = canonicalizeFieldValue(values[f.path], f.type, f.component) || {};
+      const prev = canonicalizeFieldValue(original[f.path], f.type, f.component) || {};
+      for (const [k, v] of Object.entries(next)) {
+        if (!isSameValue(v, prev[k])) flat[k] = v;
+      }
+      for (const k of Object.keys(prev)) {
+        if (!Object.prototype.hasOwnProperty.call(next, k)) flat[k] = null;
+      }
+      continue;
+    }
     const isArrObj = f.type === 'array<object>' || f.component === 'arrayform';
     const itemFields = arraySchemas?.[f.path] || f.itemFields || {};
     const next = isArrObj
@@ -532,8 +675,37 @@ export function valuesFromFlat(flat, fields) {
   const out = {};
   const src = flat && typeof flat === 'object' ? flat : {};
   for (const f of fields) {
+    const isObjMap =
+      f.type === 'object' ||
+      f.type === 'map' ||
+      f.component === 'json' ||
+      f.component === 'subform' ||
+      f.component === 'keyedobject' ||
+      f.component === 'keyed';
+
     let raw;
-    if (Object.prototype.hasOwnProperty.call(src, f.path)) {
+    if (f.keyedSiblings) {
+      const exact = Object.prototype.hasOwnProperty.call(src, f.path) ? src[f.path] : undefined;
+      if (exact && typeof exact === 'object' && !Array.isArray(exact) && Object.keys(exact).length) {
+        raw = deepClone(exact);
+      } else {
+        raw = collectKeyedSiblingsFromFlat(src, [...(f.excludeKeys || []), f.path]);
+      }
+    } else if (isObjMap) {
+      const exact = Object.prototype.hasOwnProperty.call(src, f.path) ? src[f.path] : undefined;
+      const collected = collectObjectFromFlat(src, f.path);
+      if (exact && typeof exact === 'object' && !Array.isArray(exact) && Object.keys(exact).length) {
+        raw = deepClone(exact);
+      } else if (Object.keys(collected).length) {
+        raw = collected;
+      } else if (exact && typeof exact === 'object') {
+        raw = deepClone(exact);
+      } else if (Object.prototype.hasOwnProperty.call(f, 'default')) {
+        raw = deepClone(f.default);
+      } else {
+        raw = {};
+      }
+    } else if (Object.prototype.hasOwnProperty.call(src, f.path)) {
       raw = deepClone(src[f.path]);
     } else if (Object.prototype.hasOwnProperty.call(f, 'default')) {
       raw = deepClone(f.default);
@@ -546,8 +718,6 @@ export function valuesFromFlat(flat, fields) {
       f.component === 'arrayform'
     ) {
       raw = [];
-    } else if (f.component === 'json' || f.component === 'subform' || f.type === 'object' || f.type === 'map') {
-      raw = {};
     } else if (f.component === 'number' || f.component === 'inputnumber' || f.type === 'number') {
       raw = null;
     } else {

@@ -1,5 +1,4 @@
 import fs from 'fs/promises'
-import { existsSync } from 'fs'
 import runtimeConfig from '../config/config.js'
 import PluginBase from './plugin-base.js'
 import Runtime from './runtime.js'
@@ -10,6 +9,7 @@ import { EventNormalizer } from '#utils/event-normalizer.js'
 import RuntimeUtil from '#utils/runtime-util.js'
 import { msgSegment } from '#utils/msg-segment.js'
 import { scheduleMsgRecall, rememberSentMsgIds } from '#utils/msg-recall.js'
+import { readMediaBuffer } from '#utils/entry-media.js'
 import moment from 'moment'
 
 export const dealMethods = {
@@ -84,7 +84,8 @@ export const dealMethods = {
   async parseMessage(e) {
     // 重置msg，从message数组重新构建
     e.msg = ''
-    
+    if (!e.forwardIds) e.forwardIds = []
+
     for (const val of e.message) {
       if (!val?.type) continue
 
@@ -93,6 +94,7 @@ export const dealMethods = {
           e.msg += this.dealText(val.text || '')
           break
         case 'image':
+        case 'mface':
           if (val.url || val.file) e.img.push(val.url || val.file)
           break
         case 'video':
@@ -103,10 +105,15 @@ export const dealMethods = {
           if (val.url || val.file) e.audio.push(val.url || val.file)
           break
         case 'file':
-          e.file = { name: val.name || val.file_name, fid: val.fid, size: val.size, url: val.url || val.file }
+          e.file = { name: val.name || val.file_name, fid: val.fid || val.file_id, size: val.size, url: val.url || val.file }
           if (!e.fileList) e.fileList = []
           e.fileList.push(e.file)
           break
+        case 'forward': {
+          const id = val.id || val.message_id || val.data?.id || val.data?.message_id
+          if (id != null && id !== '') e.forwardIds.push(String(id))
+          break
+        }
       }
     }
   },
@@ -488,22 +495,22 @@ export const dealMethods = {
         return false
       }
 
-      // 检查黑白名单（统一字符串比较）
+      // 检查黑白名单（与 OneBotEnhancer 一致：统一转字符串）
       const chatbot = runtimeConfig.chatbot || {}
       const { blacklist = {}, whitelist = {} } = chatbot
       const groupId = String(e.group_id ?? '')
       const userId = String(e.user_id ?? '')
-      
-      // 黑名单检查
-      if (blacklist.groups?.includes(groupId) || blacklist.qq?.includes(userId)) {
+      const inList = (list, id) =>
+        Array.isArray(list) && list.length > 0 && id && list.map(String).includes(String(id))
+
+      if (inList(blacklist.groups, groupId) || inList(blacklist.qq, userId)) {
         return false
       }
-      
-      // 白名单检查（如果配置了白名单）
-      if (whitelist.groups?.length && !whitelist.groups.includes(groupId)) {
+
+      if (Array.isArray(whitelist.groups) && whitelist.groups.length && !inList(whitelist.groups, groupId)) {
         return false
       }
-      if (whitelist.qq?.length && !whitelist.qq.includes(userId)) {
+      if (Array.isArray(whitelist.qq) && whitelist.qq.length && !inList(whitelist.qq, userId)) {
         return false
       }
 
@@ -551,20 +558,17 @@ export const dealMethods = {
       if (!media) return null
 
       try {
+        if (Buffer.isBuffer(media)) return media
         if (typeof media === 'string') {
-          if (media.startsWith('http')) {
-            const res = await fetch(media)
-            return Buffer.from(await res.arrayBuffer())
-          } else if (existsSync(media)) {
-            return await fs.readFile(media)
-          } else if (media.startsWith('base64://')) {
-            return Buffer.from(Uint8Array.fromBase64(media.replace(/^base64:\/\//, '')))
-          }
-        } else if (Buffer.isBuffer(media)) {
-          return media
-        } else if (media.file) {
-          return await e.getSendableMedia(media.file)
+          return await readMediaBuffer({ file: media, type: 'file' }, e.bot?.sendApi
+            ? (action, params) => e.bot.sendApi(action, params)
+            : undefined, { type: 'file' })
         }
+        const type = String(media.type || 'image').toLowerCase()
+        const sendApi = e.bot?.sendApi
+          ? (action, params) => e.bot.sendApi(action, params)
+          : undefined
+        return await readMediaBuffer(media, sendApi, { type })
       } catch (error) {
         logger.error(`处理媒体文件失败: ${error.message}`)
       }

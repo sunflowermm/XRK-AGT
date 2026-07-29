@@ -1,134 +1,309 @@
 import { getConfigPath } from './system-schema-helpers.js';
+import { CHATBOT_FIXED_ROOT_KEYS } from '#infrastructure/config/config-constants.js';
+
+/**
+ * 群默认 / 按群号覆盖共用字段。
+ * loader-deal（冷却、插件启停）、OneBotEnhancer（@/别名）、add.js（词条与违禁词策略）
+ */
+const groupEntryFields = {
+  groupGlobalCD: {
+    type: 'number',
+    label: '群全局冷却',
+    description: '同群指令全局冷却（毫秒），0 不限制',
+    min: 0,
+    default: 500,
+    component: 'InputNumber',
+  },
+  singleCD: {
+    type: 'number',
+    label: '单人冷却',
+    description: '同群同人指令冷却（毫秒），0 不限制',
+    min: 0,
+    default: 500,
+    component: 'InputNumber',
+  },
+  onlyReplyAt: {
+    type: 'number',
+    label: '仅 @ / 前缀响应',
+    description: '0 不限制；1 需 @ 或别名前缀；2 同 1，主人免限',
+    enum: [0, 1, 2],
+    options: [
+      { label: '0 · 不限制', value: 0 },
+      { label: '1 · 需 @/前缀', value: 1 },
+      { label: '2 · 非主人需 @/前缀', value: 2 },
+    ],
+    default: 0,
+    component: 'Select',
+  },
+  botAlias: {
+    type: 'array',
+    label: '机器人别名',
+    description: '匹配 @ 或消息前缀；空且 onlyReplyAt≠0 时不拦',
+    itemType: 'string',
+    default: [],
+    component: 'Tags',
+  },
+  enable: {
+    type: 'array',
+    label: '插件白名单',
+    description: '只跑列出的插件 name；空=全部',
+    itemType: 'string',
+    default: [],
+    component: 'Tags',
+  },
+  disable: {
+    type: 'array',
+    label: '插件黑名单',
+    description: '禁用的插件 name',
+    itemType: 'string',
+    default: [],
+    component: 'Tags',
+  },
+  addPrivate: {
+    type: 'number',
+    label: '私聊可用添加指令',
+    description: '1 允许私聊用 #添加 等；0 仅群内',
+    enum: [0, 1],
+    options: [
+      { label: '0 · 仅群内', value: 0 },
+      { label: '1 · 允许私聊', value: 1 },
+    ],
+    default: 1,
+    component: 'Select',
+  },
+  addLimit: {
+    type: 'number',
+    label: '添加指令权限',
+    description: '0 所有人；1 管理员；2 仅主人',
+    enum: [0, 1, 2],
+    options: [
+      { label: '0 · 所有人', value: 0 },
+      { label: '1 · 管理员', value: 1 },
+      { label: '2 · 仅主人', value: 2 },
+    ],
+    default: 0,
+    component: 'Select',
+  },
+  addReply: {
+    type: 'boolean',
+    label: '词条回复时引用',
+    description: '命中添加词条后是否引用原消息',
+    default: true,
+    component: 'Switch',
+  },
+  addAt: {
+    type: 'boolean',
+    label: '词条回复时 @',
+    description: '命中词条后是否 @ 触发者',
+    default: false,
+    component: 'Switch',
+  },
+  addRecall: {
+    type: 'number',
+    label: '词条回复撤回',
+    description: '词条回复多少秒后撤回，0 不撤回',
+    min: 0,
+    default: 0,
+    component: 'InputNumber',
+  },
+  bannedWords: {
+    type: 'object',
+    label: '违禁词策略',
+    description: '词库在 data/bannedWords/{群号}.json；此处为开关与处罚',
+    component: 'SubForm',
+    fields: {
+      enabled: {
+        type: 'boolean',
+        label: '启用检测',
+        default: true,
+        component: 'Switch',
+      },
+      muteTime: {
+        type: 'number',
+        label: '禁言时长',
+        description: '分钟；仅警告开启时不禁言',
+        min: 0,
+        default: 720,
+        component: 'InputNumber',
+      },
+      warnOnly: {
+        type: 'boolean',
+        label: '仅警告',
+        default: false,
+        component: 'Switch',
+      },
+      exemptRoles: {
+        type: 'array',
+        label: '免检角色',
+        description: 'owner / admin 等',
+        itemType: 'string',
+        default: [],
+        component: 'Tags',
+      },
+    },
+  },
+};
+
 export const chatbotConfig = {
-      name: 'chatbot',
-      displayName: 'Chatbot业务配置',
-      description: 'Chatbot业务相关配置，包括主人、白名单、黑名单、自动处理、私聊、频道等',
-      filePath: getConfigPath('chatbot'),
-      fileType: 'yaml',
-      schema: {
+  name: 'chatbot',
+  displayName: '机器人业务',
+  description:
+    '主人、自动同意/退群、私聊、消息黑白名单、频道；以及群默认冷却/@/插件启停/词条与违禁词，可按群号覆盖',
+  filePath: getConfigPath('chatbot'),
+  fileType: 'yaml',
+  schema: {
+    meta: {
+      collections: [
+        {
+          name: 'groupOverrides',
+          type: 'keyedObject',
+          component: 'keyedObject',
+          label: '群单独配置',
+          description: '键为群号，覆盖 default；存于本文件根级',
+          basePath: '',
+          excludeKeys: [...CHATBOT_FIXED_ROOT_KEYS],
+          keyLabel: '群号',
+          keyPlaceholder: '输入群号',
+          valueTemplatePath: 'default',
+        },
+      ],
+    },
+    fields: {
+      master: {
+        type: 'object',
+        label: '主人',
+        component: 'SubForm',
         fields: {
-          master: {
-            type: 'object',
-            label: '主人配置',
-            component: 'SubForm',
-            fields: {
-              qq: {
-                type: 'array',
-                label: '主人QQ号列表',
-                description: '主人拥有最高权限，不受任何限制',
-                itemType: 'string',
-                default: [],
-                component: 'Tags'
-              }
-            }
+          qq: {
+            type: 'array',
+            label: '主人 QQ',
+            description: '写入 e.isMaster；黑白名单与私聊限制对主人放行',
+            itemType: 'string',
+            default: [],
+            component: 'Tags',
           },
-          auto: {
-            type: 'object',
-            label: '自动处理配置',
-            component: 'SubForm',
-            fields: {
-              friend: {
-                type: 'number',
-                label: '自动同意加好友',
-                description: '1: 同意, 0: 不处理',
-                enum: [0, 1],
-                default: 1,
-                component: 'Select'
-              },
-              quit: {
-                type: 'number',
-                label: '自动退群人数',
-                description: '当被好友拉进群时，群人数小于配置值自动退出，默认50，0则不处理',
-                min: 0,
-                default: 50,
-                component: 'InputNumber'
-              }
-            }
+        },
+      },
+      auto: {
+        type: 'object',
+        label: '自动处理',
+        component: 'SubForm',
+        fields: {
+          friend: {
+            type: 'number',
+            label: '自动同意加好友',
+            description: '1 同意，0 不处理',
+            enum: [0, 1],
+            options: [
+              { label: '0 · 不处理', value: 0 },
+              { label: '1 · 同意', value: 1 },
+            ],
+            default: 1,
+            component: 'Select',
           },
-          private: {
-            type: 'object',
-            label: '私聊配置',
-            component: 'SubForm',
-            fields: {
-              disabled: {
-                type: 'boolean',
-                label: '禁用私聊功能',
-                description: 'true: 私聊只接受ck以及抽卡链接（AgentRuntime主人不受限制），false: 私聊可以触发全部指令',
-                default: false,
-                component: 'Switch'
-              },
-              disabledMsg: {
-                type: 'string',
-                label: '禁用私聊AgentRuntime提示内容',
-                default: '私聊功能已禁用',
-                component: 'Input'
-              },
-              passKeywords: {
-                type: 'array',
-                label: '私聊通行字符串',
-                description: '包含这些字符串的消息不受限制',
-                itemType: 'string',
-                default: ['stoken'],
-                component: 'Tags'
-              }
-            }
+          quit: {
+            type: 'number',
+            label: '自动退群人数阈值',
+            description: '被拉进群时人数小于此值则退群；0 关闭',
+            min: 0,
+            default: 50,
+            component: 'InputNumber',
           },
-          whitelist: {
-            type: 'object',
-            label: '白名单配置（保留给上层模块使用，Server 不再内置 HTTP 鉴权白名单）',
-            component: 'SubForm',
-            fields: {
-              groups: {
-                type: 'array',
-                label: '白名单群',
-                description: '配置后只在该群生效',
-                itemType: 'string',
-                default: [],
-                component: 'Tags'
-              },
-              qq: {
-                type: 'array',
-                label: '白名单QQ',
-                itemType: 'string',
-                default: [],
-                component: 'Tags'
-              }
-            }
+        },
+      },
+      private: {
+        type: 'object',
+        label: '私聊',
+        component: 'SubForm',
+        fields: {
+          disabled: {
+            type: 'boolean',
+            label: '禁用私聊指令',
+            description: '开启后非主人私聊默认拦截；含通行关键字则放行',
+            default: false,
+            component: 'Switch',
           },
-          blacklist: {
-            type: 'object',
-            label: '黑名单配置',
-            component: 'SubForm',
-            fields: {
-              groups: {
-                type: 'array',
-                label: '黑名单群',
-                itemType: 'string',
-                default: [],
-                component: 'Tags'
-              },
-              qq: {
-                type: 'array',
-                label: '黑名单QQ',
-                itemType: 'string',
-                default: [],
-                component: 'Tags'
-              }
-            }
+          disabledMsg: {
+            type: 'string',
+            label: '拦截提示',
+            default: '私聊功能已禁用',
+            component: 'Input',
           },
-          guild: {
-            type: 'object',
-            label: '频道消息配置',
-            component: 'SubForm',
-            fields: {
-              disableMsg: {
-                type: 'boolean',
-                label: '禁用频道消息',
-                default: true,
-                component: 'Switch'
-              }
-            }
-          }
-        }
-      }
-    }
+          passKeywords: {
+            type: 'array',
+            label: '通行关键字',
+            description: 'disabled 时消息含任一关键字仍放行；可留空',
+            itemType: 'string',
+            default: [],
+            component: 'Tags',
+          },
+        },
+      },
+      whitelist: {
+        type: 'object',
+        label: '消息白名单',
+        description: '非空则只处理名单内群/用户（主人除外）。与 HTTP 鉴权无关',
+        component: 'SubForm',
+        fields: {
+          groups: {
+            type: 'array',
+            label: '白名单群',
+            itemType: 'string',
+            default: [],
+            component: 'Tags',
+          },
+          qq: {
+            type: 'array',
+            label: '白名单 QQ',
+            itemType: 'string',
+            default: [],
+            component: 'Tags',
+          },
+        },
+      },
+      blacklist: {
+        type: 'object',
+        label: '消息黑名单',
+        description: '名单内群/用户直接丢弃（主人除外）',
+        component: 'SubForm',
+        fields: {
+          groups: {
+            type: 'array',
+            label: '黑名单群',
+            itemType: 'string',
+            default: [],
+            component: 'Tags',
+          },
+          qq: {
+            type: 'array',
+            label: '黑名单 QQ',
+            itemType: 'string',
+            default: [],
+            component: 'Tags',
+          },
+        },
+      },
+      guild: {
+        type: 'object',
+        label: '频道',
+        component: 'SubForm',
+        fields: {
+          disableMsg: {
+            type: 'boolean',
+            label: '忽略频道消息',
+            description: '群号含 - 时丢弃；主人除外',
+            default: true,
+            component: 'Switch',
+          },
+        },
+      },
+      default: {
+        type: 'object',
+        label: '群默认设置',
+        description: '未单独配置的群使用；getGroup(id) = default ∪ 群号覆盖',
+        component: 'SubForm',
+        fields: groupEntryFields,
+      },
+    },
+  },
+};

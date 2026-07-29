@@ -138,50 +138,103 @@ function onImgError(e) {
             <audio :src="resolveMediaUrl(seg.url)" controls preload="metadata" class="chat-audio" />
           </div>
           <div v-else-if="seg.type === 'file'" class="seg-file">
-            <a :href="resolveMediaUrl(seg.url)" :download="seg.name || true" target="_blank" rel="noopener">
+            <a
+              v-if="seg.url"
+              :href="resolveMediaUrl(seg.url)"
+              :download="seg.name || true"
+              target="_blank"
+              rel="noopener"
+            >
               📄 {{ seg.name || '文件' }}
             </a>
+            <span v-else>📄 {{ seg.name || '文件' }}</span>
+          </div>
+          <div v-else-if="seg.type === 'forward'" class="seg-forward">
+            <div class="fwd-title">合并转发{{ seg.id ? ` · ${seg.id}` : '' }}</div>
+            <template v-if="seg.segments?.length">
+              <div v-for="(fs, fi) in seg.segments" :key="fi" class="fwd-seg">
+                <img
+                  v-if="fs.type === 'image'"
+                  class="chat-image sm"
+                  :src="resolveMediaUrl(fs.url)"
+                  alt=""
+                  @click="emit('preview', fs.url)"
+                />
+                <video
+                  v-else-if="fs.type === 'video'"
+                  :src="resolveMediaUrl(fs.url)"
+                  controls
+                  preload="metadata"
+                  class="chat-video sm"
+                />
+                <audio
+                  v-else-if="fs.type === 'record'"
+                  :src="resolveMediaUrl(fs.url)"
+                  controls
+                  class="chat-audio"
+                />
+                <a
+                  v-else-if="fs.type === 'file' && fs.url"
+                  :href="resolveMediaUrl(fs.url)"
+                  target="_blank"
+                  rel="noopener"
+                >📄 {{ fs.name || '文件' }}</a>
+                <div
+                  v-else-if="fs.type === 'text' || fs.type === 'markdown'"
+                  class="seg-text"
+                  v-html="md(fs.text)"
+                />
+                <span v-else class="fwd-fallback">{{ fs.text || `[${fs.type}]` }}</span>
+              </div>
+            </template>
+            <div v-else class="fwd-fallback">{{ seg.text || '[转发]' }}</div>
           </div>
           <ChatToolBlock v-else-if="seg.type === 'tools'" :tools="seg.tools || []" />
         </template>
       </div>
 
       <div v-if="message.role !== 'system'" class="msg-actions">
-        <button type="button" class="act" @click="emit('copy', message)">
+        <button type="button" class="act" aria-label="复制" title="复制" @click="emit('copy', message)">
           <XrkIcon name="copy" :size="12" />
-          复制
+          <span class="act-label">复制</span>
         </button>
         <button
           v-if="segments.some((s) => s.type === 'image')"
           type="button"
           class="act"
+          aria-label="看图"
+          title="看图"
           @click="emit('preview', segments.find((s) => s.type === 'image').url)"
         >
           <XrkIcon name="image" :size="12" />
-          看图
+          <span class="act-label">看图</span>
         </button>
         <button
           v-if="mode === 'event' && plain"
           type="button"
           class="act"
+          aria-label="引用"
+          title="引用"
           @click="emit('quote', message)"
         >
           <XrkIcon name="quote" :size="12" />
-          引用
+          <span class="act-label">引用</span>
         </button>
         <button
           v-if="message.role === 'assistant' && mode === 'ai'"
           type="button"
           class="act"
+          aria-label="重生成"
+          title="重生成"
           :disabled="streaming"
           @click="emit('regen', message)"
         >
           <XrkIcon name="reload" :size="12" />
-          重生成
+          <span class="act-label">重生成</span>
         </button>
-        <button type="button" class="act danger" @click="emit('delete', message)">
+        <button type="button" class="act danger" :aria-label="message.role === 'user' ? '撤回' : '删除'" :title="message.role === 'user' ? '撤回' : '删除'" @click="emit('delete', message)">
           <XrkIcon name="trash" :size="12" />
-          {{ message.role === 'user' ? '撤回' : '删除' }}
+          <span class="act-label">{{ message.role === 'user' ? '撤回' : '删除' }}</span>
         </button>
       </div>
     </div>
@@ -331,6 +384,15 @@ function onImgError(e) {
   .msg-actions {
     opacity: 1;
   }
+  .act {
+    padding: 6px;
+    min-width: 32px;
+    min-height: 32px;
+    justify-content: center;
+  }
+  .act-label {
+    display: none;
+  }
 }
 .act {
   border: 1.5px solid color-mix(in srgb, var(--ink) 40%, transparent);
@@ -398,6 +460,33 @@ function onImgError(e) {
   color: inherit;
   font-weight: 700;
   font-size: var(--font-sm);
+}
+.seg-forward {
+  border: 1.5px solid var(--ink);
+  border-radius: 8px;
+  padding: 8px;
+  background: color-mix(in srgb, var(--cyan) 12%, var(--card));
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-width: 100%;
+}
+.fwd-title {
+  font-size: var(--font-xs);
+  font-weight: 800;
+  opacity: 0.75;
+}
+.fwd-seg {
+  font-size: var(--font-sm);
+}
+.fwd-fallback {
+  opacity: 0.8;
+  font-size: var(--font-sm);
+}
+.chat-image.sm,
+.chat-video.sm {
+  max-width: 160px;
+  max-height: 120px;
 }
 .chat-image-container {
   margin-top: 4px;

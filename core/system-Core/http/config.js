@@ -113,9 +113,14 @@ export default {
         const current = await config.read(false);
         // 注意：这里的 flat 是“精确路径集合”，语义应该是“只覆盖这些路径”，而不是深合并整个对象。
         // 否则像 headers/extraBody 这类 object/map 字段无法被清空（{} 深合并会保留旧键）。
+        // null/undefined：删除该路径（如 Yunzai 根级群号覆盖被移除）
         const merged = JSON.parse(JSON.stringify(current ?? {}));
         for (const [p, v] of Object.entries(flat)) {
-          config._setValueByPath(merged, p, v);
+          if (v === null || v === undefined) {
+            config._deleteValueByPath(merged, p);
+          } else {
+            config._setValueByPath(merged, p, v);
+          }
         }
 
         // 校验并写入

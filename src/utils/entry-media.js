@@ -2,9 +2,11 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import RuntimeUtil from '#utils/runtime-util.js';
 import { inlineBinaryFromRef, isPathLike } from '#utils/media-ref.js';
+import { segMediaRef } from '#utils/onebot-message-seg.js';
 
 const HTTP_RE = /^https?:\/\//i;
 const QQ_CDN_RE = /multimedia\.nt\.qq\.com/i;
+const FILE_MEDIA = new Set(['file', 'video', 'record', 'audio']);
 
 export function isHttpRef(ref) {
   return HTTP_RE.test(String(ref ?? '').trim());
@@ -22,9 +24,11 @@ function isQqCdn(ref) {
 
 function refStrings(refs) {
   const data = typeof refs === 'object' && refs !== null ? refs : { file: refs };
+  const media = segMediaRef(data);
   return {
-    file: String(data.file ?? '').trim(),
-    url: String(data.url ?? '').trim(),
+    file: media.file || String(data.file ?? '').trim(),
+    url: media.url || String(data.url ?? '').trim(),
+    fileId: media.fileId,
   };
 }
 
@@ -49,10 +53,10 @@ async function fetchRefBuffer(ref, timeoutMs) {
   return Buffer.isBuffer(fetched) && fetched.length ? fetched : null;
 }
 
-async function getImageViaApi(sendApi, fileRef, timeoutMs) {
-  if (!sendApi || !fileRef) return null;
+async function getViaApi(sendApi, action, params, timeoutMs) {
+  if (!sendApi) return null;
   try {
-    const api = sendApi('get_image', { file: fileRef }).then((r) => r?.data ?? {});
+    const api = sendApi(action, params).then((r) => r?.data ?? {});
     const d = timeoutMs > 0
       ? await Promise.race([
         api,
@@ -64,25 +68,36 @@ async function getImageViaApi(sendApi, fileRef, timeoutMs) {
     if (d.file && isPathLike(d.file) && await RuntimeUtil.fileExists(d.file)) {
       return readLocalBuffer(`file://${path.resolve(d.file)}`);
     }
+    if (d.path && isPathLike(d.path) && await RuntimeUtil.fileExists(d.path)) {
+      return readLocalBuffer(`file://${path.resolve(d.path)}`);
+    }
     if (d.base64) {
       const raw = String(d.base64).replace(/^base64:\/\//, '');
       return raw ? Buffer.from(raw, 'base64') : null;
     }
   } catch (err) {
-    globalThis.AgentRuntime?.makeLog?.('debug', `[get_image] ${fileRef} → ${err.message}`, 'EntryMedia');
+    globalThis.AgentRuntime?.makeLog?.('debug', `[${action}] ${JSON.stringify(params)} → ${err.message}`, 'EntryMedia');
   }
   return null;
 }
 
-/** QQ 图链 / 本地路径 → Buffer（词条落盘、LLM 视觉）；出站发送走 OneBotv11.makeFile */
-export async function readImageBuffer(refs, sendApi, opts = {}) {
-  const { file, url } = refStrings(refs);
+/**
+ * 通用媒体 Buffer：image→get_image；file/video/record→get_file；兼 HTTP/本地/base64
+ * @param {object|string} refs
+ * @param {Function} [sendApi]
+ * @param {{ type?: string, persist?: boolean, fetchTimeout?: number, getImageTimeout?: number }} [opts]
+ */
+export async function readMediaBuffer(refs, sendApi, opts = {}) {
+  const mediaType = String(opts.type || (typeof refs === 'object' && refs?.type) || 'image').toLowerCase();
+  const { file, url, fileId } = refStrings(refs);
   const persist = opts.persist === true;
   const fetchTimeout = opts.fetchTimeout ?? 12000;
-  const getImageTimeout = opts.getImageTimeout ?? (persist ? 8000 : 60000);
+  const apiTimeout = opts.getImageTimeout ?? (persist ? 8000 : 60000);
 
-  if (file.startsWith('base64://')) {
-    return Buffer.from(file.slice(9), 'base64');
+  for (const ref of [file, url]) {
+    if (ref?.startsWith('base64://')) {
+      return Buffer.from(ref.slice(9), 'base64');
+    }
   }
 
   for (const ref of [file, url]) {
@@ -98,9 +113,22 @@ export async function readImageBuffer(refs, sendApi, opts = {}) {
   }
 
   if (sendApi) {
-    for (const ref of [file, url]) {
+    const isImageLike = mediaType === 'image' || mediaType === 'mface';
+    const actions = isImageLike
+      ? [['get_image', { file: file || url }]]
+      : FILE_MEDIA.has(mediaType) || fileId
+        ? [
+          ['get_file', { file: file || fileId }],
+          ['get_file', { file_id: fileId || file }],
+          ['get_record', { file: file || fileId }],
+        ]
+        : [['get_image', { file: file || url }], ['get_file', { file: file || fileId }]];
+
+    for (const [action, params] of actions) {
+      const ref = params.file || params.file_id;
       if (!ref) continue;
-      const buf = await getImageViaApi(sendApi, ref, getImageTimeout);
+      if (/^https?:\/\//i.test(ref) && action !== 'get_image') continue;
+      const buf = await getViaApi(sendApi, action, params, apiTimeout);
       if (buf?.length) return buf;
     }
   }
@@ -115,6 +143,11 @@ export async function readImageBuffer(refs, sendApi, opts = {}) {
   }
 
   return null;
+}
+
+/** QQ 图链 / 本地路径 → Buffer（词条落盘、LLM 视觉）；出站发送走 OneBotv11.makeFile */
+export async function readImageBuffer(refs, sendApi, opts = {}) {
+  return readMediaBuffer(refs, sendApi, { ...opts, type: 'image' });
 }
 
 /** 词条媒体落盘 → 相对路径 group/type/file（JSON 仅存本地，不存 URL） */
@@ -138,7 +171,7 @@ export async function persistEntryMedia(segment, { baseDir, groupId, sendApi }) 
     }
   }
 
-  const buffer = await readImageBuffer(data, sendApi, { persist: true });
+  const buffer = await readMediaBuffer(data, sendApi, { persist: true, type: mediaType });
   if (!buffer?.length) return null;
 
   const file = await AgentRuntime.fileType({ ...data, file: buffer });

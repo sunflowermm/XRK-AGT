@@ -9,7 +9,6 @@ import { agtConfig } from './system/system-agt.js';
 import { chatbotConfig } from './system/system-chatbot.js';
 import { serverConfig } from './system/system-server.js';
 import { deviceConfig } from './system/system-device.js';
-import { groupConfig } from './system/system-group.js';
 import { redisConfig } from './system/system-redis.js';
 import { sqliteConfig } from './system/system-sqlite.js';
 import { aiWorkflowConfig } from './system/system-ai-workflow.js';
@@ -18,21 +17,16 @@ import { rendererConfig } from './system/system-renderer.js';
 
 /**
  * 系统配置管理
- * 管理所有系统级配置文件
- * 新配置结构：
- * - 全局配置（不随端口变化）：agt, device, monitor, redis, sqlite（与 config-constants.js 一致）
- *   存储位置：server_bots/ 根目录
- * - 服务器配置（随端口变化）：server, chatbot, group
- *   存储位置：server_bots/{port}/
- *
- * Schema 分文件在 commonconfig/system/（不被 Loader 扫描为独立 ConfigBase）。
+ * - 全局：agt, device, monitor, redis, sqlite → server_bots/
+ * - 随端口：server, chatbot, ai-workflow → server_bots/{port}/
+ *   chatbot：主人/黑白名单/私聊 + 群默认与按群号覆盖
  */
 export default class SystemConfig extends ConfigBase {
   constructor() {
     super({
       name: 'system',
       displayName: '系统配置',
-      description: 'XRK-AGT 系统配置管理（日志/HTTP 服务器/设备/监控/LLM 工厂等都从这里拆分为子配置，前端可视化编辑时建议先从 agt/server/chatbot 入手）',
+      description: 'XRK-AGT 系统配置（agt/server/chatbot/ai-workflow 等子配置）',
       filePath: '',
       fileType: 'yaml'
     });
@@ -42,7 +36,6 @@ export default class SystemConfig extends ConfigBase {
       chatbot: chatbotConfig,
       server: serverConfig,
       device: deviceConfig,
-      group: groupConfig,
       redis: redisConfig,
       sqlite: sqliteConfig,
       'ai-workflow': aiWorkflowConfig,

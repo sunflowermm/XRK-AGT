@@ -31,6 +31,8 @@ import AiWorkspacePanel from '@/components/AiWorkspacePanel.vue';
 import ChatBubble from '@/components/ChatBubble.vue';
 import XrkIcon from '@/components/XrkIcon.vue';
 import { useDeviceWs } from '@/composables/useDeviceWs';
+import { useListPaneWidth } from '@/composables/useListPaneWidth';
+import { useViewport } from '@/composables/useViewport';
 import { createVoiceTts, stripMarkdownForTTS } from '@/chat/voice-tts';
 import {
   extractForwardLines,
@@ -61,6 +63,8 @@ const message = useMessage();
 const chat = useChatStore();
 const auth = useAuthStore();
 const router = useRouter();
+const { isMobile } = useViewport();
+const { width: listPaneW, startResize } = useListPaneWidth();
 
 const input = ref('');
 const streaming = ref(false);
@@ -828,7 +832,8 @@ async function sendEvent(text) {
         const b64 = await fileToBase64(a.file);
         userSegs.push({ type: 'record', url: b64, name: a.name });
       } else {
-        userSegs.push({ type: 'text', text: `[文件] ${a.name} (${formatBytes(a.size)})` });
+        const b64 = await fileToBase64(a.file);
+        userSegs.push({ type: 'file', url: b64, name: a.name, size: a.size });
       }
     } catch {
       userSegs.push({ type: 'text', text: `[文件] ${a.name}` });
@@ -855,6 +860,7 @@ async function sendEvent(text) {
         body: JSON.stringify({
           event_type: 'message',
           content: text,
+          message: userSegs.length ? userSegs : undefined,
           json: true,
           user_info: { tasker: 'api' },
         }),
@@ -1244,7 +1250,8 @@ onDeactivated(() => {
 <template>
   <div
     class="chat-page"
-    :class="{ 'is-dragover': dragOver, 'side-open': sideOpen }"
+    :class="{ 'is-dragover': dragOver, 'side-open': sideOpen, 'is-mobile-page': isMobile }"
+    :style="{ '--list-pane-w': `${listPaneW}px` }"
     @dragover.prevent="dragOver = chat.mode !== 'voice'"
     @dragleave.prevent="dragOver = false"
     @drop="onDrop"
@@ -1370,6 +1377,13 @@ onDeactivated(() => {
           </div>
         </template>
       </NSpace>
+      <button
+        type="button"
+        class="pane-resizer"
+        aria-label="调整列表宽度"
+        title="拖拽调整宽度"
+        @pointerdown="startResize"
+      />
     </aside>
 
     <section class="chat-main brutal-card" :class="{ 'voice-main': chat.mode === 'voice' }">
@@ -1548,7 +1562,7 @@ onDeactivated(() => {
 <style scoped>
 .chat-page {
   display: grid;
-  grid-template-columns: 220px minmax(0, 1fr);
+  grid-template-columns: var(--list-pane-w, 260px) minmax(0, 1fr);
   gap: var(--gap);
   height: 100%;
   min-height: 100%;
@@ -1566,6 +1580,8 @@ onDeactivated(() => {
 }
 .chat-side {
   overflow: auto;
+  position: relative;
+  min-width: 0;
 }
 .mode-row {
   display: grid;
@@ -1953,6 +1969,9 @@ header {
   .chat-side {
     display: none;
   }
+  .chat-page .pane-resizer {
+    display: none;
+  }
   .chat-page.side-open .chat-side {
     display: flex;
     position: fixed;
@@ -1974,6 +1993,20 @@ header {
   }
   .msgs {
     min-height: 200px;
+  }
+  .chat-page.is-mobile-page.side-open .chat-side {
+    top: max(48px, env(safe-area-inset-top) + 44px);
+    bottom: calc(var(--shell-tabbar-h, 52px) + env(safe-area-inset-bottom));
+  }
+  .chat-page.is-mobile-page .composer {
+    gap: 4px;
+  }
+  .chat-page.is-mobile-page .tool-btn {
+    width: 34px;
+    height: 34px;
+  }
+  .chat-page.is-mobile-page .composer-input :deep(textarea) {
+    font-size: 16px; /* 避免 iOS 聚焦放大 */
   }
 }
 </style>

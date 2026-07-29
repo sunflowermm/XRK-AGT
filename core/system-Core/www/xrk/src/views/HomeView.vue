@@ -13,7 +13,9 @@ import {
 } from '@/home/metrics';
 import { useHomeCharts } from '@/home/useHomeCharts';
 import HomeTagCloud from '@/components/HomeTagCloud.vue';
+import { useViewport } from '@/composables/useViewport';
 
+const { isMobile } = useViewport();
 const message = useMessage();
 const loading = ref(false);
 const refreshing = ref(false);
@@ -51,6 +53,8 @@ const host = reactive({
 
 const disks = ref([]);
 const ifaces = ref([]);
+/** 接口失败时若仍展示缓存，告知用户别当成实时鉴权成功 */
+const staleHint = ref('');
 
 const cpuRef = ref(null);
 const memRef = ref(null);
@@ -246,10 +250,20 @@ async function load({ force = false, silent = false } = {}) {
       const data = overviewSettled.value || {};
       applyOverview(data);
       saveCache(data);
+      staleHint.value = '';
     } else {
+      const errMsg = overviewSettled.reason?.message || '概览加载失败';
       const cached = loadCache();
-      if (cached) applyOverview(cached);
-      else if (!silent) message.warning(overviewSettled.reason?.message || '概览加载失败');
+      if (cached) {
+        applyOverview(cached);
+        const ageMin = Math.max(1, Math.round((Date.now() - (cached._cacheTime || 0)) / 60000));
+        staleHint.value = /未授权|401/i.test(errMsg)
+          ? `鉴权失败，显示约 ${ageMin} 分钟前的缓存（请填写 X-API-Key）`
+          : `加载失败，显示约 ${ageMin} 分钟前的缓存：${errMsg}`;
+      } else {
+        staleHint.value = '';
+        if (!silent) message.warning(errMsg);
+      }
     }
 
     if (pluginsSettled.status === 'fulfilled') {
@@ -359,7 +373,7 @@ const hostFacts = computed(() => [
 </script>
 
 <template>
-  <div class="home-page">
+  <div class="home-page" :class="{ 'is-mobile-page': isMobile }">
     <NSpin :show="loading && !metrics.cpuText.includes('%')">
       <div class="dashboard">
       <div class="dash-head">
@@ -376,6 +390,8 @@ const hostFacts = computed(() => [
           刷新
         </NButton>
       </div>
+
+      <div v-if="staleHint" class="stale-banner" role="status">{{ staleHint }}</div>
 
       <div class="stats-grid">
         <div
@@ -601,6 +617,20 @@ const hostFacts = computed(() => [
   margin: 2px 0 0;
   font-size: var(--font-xs);
   color: var(--muted);
+}
+.stale-banner {
+  margin: 0 0 var(--gap);
+  padding: 8px 12px;
+  font-size: var(--font-xs);
+  color: #7a3b00;
+  background: #fff3d6;
+  border: 1px solid #f0c36d;
+  border-radius: 6px;
+}
+html.dark .stale-banner {
+  color: #ffd89a;
+  background: rgba(240, 195, 109, 0.12);
+  border-color: rgba(240, 195, 109, 0.35);
 }
 .stats-grid {
   display: grid;
@@ -1008,19 +1038,23 @@ const hostFacts = computed(() => [
     grid-template-columns: 1fr 1fr;
   }
 }
-@media (max-width: 520px) {
-  .stats-grid {
-    grid-template-columns: 1fr;
-  }
-  .stat-value {
-    font-size: 15px;
-  }
-  .doughnut-wrap {
-    width: 84px;
-    height: 84px;
-  }
-  .net-wrap {
-    height: 120px;
-  }
+.home-page.is-mobile-page .stats-grid {
+  grid-template-columns: 1fr;
+}
+.home-page.is-mobile-page .chart-grid,
+.home-page.is-mobile-page .info-grid,
+.home-page.is-mobile-page .bottom-grid,
+.home-page.is-mobile-page .detail-grid {
+  grid-template-columns: 1fr;
+}
+.home-page.is-mobile-page .doughnut-wrap {
+  width: 72px;
+  height: 72px;
+}
+.home-page.is-mobile-page .net-wrap {
+  height: 110px;
+}
+.home-page.is-mobile-page .stat-value {
+  font-size: 15px;
 }
 </style>

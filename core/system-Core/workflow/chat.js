@@ -37,7 +37,7 @@ import {
 } from '#utils/onebot-message-seg.js';
 import { chatSessionHistory } from '#utils/chat-session-history.js';
 import { summarizeToolForHistory } from '#utils/mcp-tool-result-text.js';
-import { readImageBuffer } from '#utils/entry-media.js';
+import { readMediaBuffer } from '#utils/entry-media.js';
 import {
   buildAgtUserContent,
   extractVisionFromEvent,
@@ -456,12 +456,29 @@ export default class ChatStream extends AiWorkflow {
           url: seg.url || data.url,
           file: data.file || seg.file
         });
+      } else if (seg.type === 'video') {
+        assets.push({
+          type: 'video',
+          name: data.name || seg.name,
+          url: data.url || seg.url,
+          file: data.file || seg.file,
+          file_id: data.file_id || seg.file_id
+        });
+      } else if (seg.type === 'record' || seg.type === 'audio') {
+        assets.push({
+          type: 'record',
+          name: data.name || seg.name,
+          url: data.url || seg.url,
+          file: data.file || seg.file,
+          file_id: data.file_id || seg.file_id
+        });
       } else if (seg.type === 'file') {
         assets.push({
           type: 'file',
           name: data.name || seg.name,
           url: data.url || seg.url,
-          file: data.file || seg.file
+          file: data.file || seg.file,
+          file_id: data.file_id || seg.file_id || data.fid
         });
       } else if (seg.type === 'mface') {
         assets.push({
@@ -483,8 +500,11 @@ export default class ChatStream extends AiWorkflow {
     if (asset?.url || asset?.file) {
       const fromName = path.extname(String(asset.file || asset.url).split('?')[0]);
       if (IMAGE_SEND_EXTS.has(fromName.toLowerCase())) return fromName.toLowerCase();
+      if (fromName) return fromName.toLowerCase();
     }
     if (asset?.type === 'image' || asset?.type === 'mface') return '.png';
+    if (asset?.type === 'video') return '.mp4';
+    if (asset?.type === 'record') return '.amr';
     return '.bin';
   }
 
@@ -550,7 +570,19 @@ export default class ChatStream extends AiWorkflow {
     }
 
     if ((asset.type === 'image' || asset.type === 'mface') && (asset.file || asset.url)) {
-      const buf = await readImageBuffer({ file: asset.file, url: asset.url }, sendApi);
+      const buf = await readMediaBuffer({ file: asset.file, url: asset.url }, sendApi, { type: 'image' });
+      if (buf?.length) {
+        await RuntimeUtil.writeFile(absPath, buf);
+        return absPath;
+      }
+    }
+
+    if (['file', 'video', 'record'].includes(asset.type) && (asset.file || asset.url || asset.file_id)) {
+      const buf = await readMediaBuffer(
+        { file: asset.file, url: asset.url, file_id: asset.file_id, type: asset.type },
+        sendApi,
+        { type: asset.type },
+      );
       if (buf?.length) {
         await RuntimeUtil.writeFile(absPath, buf);
         return absPath;
@@ -914,10 +946,10 @@ export default class ChatStream extends AiWorkflow {
         }
         const segments = Array.isArray(messageData.message) ? messageData.message : [];
         const assets = this._extractMessageAssets(segments).filter(
-          (a) => a.type === 'image' || a.type === 'file' || a.type === 'mface'
+          (a) => ['image', 'file', 'mface', 'video', 'record'].includes(a.type)
         );
         if (assets.length === 0) {
-          return { success: false, error: '该消息没有可下载的图片/文件/表情包' };
+          return { success: false, error: '该消息没有可下载的图片/视频/语音/文件/表情包' };
         }
         if (index >= assets.length) {
           return { success: false, error: `index 超出范围，共 ${assets.length} 个可下载资源` };

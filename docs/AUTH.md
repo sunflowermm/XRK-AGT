@@ -45,11 +45,12 @@
 - **密钥来源**：`server.auth.apiKey.file`（如 `config/server_config/api_key.json`）中的 `key`；未配置则启动时自动生成并写入该文件。
 - **请求中如何携带**（任选其一即可）：
   - 请求头：`X-API-Key: <key>`
+  - 请求头：`Api-Key: <key>`
   - 请求头：`Authorization: Bearer <key>` / `Authorization: Token <key>` / `Authorization: ApiKey <key>`
-  - 请求头：`X-Auth-Token: <key>` / `X-Access-Token: <key>` / `Api-Key: <key>`
-  - 查询参数：`?api_key=<key>`（同时兼容 `apiKey/apikey/access_token/token/key`）
-  - 请求体（JSON）：`{ "api_key": "<key>" }`（同时兼容 `apiKey/apikey/access_token/token/key`）
+  - 查询参数：`?api_key=<key>` 或 `?apiKey=<key>`（WebSocket 升级同此；不接受 body / `token` / `key` 等易撞字段）
 - **校验方式**：使用 `crypto.timingSafeEqual` 做常量时间比较，防止时序攻击。
+- **空密钥文件**：`api_key.json` 存在但 `key` 为空时视为无效，启动时重新生成。
+- **`enabled === false`**：关闭 API Key 时校验恒为通过（含远程）。
 
 ---
 
@@ -63,9 +64,9 @@
 
 客户端可以通过以下任一方式携带系统 API Key（与 HTTP 一致）：
 
-- 头部：`X-API-Key: <key>`
+- 头部：`X-API-Key: <key>` / `Api-Key: <key>`
 - 头部：`Authorization: Bearer <key>` / `Authorization: Token <key>` / `Authorization: ApiKey <key>`
-- 查询：`?api_key=<key>`（如 `wss://host/device?api_key=<key>`，并兼容 `apiKey/apikey/access_token/token/key`）
+- 查询：`?api_key=<key>` 或 `?apiKey=<key>`（如 `wss://host/device?api_key=<key>`）
 
 各 Tasker 若还需要额外的业务级鉴权（例如设备 ID 白名单），可以在各自的 WS handler 内再做一层校验；对于显式声明 `skipAuth: true` 的路径，推荐在 Tasker 内自行实现细粒度的业务鉴权逻辑。
 

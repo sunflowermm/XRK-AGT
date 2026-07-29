@@ -35,5 +35,11 @@ export const msgSegment = {
   },
   text(text) {
     return { type: 'text', text }
-  }
+  },
+  forward(id) {
+    return { type: 'forward', id: String(id) }
+  },
+  node(data) {
+    return { type: 'node', data }
+  },
 }

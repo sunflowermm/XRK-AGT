@@ -1,13 +1,10 @@
 <script setup>
 import { computed, ref, watch } from 'vue';
-import { NButton, NInput, NInputNumber, NSelect, NSpace, NSwitch } from 'naive-ui';
+import { NButton, NInput, NSpace } from 'naive-ui';
 import {
   buildDefaultsFromFields,
-  formatTagsText,
   getNestedValue,
   isFieldFullSpan,
-  normalizeOptions,
-  parseTagsText,
   resolveFieldControl,
   setNestedValue,
 } from '@/config/flat';
@@ -16,7 +13,9 @@ import {
   groupProviderSchemaFields,
   isLlmProvidersArray,
 } from '@/config/llm-provider-ui';
+import { useConfirmDialog } from '@/composables/useConfirmDialog';
 import { randomId } from '@/utils/http';
+import ConfigFieldControl from '@/components/ConfigFieldControl.vue';
 import XrkIcon from '@/components/XrkIcon.vue';
 
 const props = defineProps({
@@ -28,6 +27,7 @@ const props = defineProps({
 });
 
 const emit = defineEmits(['update:modelValue']);
+const { confirm } = useConfirmDialog();
 
 const items = computed(() => (Array.isArray(props.modelValue) ? props.modelValue : []));
 const isProviders = computed(() => isLlmProvidersArray(props.path));
@@ -72,6 +72,7 @@ function isFull(key, schema) {
   return (
     isFieldFullSpan(asFieldMeta(key, schema)) ||
     ctrl === 'json' ||
+    ctrl === 'kv' ||
     ctrl === 'textarea' ||
     ctrl === 'nested' ||
     ctrl === 'tags'
@@ -114,14 +115,6 @@ function jsonText(item, relPath) {
   }
 }
 
-function tagsValue(item, relPath) {
-  return formatTagsText(readItem(item, relPath));
-}
-
-function setTags(index, relPath, text) {
-  patchItem(index, relPath, parseTagsText(text));
-}
-
 function addItem() {
   rowKeys.value = [...rowKeys.value, randomId()];
   emit('update:modelValue', [
@@ -130,9 +123,15 @@ function addItem() {
   ]);
 }
 
-function removeItem(i) {
+async function removeItem(i) {
   const title = summary(items.value[i], i);
-  if (!window.confirm(`确认删除「${title}」？`)) return;
+  const ok = await confirm({
+    title: `删除${props.label || '条目'}`,
+    content: `确认删除「${title}」？未保存前可点重载撤销。`,
+    positiveText: '删除',
+    negativeText: '取消',
+  });
+  if (!ok) return;
   const next = [...items.value];
   next.splice(i, 1);
   const keys = [...rowKeys.value];
@@ -233,7 +232,7 @@ function expandAll() {
             v-for="sec in sectionsForItem"
             :key="sec.id"
             class="section"
-            v-bind="sec.collapsible ? { open: !dense } : {}"
+            v-bind="sec.collapsible ? { open: true } : {}"
           >
             <summary v-if="sec.collapsible" class="section-head">{{ sec.label }}</summary>
             <header v-else-if="sec.label" class="section-head static">{{ sec.label }}</header>
@@ -256,43 +255,10 @@ function expandAll() {
                       }"
                     >
                       <label :title="ns.description || nk">{{ ns.label || nk }}</label>
-                      <NSwitch
-                        v-if="fieldControl(ns) === 'switch'"
-                        :value="Boolean(readItem(item, `${key}.${nk}`))"
-                        size="small"
-                        @update:value="(v) => patchItem(i, `${key}.${nk}`, v)"
-                      />
-                      <NSelect
-                        v-else-if="fieldControl(ns) === 'select'"
-                        :value="readItem(item, `${key}.${nk}`)"
-                        size="small"
-                        :options="normalizeOptions(ns.options || ns.enum || ns.choices)"
-                        clearable
-                        @update:value="(v) => patchItem(i, `${key}.${nk}`, v)"
-                      />
-                      <NInputNumber
-                        v-else-if="fieldControl(ns) === 'number'"
-                        :value="readItem(item, `${key}.${nk}`)"
-                        size="small"
-                        :min="ns.min"
-                        :max="ns.max"
-                        :step="ns.step || 1"
-                        style="width: 100%"
-                        @update:value="(v) => patchItem(i, `${key}.${nk}`, v)"
-                      />
-                      <NInput
-                        v-else-if="fieldControl(ns) === 'password'"
-                        :value="String(readItem(item, `${key}.${nk}`) ?? '')"
-                        type="password"
-                        show-password-on="click"
-                        size="small"
-                        @update:value="(v) => patchItem(i, `${key}.${nk}`, v)"
-                      />
-                      <NInput
-                        v-else
-                        :value="String(readItem(item, `${key}.${nk}`) ?? '')"
-                        size="small"
-                        @update:value="(v) => patchItem(i, `${key}.${nk}`, v)"
+                      <ConfigFieldControl
+                        :schema="ns"
+                        :model-value="readItem(item, `${key}.${nk}`)"
+                        @update:model-value="(v) => patchItem(i, `${key}.${nk}`, v)"
                       />
                     </div>
                   </div>
@@ -307,68 +273,10 @@ function expandAll() {
                   <p v-if="schema.description" class="desc" :title="schema.description">
                     {{ schema.description }}
                   </p>
-                  <NSwitch
-                    v-if="fieldControl(schema) === 'switch'"
-                    :value="Boolean(readItem(item, key))"
-                    size="small"
-                    @update:value="(v) => patchItem(i, key, v)"
-                  />
-                  <NSelect
-                    v-else-if="fieldControl(schema) === 'select'"
-                    :value="readItem(item, key)"
-                    size="small"
-                    :options="normalizeOptions(schema.options || schema.enum || schema.choices)"
-                    clearable
-                    @update:value="(v) => patchItem(i, key, v)"
-                  />
-                  <NInputNumber
-                    v-else-if="fieldControl(schema) === 'number'"
-                    :value="readItem(item, key)"
-                    size="small"
-                    :min="schema.min"
-                    :max="schema.max"
-                    :step="schema.step || 1"
-                    style="width: 100%"
-                    @update:value="(v) => patchItem(i, key, v)"
-                  />
-                  <NInput
-                    v-else-if="fieldControl(schema) === 'password'"
-                    :value="String(readItem(item, key) ?? '')"
-                    type="password"
-                    show-password-on="click"
-                    size="small"
-                    @update:value="(v) => patchItem(i, key, v)"
-                  />
-                  <NInput
-                    v-else-if="fieldControl(schema) === 'textarea'"
-                    :value="String(readItem(item, key) ?? '')"
-                    type="textarea"
-                    size="small"
-                    :rows="dense ? 2 : 3"
-                    @update:value="(v) => patchItem(i, key, v)"
-                  />
-                  <NInput
-                    v-else-if="fieldControl(schema) === 'tags'"
-                    :value="tagsValue(item, key)"
-                    size="small"
-                    placeholder="逗号分隔"
-                    @update:value="(v) => setTags(i, key, v)"
-                  />
-                  <NInput
-                    v-else-if="fieldControl(schema) === 'json'"
-                    :value="jsonText(item, key)"
-                    type="textarea"
-                    size="small"
-                    class="mono"
-                    :rows="dense ? 3 : 5"
-                    @update:value="(v) => patchItemJson(i, key, v)"
-                  />
-                  <NInput
-                    v-else
-                    :value="String(readItem(item, key) ?? '')"
-                    size="small"
-                    :placeholder="schema.placeholder || ''"
-                    @update:value="(v) => patchItem(i, key, v)"
+                  <ConfigFieldControl
+                    :schema="schema"
+                    :model-value="readItem(item, key)"
+                    @update:model-value="(v) => patchItem(i, key, v)"
                   />
                 </div>
               </template>
@@ -381,7 +289,7 @@ function expandAll() {
           type="textarea"
           size="small"
           class="mono"
-          :rows="dense ? 4 : 6"
+          :rows="6"
           @update:value="(v) => patchItemJson(i, '', v)"
         />
       </div>
@@ -464,12 +372,15 @@ function expandAll() {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
+  contain: layout style;
 }
 .field {
   display: flex;
   flex-direction: column;
   gap: 3px;
   min-width: 0;
+  min-height: 30px;
+  contain: layout;
 }
 .field.full { grid-column: 1 / -1; }
 .field.switch {
@@ -518,37 +429,9 @@ function expandAll() {
   padding: 0 4px !important;
 }
 
-.dense { gap: 6px; }
-.dense .card-head { padding: 6px 8px; }
-.dense .card-body { padding: 6px 8px 8px; }
-.dense .section { margin-bottom: 6px; padding: 4px; }
-.dense .section-head { margin-bottom: 4px; font-size: var(--font-xs); }
+/* 紧凑 = 仅 2 列 → 3 列，不改高度 */
 .dense .field-grid {
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 6px;
-}
-.dense .field { gap: 1px; }
-.dense .field label { font-size: var(--font-xs); }
-.dense .desc {
-  -webkit-line-clamp: 1;
-  max-height: 1.35em;
-}
-
-@container cfg-array (max-width: 560px) {
-  .field-grid,
-  .dense .field-grid {
-    grid-template-columns: 1fr;
-  }
-}
-@container cfg-array (min-width: 561px) and (max-width: 780px) {
-  .dense .field-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-@media (max-width: 720px) {
-  .field-grid,
-  .dense .field-grid {
-    grid-template-columns: 1fr;
-  }
+  gap: 8px 10px;
 }
 </style>

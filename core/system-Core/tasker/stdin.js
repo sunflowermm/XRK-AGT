@@ -220,8 +220,11 @@ export default class StdinTasker {
           case 'image':
           case 'video':
           case 'audio':
+          case 'record':
           case 'file':
-            processed.push(await this.processMediaFile(item));
+            processed.push(await this.processMediaFile(
+              item.type === 'record' ? { ...item, type: 'audio' } : item,
+            ));
             break;
           case 'forward':
             processed.push(item);
@@ -369,8 +372,10 @@ export default class StdinTasker {
         textLogs.push(item);
         processedItems.push({ type: 'text', text: item });
       } else if (item?.type) {
-        if (['image', 'video', 'audio', 'file'].includes(item.type)) {
-          const processed = await this.processMediaFile(item);
+        if (['image', 'video', 'audio', 'record', 'file'].includes(item.type)) {
+          const processed = await this.processMediaFile(
+            item.type === 'record' ? { ...item, type: 'audio' } : item,
+          );
           processedItems.push(processed);
           textLogs.push(`[${item.type}: ${processed.name || '未命名'} - ${processed.url || '无URL'}]`);
         } else if (item.type === 'text') {

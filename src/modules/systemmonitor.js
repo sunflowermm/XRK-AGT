@@ -16,6 +16,7 @@ import path from 'path';
 import { exec } from '#utils/exec-async.js';
 import EventEmitter from 'events';
 import { safeOsNetworkInterfaces } from '#utils/safe-os-network.js';
+import { readDisks, readMem } from '#infrastructure/http/utils/system-metrics.js';
 import {
     normalizeMonitorConfig,
     isManagedBrowserCommand,
@@ -48,7 +49,7 @@ class SystemMonitor extends EventEmitter {
         this.monitorInterval = null;
         this.reportInterval = null;
         this.lastOptimizeTime = 0;
-        /** 防止 checkSystem 重入（Windows 上 shell 探测尤不可重叠） */
+        /** 防止 checkSystem 重入 */
         this._checking = false;
         /** 防止 optimizeSystem 重入 */
         this._optimizing = false;
@@ -70,6 +71,8 @@ class SystemMonitor extends EventEmitter {
         this.redis = null;
         /** @type {object | null} 经 normalizeMonitorConfig 后的监控配置 */
         this.config = null;
+        /** @type {{ total: number, free: number, used: number, usedPercent: number } | null} */
+        this._lastSystemMemory = null;
     }
 
     /**
@@ -223,7 +226,14 @@ class SystemMonitor extends EventEmitter {
      */
     async checkMemory() {
         const processMemory = process.memoryUsage();
-        const systemMemory = this.getSystemMemory();
+        const mem = await readMem();
+        const systemMemory = {
+            total: mem.total,
+            free: mem.free,
+            used: mem.used,
+            usedPercent: mem.total > 0 ? (mem.used / mem.total) * 100 : 0,
+        };
+        this._lastSystemMemory = systemMemory;
         const heapStats = v8.getHeapStatistics();
         
         const heapUsedPercent = (processMemory.heapUsed / heapStats.heap_size_limit) * 100;
@@ -239,8 +249,8 @@ class SystemMonitor extends EventEmitter {
             this.memoryHistory.shift();
         }
 
-        const nodePressure = heapUsedPercent > (this.config.memory?.nodeThreshold || 85);
-        const systemPressure = systemUsedPercent > (this.config.memory?.systemThreshold || 85);
+        const nodePressure = heapUsedPercent > (this.config?.memory?.nodeThreshold || 85);
+        const systemPressure = systemUsedPercent > (this.config?.memory?.systemThreshold || 85);
 
         return {
             process: {
@@ -579,59 +589,25 @@ class SystemMonitor extends EventEmitter {
     }
 
     /**
-     * 采样根分区 / 首个逻辑盘使用率。
+     * 采样主磁盘使用率（与 HTTP / #状态 同一套 normalizeDisks）。
      * @returns {Promise<{ total: number, free: number, used: number, usedPercent: number } | null>}
      */
     async checkDisk() {
         try {
-            const platform = process.platform;
-            let diskUsage = null;
-
-            if (platform === 'win32') {
-                const { stdout } = await exec('wmic logicaldisk get size,freespace,caption');
-                const lines = stdout.split('\n').filter(l => l.trim() && !l.includes('Caption'));
-                if (lines.length > 0) {
-                    const parts = lines[0].trim().split(/\s+/);
-                    const free = parseInt(parts[parts.length - 2]) || 0;
-                    const total = parseInt(parts[parts.length - 1]) || 0;
-                    diskUsage = this._calculateDiskUsage(total, free);
-                }
-            } else {
-                const { stdout } = await exec('df -k /');
-                const lines = stdout.split('\n');
-                if (lines.length > 1) {
-                    const parts = lines[1].trim().split(/\s+/);
-                    const total = parseInt(parts[1]) * 1024;
-                    const free = parseInt(parts[3]) * 1024;
-                    diskUsage = this._calculateDiskUsage(total, free);
-                }
+            const main = (await readDisks())[0];
+            if (!main?.size) {
+                return { total: 0, free: 0, used: 0, usedPercent: 0 };
             }
-
-            return diskUsage || {
-                total: 0,
-                free: 0,
-                used: 0,
-                usedPercent: 0
+            const free = Math.max(0, main.size - main.used);
+            return {
+                total: main.size,
+                free,
+                used: main.used,
+                usedPercent: (main.used / main.size) * 100,
             };
         } catch {
             return null;
         }
-    }
-
-    /**
-     * @param {number} total 总字节
-     * @param {number} free 空闲字节
-     * @returns {{ total: number, free: number, used: number, usedPercent: number }}
-     * @private
-     */
-    _calculateDiskUsage(total, free) {
-        const used = total - free;
-        return {
-            total,
-            free,
-            used,
-            usedPercent: total > 0 ? (used / total * 100) : 0
-        };
     }
 
     /**
@@ -1075,14 +1051,15 @@ class SystemMonitor extends EventEmitter {
      * @returns {{ total: number, free: number, used: number, usedPercent: number }}
      */
     getSystemMemory() {
+        if (this._lastSystemMemory) return this._lastSystemMemory;
         const total = os.totalmem();
         const free = os.freemem();
-        const used = total - free;
+        const used = Math.max(0, total - free);
         return {
             total,
             free,
             used,
-            usedPercent: (used / total) * 100
+            usedPercent: total > 0 ? (used / total) * 100 : 0,
         };
     }
 

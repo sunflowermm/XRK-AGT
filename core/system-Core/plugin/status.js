@@ -3,6 +3,11 @@ import moment from 'moment'
 import * as si from 'systeminformation'
 import runtimeConfig from '#infrastructure/config/config.js'
 import PluginLoader from '#infrastructure/plugins/loader.js'
+import {
+  readDisks,
+  readMem,
+  readCpuLoadPercent,
+} from '#infrastructure/http/utils/system-metrics.js'
 
 // 模块级配置
 let showNetworkInfo = true
@@ -63,18 +68,18 @@ export class stattools extends PluginBase {
     try {
       const [
         cpu,
-        currentLoad,
+        cpuLoadPct,
         mem,
-        fsSize,
+        disks,
         osInfo,
         processes,
         time,
         networkInterfaces
       ] = await Promise.all([
         si.cpu(),
-        si.currentLoad(),
-        si.mem(),
-        si.fsSize(),
+        readCpuLoadPercent(),
+        readMem(),
+        readDisks(),
         si.osInfo(),
         si.processes(),
         si.time(),
@@ -91,23 +96,14 @@ export class stattools extends PluginBase {
       const pluginCount = PluginLoader.priority.length + PluginLoader.extended.length
       const taskCount = PluginLoader.task.length
 
-      // Node进程信息
       const nodeUsage = process.memoryUsage()
       const nodeVersion = process.version
       
-      const mainDisk = fsSize.find(fs => fs.mount === '/' || fs.mount === 'C:\\') || 
-                       fsSize.reduce((prev, current) => 
-          (current.size > prev.size) ? current : prev
-        )
+      const mainDisk = disks[0]
       const activeNetwork = networkInterfaces.find(net => net.default) || networkInterfaces[0]
       
-      const cpuUsage = currentLoad.currentLoad || 0
-      const cpuTemp = currentLoad.cpus ? 
-        (currentLoad.cpus.reduce((sum, cpu) => sum + (cpu.load || 0), 0) / currentLoad.cpus.length).toFixed(1) : 
-        cpuUsage.toFixed(1)
-      
-      const memUsed = mem.total - mem.available
-      const memUsage = ((memUsed / mem.total) * 100).toFixed(1)
+      const cpuLoad = Number(cpuLoadPct).toFixed(1)
+      const memUsage = mem.total > 0 ? ((mem.used / mem.total) * 100).toFixed(1) : '0.0'
       
       const systemUptime = this.formatTime(time.uptime || os.uptime())
       
@@ -125,13 +121,12 @@ export class stattools extends PluginBase {
         `  处理器：${cpu.manufacturer} ${cpu.brand}`,
         `  核心数：${cpu.physicalCores}核心 ${cpu.cores}线程`,
         `  主频率：${cpu.speed}GHz${cpu.speedMax ? ` (最高${cpu.speedMax}GHz)` : ''}`,
-        `  当前负载：${cpuTemp}%`,
+        `  当前负载：${cpuLoad}%`,
         '',
         `● 内存信息`,
         `  总内存：${this.formatFileSize(mem.total)}`,
-        `  已使用：${this.formatFileSize(memUsed)} (${memUsage}%)`,
-        `  可用：${this.formatFileSize(mem.available)}`,
-        `  缓存：${this.formatFileSize(mem.cached || 0)}`,
+        `  已使用：${this.formatFileSize(mem.used)} (${memUsage}%)`,
+        `  可用：${this.formatFileSize(mem.free)}`,
         `  Node占用：${this.formatFileSize(nodeUsage.rss)} (堆${this.formatFileSize(nodeUsage.heapUsed)})`,
         '',
         ...(showDiskInfo ? [
@@ -140,8 +135,8 @@ export class stattools extends PluginBase {
             `  挂载点：${mainDisk.mount}`,
             `  文件系统：${mainDisk.fs}`,
             `  总容量：${this.formatFileSize(mainDisk.size)}`,
-            `  已使用：${this.formatFileSize(mainDisk.used)} (${mainDisk.use?.toFixed(1) || '0'}%)`,
-            `  可用：${this.formatFileSize(mainDisk.available)}`
+            `  已使用：${this.formatFileSize(mainDisk.used)} (${mainDisk.size ? ((mainDisk.used / mainDisk.size) * 100).toFixed(1) : '0'}%)`,
+            `  可用：${this.formatFileSize(Math.max(0, mainDisk.size - mainDisk.used))}`
           ].join('\n') : '  无磁盘信息',
           ''
         ] : []),
@@ -164,7 +159,7 @@ export class stattools extends PluginBase {
         `  日志目录：${runtimeConfig.agt?.logging?.dir || 'logs'}`
       ].flat()
 
-      if (showNetworkInfo) {
+      if (showNetworkInfo && activeNetwork) {
         msg.push('', `● 网络信息`)
         msg.push(`  接口名称：${activeNetwork.iface}`)
         msg.push(`  IPv4地址：${activeNetwork.ip4 || '无'}`)

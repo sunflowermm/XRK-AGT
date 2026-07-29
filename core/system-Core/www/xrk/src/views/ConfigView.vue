@@ -8,12 +8,10 @@ import {
   NButton,
   NEmpty,
   NInput,
-  NInputNumber,
-  NSelect,
   NSpace,
   NSpin,
-  NSwitch,
   NTag,
+  useDialog,
   useMessage,
 } from 'naive-ui';
 import { apiFetch, apiJson } from '@/api/client';
@@ -25,20 +23,27 @@ import {
   extractActiveSchema,
   formatExample,
   formatGroupLabel,
-  formatTagsText,
   groupFields,
   isFieldFullSpan,
   normalizeFlatFields,
-  parseTagsText,
   resolveArrayItemFields,
   resolveFieldControl,
+  fieldNestedFields,
   sameFieldValue,
   valuesFromFlat,
 } from '@/config/flat';
 import ConfigArrayForm from '@/components/ConfigArrayForm.vue';
+import ConfigFieldControl from '@/components/ConfigFieldControl.vue';
+import ConfigJsonEditor from '@/components/ConfigJsonEditor.vue';
+import ConfigKeyedMapForm from '@/components/ConfigKeyedMapForm.vue';
 import XrkIcon from '@/components/XrkIcon.vue';
+import { useListPaneWidth } from '@/composables/useListPaneWidth';
+import { useViewport } from '@/composables/useViewport';
 
 const message = useMessage();
+const dialog = useDialog();
+const { isMobile } = useViewport();
+const { width: listPaneW, startResize } = useListPaneWidth();
 const loading = ref(false);
 const saving = ref(false);
 const listOpen = ref(false);
@@ -56,6 +61,7 @@ const original = reactive({});
 const jsonText = ref('{}');
 const jsonBaseline = ref('{}');
 const children = ref([]);
+const validateErrorPaths = ref([]);
 /** 阻止 selectedChild 回滚时二次触发 */
 let suppressChildWatch = false;
 
@@ -76,6 +82,22 @@ const showGroupHeaders = computed(() => {
 });
 const selectedConfig = computed(() => configs.value.find((c) => c.name === selected.value) || null);
 const isSystem = computed(() => selected.value === 'system');
+const editingSystemChild = computed(() => isSystem.value && Boolean(selectedChild.value));
+
+const editorTitle = computed(() => {
+  if (editingSystemChild.value) {
+    const opt = childOptions.value.find((o) => o.value === selectedChild.value);
+    return opt?.label || selectedChild.value;
+  }
+  return selectedConfig.value?.displayName || selected.value || '未选择';
+});
+
+const editorDesc = computed(() => {
+  if (editingSystemChild.value) return `system / ${selectedChild.value}`;
+  if (selectedConfig.value?.description) return selectedConfig.value.description;
+  if (selected.value) return selected.value;
+  return '';
+});
 
 const dirtyCount = computed(() => {
   if (mode.value === 'json' && jsonText.value !== jsonBaseline.value) {
@@ -94,6 +116,30 @@ const dirtyCount = computed(() => {
   return Object.keys(buildDirtyFlat(values, original, fields.value, arraySchemas.value)).length;
 });
 
+const dirtyPaths = computed(() => {
+  try {
+    let flat;
+    if (mode.value === 'json') {
+      const parsed = JSON.parse(jsonText.value);
+      const shadow = valuesFromFlat(parsed, fields.value);
+      flat = buildDirtyFlat(shadow, original, fields.value, arraySchemas.value);
+    } else {
+      flat = buildDirtyFlat(values, original, fields.value, arraySchemas.value);
+    }
+    return Object.keys(flat || {}).slice(0, 8);
+  } catch {
+    return [];
+  }
+});
+
+const dirtySummary = computed(() => {
+  if (!dirtyPaths.value.length) return '';
+  const more = dirtyCount.value > dirtyPaths.value.length
+    ? ` 等 ${dirtyCount.value} 项`
+    : '';
+  return dirtyPaths.value.join(', ') + more;
+});
+
 const childOptions = computed(() => {
   const cfg = selectedConfig.value;
   if (cfg?.configs && typeof cfg.configs === 'object') {
@@ -110,8 +156,56 @@ const childOptions = computed(() => {
 
 function confirmDiscard() {
   const n = dirtyCount.value;
-  if (!n) return true;
-  return window.confirm(`有 ${n} 项未保存，确定放弃修改？`);
+  if (!n) return Promise.resolve(true);
+  return new Promise((resolve) => {
+    dialog.warning({
+      title: '放弃修改',
+      content: `有 ${n} 项未保存${dirtySummary.value ? `（${dirtySummary.value}）` : ''}，确定放弃？`,
+      positiveText: '放弃',
+      negativeText: '取消',
+      onPositiveClick: () => resolve(true),
+      onNegativeClick: () => resolve(false),
+      onClose: () => resolve(false),
+    });
+  });
+}
+
+function flatToNested(flat) {
+  const out = {};
+  for (const [p, v] of Object.entries(flat || {})) {
+    const parts = String(p).split('.').filter(Boolean);
+    if (!parts.length) continue;
+    let cur = out;
+    for (let i = 0; i < parts.length - 1; i++) {
+      const k = parts[i];
+      if (!cur[k] || typeof cur[k] !== 'object' || Array.isArray(cur[k])) cur[k] = {};
+      cur = cur[k];
+    }
+    cur[parts[parts.length - 1]] = v;
+  }
+  return out;
+}
+
+function ensureNestedObj(path) {
+  if (!values[path] || typeof values[path] !== 'object' || Array.isArray(values[path])) {
+    values[path] = {};
+  }
+  return values[path];
+}
+
+function nestedFieldEntries(f) {
+  return Object.entries(fieldNestedFields(f));
+}
+
+function ensureObjValue(path) {
+  const cur = values[path];
+  if (cur && typeof cur === 'object' && !Array.isArray(cur)) return cur;
+  return {};
+}
+
+function setNestedValue(parentPath, key, v) {
+  const obj = ensureNestedObj(parentPath);
+  obj[key] = v;
 }
 
 function persistSelection() {
@@ -155,6 +249,7 @@ function applyFlatData(flatSchema, flatData, structure = null) {
   const list = normalizeFlatFields(flatSchema);
   fields.value = list;
   clearValues();
+  validateErrorPaths.value = [];
   const fromStructure = buildArraySchemaIndex(
     extractActiveSchema(structure, selected.value, selectedChild.value) || { fields: {} },
   );
@@ -229,7 +324,7 @@ function childQuery() {
  */
 async function loadOne(name, opts = {}) {
   if (!name) return;
-  if (!opts.force && !confirmDiscard()) return;
+  if (!opts.force && !(await confirmDiscard())) return;
   if (name === 'system' && !selectedChild.value) {
     const cfg = configs.value.find((c) => c.name === 'system');
     if (cfg?.configs) {
@@ -289,7 +384,36 @@ async function save() {
   }
 
   saving.value = true;
+  validateErrorPaths.value = [];
   try {
+    if (!isSystem.value) {
+      const allFlat = {};
+      for (const f of fields.value) allFlat[f.path] = values[f.path];
+      const data = flatToNested(allFlat);
+      try {
+        const res = await apiJson(
+          `/api/config/${encodeURIComponent(selected.value)}/validate`,
+          { data },
+          'POST',
+        );
+        const validation = res?.validation ?? res;
+        if (validation && validation.valid === false) {
+          const errs = Array.isArray(validation.errors) ? validation.errors : [String(validation)];
+          message.error(`校验失败: ${errs.join('; ')}`);
+          validateErrorPaths.value = errs
+            .map((e) => {
+              const m = String(e).match(/字段\s+([\w.]+)/);
+              return m?.[1];
+            })
+            .filter(Boolean);
+          return;
+        }
+      } catch (err) {
+        message.error(err?.message || String(err));
+        return;
+      }
+    }
+
     const body = { flat, backup: true, validate: true };
     if (isSystem.value && selectedChild.value) body.path = selectedChild.value;
     await apiJson(`/api/config/${encodeURIComponent(selected.value)}/batch-set`, body, 'POST');
@@ -320,7 +444,18 @@ async function resetCfg() {
     message.warning('system 子配置请在确认后于服务端重置');
     return;
   }
-  if (!window.confirm(`确认将 ${selected.value} 重置为默认值？`)) return;
+  const ok = await new Promise((resolve) => {
+    dialog.warning({
+      title: '重置配置',
+      content: `确认将 ${selected.value} 重置为默认值？`,
+      positiveText: '重置',
+      negativeText: '取消',
+      onPositiveClick: () => resolve(true),
+      onNegativeClick: () => resolve(false),
+      onClose: () => resolve(false),
+    });
+  });
+  if (!ok) return;
   try {
     await apiJson(`/api/config/${encodeURIComponent(selected.value)}/reset`, { backup: true }, 'POST');
     message.success('已重置');
@@ -330,12 +465,12 @@ async function resetCfg() {
   }
 }
 
-function selectConfig(name) {
+async function selectConfig(name) {
   if (selected.value === name) {
     listOpen.value = false;
     return;
   }
-  if (!confirmDiscard()) return;
+  if (!(await confirmDiscard())) return;
   suppressChildWatch = true;
   selected.value = name;
   if (name !== 'system') selectedChild.value = '';
@@ -346,6 +481,21 @@ function selectConfig(name) {
     suppressChildWatch = false;
   });
   void loadOne(name, { force: true });
+}
+
+async function goBackChild() {
+  if (!editingSystemChild.value) return;
+  if (!(await confirmDiscard())) return;
+  suppressChildWatch = true;
+  selectedChild.value = '';
+  persistSelection();
+  fields.value = [];
+  arraySchemas.value = {};
+  clearValues();
+  syncJsonFromValues();
+  queueMicrotask(() => {
+    suppressChildWatch = false;
+  });
 }
 
 function fieldControl(f) {
@@ -368,30 +518,6 @@ function isDirty(path) {
   return !sameFieldValue(values[path], original[path], f.type, f.component);
 }
 
-function tagsText(path) {
-  return formatTagsText(values[path]);
-}
-
-function setTags(path, text) {
-  values[path] = parseTagsText(text);
-}
-
-function jsonFieldText(path) {
-  try {
-    return JSON.stringify(values[path] ?? {}, null, 2);
-  } catch {
-    return '{}';
-  }
-}
-
-function setJsonField(path, text) {
-  try {
-    values[path] = JSON.parse(text);
-  } catch {
-    /* keep typing */
-  }
-}
-
 function formatJsonEditor() {
   try {
     const parsed = JSON.parse(jsonText.value);
@@ -402,11 +528,11 @@ function formatJsonEditor() {
   }
 }
 
-watch(selectedChild, (v, prev) => {
+watch(selectedChild, async (v, prev) => {
   if (suppressChildWatch) return;
   if (selected.value !== 'system') return;
   if (v === prev) return;
-  if (!confirmDiscard()) {
+  if (!(await confirmDiscard())) {
     suppressChildWatch = true;
     selectedChild.value = prev;
     queueMicrotask(() => {
@@ -428,7 +554,11 @@ onMounted(loadList);
 </script>
 
 <template>
-  <div class="config" :class="{ dense, 'list-open': listOpen }">
+  <div
+    class="config"
+    :class="{ dense, 'list-open': listOpen, 'is-mobile-page': isMobile }"
+    :style="{ '--list-pane-w': `${listPaneW}px` }"
+  >
     <div v-if="listOpen" class="scrim" @click="listOpen = false" />
 
     <aside class="brutal-card side">
@@ -442,18 +572,26 @@ onMounted(loadList);
           v-for="c in filtered"
           :key="c.name"
           class="cfg-item"
-          :class="{ active: selected === c.name }"
+          :class="{ active: selected === c.name, multi: c.name === 'system' }"
           @click="selectConfig(c.name)"
         >
           <div class="cfg-meta">
             <span class="name">{{ c.displayName || c.name }}</span>
             <span v-if="c.description" class="desc">{{ c.description }}</span>
+            <span v-if="c.name === 'system'" class="multi-hint">点选后进入子配置</span>
           </div>
           <span v-if="c.name === 'system'" class="cfg-tag">多文件</span>
         </li>
       </ul>
       <NEmpty v-if="!filtered.length" description="无配置项" size="small" />
       <NButton size="small" block @click="loadList">刷新列表</NButton>
+      <button
+        type="button"
+        class="pane-resizer"
+        aria-label="调整列表宽度"
+        title="拖拽调整宽度"
+        @pointerdown="startResize"
+      />
     </aside>
 
     <section class="brutal-card editor">
@@ -469,25 +607,26 @@ onMounted(loadList);
             <XrkIcon :name="listOpen ? 'close' : 'menu'" :size="14" />
             <span>{{ listOpen ? '关闭' : '列表' }}</span>
           </button>
+          <button
+            v-if="editingSystemChild"
+            type="button"
+            class="back-btn"
+            title="返回子配置列表"
+            @click="goBackChild"
+          >
+            <XrkIcon name="collapse" :size="14" />
+            <span>返回</span>
+          </button>
           <div class="hdr-titles">
-            <h2>{{ selectedConfig?.displayName || selected || '未选择' }}</h2>
-            <p v-if="selectedConfig?.description" class="hdr-desc">{{ selectedConfig.description }}</p>
-            <p v-else-if="selected" class="hdr-desc mono">{{ selected }}</p>
+            <h2>{{ editorTitle }}</h2>
+            <p v-if="editorDesc" class="hdr-desc" :class="{ mono: editingSystemChild }">{{ editorDesc }}</p>
           </div>
-          <NTag v-if="dirtyCount" size="small" type="warning" :bordered="true">
+          <NTag v-if="dirtyCount" size="small" type="warning" :bordered="true" :title="dirtySummary">
             {{ dirtyCount }} 未保存
           </NTag>
+          <span v-if="dirtySummary && !isMobile" class="dirty-hint" :title="dirtySummary">{{ dirtySummary }}</span>
         </div>
         <NSpace size="small" wrap>
-          <NSelect
-            v-if="isSystem"
-            v-model:value="selectedChild"
-            size="small"
-            :options="childOptions"
-            placeholder="子配置"
-            clearable
-            style="width: 160px"
-          />
           <NButton size="small" :type="mode === 'form' ? 'primary' : 'default'" class="tb-btn" @click="setMode('form')">
             <XrkIcon name="form" :size="14" />
             <span>表单</span>
@@ -555,7 +694,7 @@ onMounted(loadList);
               <NButton size="tiny" secondary @click="syncJsonFromValues">从表格同步</NButton>
               <span v-if="dirtyCount" class="json-dirty">{{ dirtyCount }} 未保存</span>
             </div>
-            <NInput v-model:value="jsonText" type="textarea" class="mono" :rows="dense ? 18 : 22" />
+            <NInput v-model:value="jsonText" type="textarea" class="mono" :rows="20" />
             <p class="hint">JSON 为 path → value 扁平对象；保存时只提交相对原始值的变更。切回表单会应用当前 JSON。</p>
           </div>
 
@@ -582,6 +721,7 @@ onMounted(loadList);
                     full: isFieldFullSpan(f),
                     switch: fieldControl(f) === 'switch',
                     dirty: isDirty(f.path),
+                    invalid: validateErrorPaths.includes(f.path),
                   }"
                   :title="f.path"
                 >
@@ -595,82 +735,64 @@ onMounted(loadList);
                     </p>
                   </div>
                   <div class="ctrl" :class="{ 'ctrl-switch': fieldControl(f) === 'switch' }">
-                    <NSwitch
-                      v-if="fieldControl(f) === 'switch'"
-                      :id="`f-${f.path}`"
-                      v-model:value="values[f.path]"
-                      size="small"
-                    />
-                    <NSelect
-                      v-else-if="fieldControl(f) === 'select'"
-                      :id="`f-${f.path}`"
-                      v-model:value="values[f.path]"
-                      size="small"
-                      :options="f.options"
-                      clearable
-                    />
-                    <NInputNumber
-                      v-else-if="fieldControl(f) === 'number'"
-                      :id="`f-${f.path}`"
-                      v-model:value="values[f.path]"
-                      size="small"
-                      :min="f.min"
-                      :max="f.max"
-                      :step="f.step || 1"
-                      style="width: 100%"
-                    />
-                    <NInput
-                      v-else-if="fieldControl(f) === 'password'"
-                      :id="`f-${f.path}`"
-                      v-model:value="values[f.path]"
-                      type="password"
-                      show-password-on="click"
-                      size="small"
-                      :placeholder="f.placeholder"
-                    />
-                    <NInput
-                      v-else-if="fieldControl(f) === 'textarea'"
-                      :id="`f-${f.path}`"
-                      v-model:value="values[f.path]"
-                      type="textarea"
-                      size="small"
-                      :rows="dense ? 2 : 3"
-                      :placeholder="f.placeholder"
-                    />
-                    <NInput
-                      v-else-if="fieldControl(f) === 'tags'"
-                      :value="tagsText(f.path)"
-                      size="small"
-                      placeholder="逗号分隔"
-                      @update:value="(v) => setTags(f.path, v)"
-                    />
                     <ConfigArrayForm
-                      v-else-if="fieldControl(f) === 'array'"
+                      v-if="fieldControl(f) === 'array'"
                       v-model="values[f.path]"
                       :path="f.path"
                       :label="f.itemLabel || f.label || '条目'"
                       :item-fields="itemFieldsFor(f)"
                       :dense="dense"
                     />
-                    <NInput
-                      v-else-if="fieldControl(f) === 'json'"
-                      :value="jsonFieldText(f.path)"
-                      type="textarea"
-                      size="small"
-                      class="mono"
-                      :rows="dense ? 3 : 5"
-                      @update:value="(v) => setJsonField(f.path, v)"
+                    <ConfigKeyedMapForm
+                      v-else-if="fieldControl(f) === 'keyed'"
+                      :model-value="ensureObjValue(f.path)"
+                      :label="f.itemLabel || f.label || '条目'"
+                      :item-fields="fieldNestedFields(f)"
+                      :example="f.example"
+                      :key-label="f.keyLabel || '键'"
+                      :key-placeholder="f.keyPlaceholder || '输入键名，如 * 或 chat_id'"
+                      :dense="dense"
+                      @update:model-value="(v) => (values[f.path] = v && typeof v === 'object' ? v : {})"
                     />
-                    <NInput
+                    <div
+                      v-else-if="fieldControl(f) === 'nested' && nestedFieldEntries(f).length"
+                      class="nested-block"
+                    >
+                      <div
+                        v-for="[nk, ns] in nestedFieldEntries(f)"
+                        :key="nk"
+                        class="field nested-item"
+                        :class="{
+                          full: isFieldFullSpan({ ...ns, path: `${f.path}.${nk}` }),
+                          switch: fieldControl(ns) === 'switch',
+                        }"
+                      >
+                        <div class="meta">
+                          <label :title="ns.description || nk">{{ ns.label || nk }}</label>
+                          <p v-if="ns.description" class="desc compact">{{ ns.description }}</p>
+                        </div>
+                        <ConfigFieldControl
+                          :schema="ns"
+                          :model-value="ensureNestedObj(f.path)[nk]"
+                          @update:model-value="(v) => setNestedValue(f.path, nk, v)"
+                        />
+                      </div>
+                    </div>
+                    <ConfigJsonEditor
+                      v-else-if="fieldControl(f) === 'nested' || fieldControl(f) === 'json'"
+                      :model-value="ensureObjValue(f.path)"
+                      @update:model-value="(v) => (values[f.path] = v && typeof v === 'object' ? v : {})"
+                    />
+                    <ConfigFieldControl
                       v-else
-                      :id="`f-${f.path}`"
-                      v-model:value="values[f.path]"
-                      size="small"
-                      :placeholder="f.placeholder"
+                      :input-id="`f-${f.path}`"
+                      :schema="f"
+                      :model-value="values[f.path]"
+                      @update:model-value="(v) => (values[f.path] = v)"
                     />
                   </div>
                   <div
-                    v-if="f.example != null && f.example !== '' && !(dense && !isFieldFullSpan(f))"
+                    v-if="f.example != null && f.example !== ''"
                     class="example"
                   >
                     <strong>此为示例：</strong>
@@ -692,7 +814,7 @@ onMounted(loadList);
   --config-border-strong: var(--ink);
   --config-divider: color-mix(in srgb, var(--ink) 42%, transparent);
   display: grid;
-  grid-template-columns: minmax(240px, 30%) minmax(0, 1fr);
+  grid-template-columns: var(--list-pane-w, 260px) minmax(0, 1fr);
   gap: var(--gap);
   height: 100%;
   min-height: 100%;
@@ -715,6 +837,8 @@ onMounted(loadList);
   flex-direction: column;
   gap: 6px;
   overflow: hidden;
+  position: relative;
+  min-width: 0;
 }
 .side-head {
   display: flex;
@@ -750,6 +874,8 @@ onMounted(loadList);
   border-radius: 7px;
   background: var(--card);
   cursor: pointer;
+  flex-shrink: 0;
+  overflow: visible;
 }
 .cfg-item:hover {
   border-color: var(--ink);
@@ -759,6 +885,46 @@ onMounted(loadList);
   border-color: var(--ink);
   background: color-mix(in srgb, var(--yellow) 48%, var(--card));
   box-shadow: var(--shadow);
+}
+.cfg-item.multi {
+  padding: 14px 12px;
+  border-width: 2px;
+  background: color-mix(in srgb, var(--cyan) 10%, var(--card));
+}
+.cfg-item.multi .name {
+  font-size: 14px;
+}
+.cfg-item.multi .cfg-tag {
+  font-size: 11px;
+  padding: 3px 10px;
+}
+.multi-hint {
+  font-size: var(--font-xs);
+  color: var(--muted);
+  font-weight: 600;
+}
+.back-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 1.5px solid var(--ink);
+  border-radius: 6px;
+  background: var(--paper-2);
+  font: inherit;
+  font-size: var(--font-sm);
+  font-weight: 700;
+  padding: 4px 10px;
+  box-shadow: var(--shadow);
+  flex: 0 0 auto;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.back-btn:hover {
+  background: color-mix(in srgb, var(--yellow) 35%, var(--card));
+}
+.back-btn:active {
+  transform: translate(1px, 1px);
+  box-shadow: none;
 }
 .cfg-meta {
   display: flex;
@@ -935,39 +1101,54 @@ header h2 {
   min-width: 0;
   padding: 9px 4px;
   border-bottom: 2px solid var(--config-divider);
+  contain: layout;
 }
 .field.full { grid-column: 1 / -1; }
 .field.dirty {
   background: color-mix(in srgb, var(--pink) 12%, transparent);
   border-radius: 4px;
-  padding-left: 6px;
-  padding-right: 6px;
+  box-shadow: inset 3px 0 0 var(--pink);
+}
+.field.invalid {
+  background: color-mix(in srgb, var(--red) 10%, transparent);
+  box-shadow: inset 3px 0 0 var(--red);
+}
+.field-grid {
+  contain: layout style;
+}
+.ctrl {
+  min-height: 30px;
+}
+.dirty-hint {
+  font-size: var(--font-xs);
+  opacity: 0.65;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--mono);
+}
+.nested-block {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  border: 1.5px dashed color-mix(in srgb, var(--ink) 35%, transparent);
+  border-radius: 8px;
+  padding: 8px;
+  box-sizing: border-box;
+}
+.nested-item {
+  display: grid;
+  gap: 4px;
 }
 .field:not(.full) { min-height: 100%; }
 .field:not(.full) .ctrl { margin-top: auto; padding-top: 4px; }
-/* 紧凑 = 两列 → 三列，并收紧间距 */
+/* 紧凑 = 仅 2 列 → 3 列，不改高度 */
 .dense .field-grid {
   grid-template-columns: repeat(3, minmax(0, 1fr));
   column-gap: 10px;
-  row-gap: 0;
 }
-.dense .field { padding: 4px 2px; }
-.dense .group { margin-bottom: 8px; }
-.dense .group-h { padding: 6px 8px 6px 12px; }
-.dense .group .field-grid { padding: 0 6px 2px 10px; }
-.dense .meta { gap: 0; }
-.dense .meta label { font-size: var(--font-sm); }
-.dense .meta .desc {
-  -webkit-line-clamp: 1;
-  max-height: 1.4em;
-  font-size: var(--font-xs);
-}
-.dense .meta .desc.compact {
-  -webkit-line-clamp: 1;
-  max-height: 1.4em;
-}
-.dense .ctrl { min-height: 26px; }
-.dense .example { margin-top: 4px; padding: 4px 6px; }
 .meta {
   display: flex;
   flex-direction: column;
@@ -1029,39 +1210,31 @@ header h2 {
 .sys-chooser { padding: 4px 0; }
 .sys-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-  gap: 6px;
-  margin-top: 6px;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 10px;
+  margin-top: 10px;
 }
 .sys-card {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 6px;
   text-align: left;
-  padding: 8px;
-  border: 1.5px solid var(--ink);
-  border-radius: 8px;
+  padding: 16px 14px;
+  min-height: 88px;
+  border: 2px solid var(--ink);
+  border-radius: 10px;
   background: color-mix(in srgb, var(--cyan) 14%, var(--card));
   font: inherit;
   box-shadow: var(--shadow);
+  cursor: pointer;
 }
 .sys-card:hover {
   transform: translate(-1px, -1px);
   box-shadow: 3px 3px 0 var(--ink);
+  background: color-mix(in srgb, var(--yellow) 28%, var(--card));
 }
-.sys-card strong { font-size: 12px; }
-.sys-card span { font-size: var(--font-xs); color: var(--muted); }
-@container config (max-width: 720px) {
-  .field-grid,
-  .dense .field-grid {
-    grid-template-columns: 1fr;
-  }
-}
-@container config (min-width: 721px) and (max-width: 980px) {
-  .dense .field-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
+.sys-card strong { font-size: 14px; line-height: 1.3; }
+.sys-card span { font-size: var(--font-sm); color: var(--muted); }
 @media (max-width: 900px) {
   .config {
     display: flex;
@@ -1101,6 +1274,9 @@ header h2 {
   .side {
     display: none;
   }
+  .config .pane-resizer {
+    display: none;
+  }
   .config.list-open .side {
     display: flex;
     flex-direction: column;
@@ -1112,13 +1288,17 @@ header h2 {
     width: min(320px, calc(100vw - var(--gap) * 2));
     box-shadow: 4px 4px 0 var(--ink);
   }
+  .config.is-mobile-page.list-open .side {
+    top: max(48px, env(safe-area-inset-top) + 44px);
+    bottom: calc(var(--shell-tabbar-h, 52px) + env(safe-area-inset-bottom));
+  }
+  .config.is-mobile-page .tb-btn span {
+    display: inline;
+    font-size: 11px;
+  }
   .editor {
     flex: 1;
     min-height: 0;
-  }
-  .field-grid,
-  .dense .field-grid {
-    grid-template-columns: 1fr;
   }
   /* 开关 + 标题同一行；工具栏整宽换行 */
   header {

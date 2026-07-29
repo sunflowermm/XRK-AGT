@@ -8,7 +8,7 @@ import { normalizeError } from '#utils/normalize-error.js';
 import { isShuttingDown } from '#utils/runtime-globals.js';
 import { fileExistsSync, loadYamlFromCandidates, mergeYamlTexts, readYamlTextsBatch } from '#utils/config-yaml.js';
 import { copyFileIfMissingSync } from './config-seed.js';
-import { GLOBAL_CONFIGS, SERVER_CONFIGS } from './config-constants.js';
+import { GLOBAL_CONFIGS, SERVER_CONFIGS, CHATBOT_FIXED_ROOT_KEYS } from './config-constants.js';
 import { seedGlobalConfigsSync } from './config-seed.js';
 
 const LOG_TAG = 'Config';
@@ -149,6 +149,7 @@ class RuntimeConfig {
     try {
       let { config, watchFile } = loadYamlFromCandidates([file], name);
       if (name === 'ai-workflow') config = this.normalizeAiWorkflowConfigShape(config);
+      if (name === 'chatbot') config = this.ensureChatbotDefaults(config, defaultFile);
       this.config[key] = config;
       if (watchFile) this.watch(watchFile, name, key);
       return this.config[key];
@@ -156,6 +157,26 @@ class RuntimeConfig {
       RuntimeUtil.makeLog('error', `[服务器配置解析失败][${name}] ${error?.message || error}`, LOG_TAG, true);
       return this.config[key] = {};
     }
+  }
+
+  /**
+   * chatbot 缺 default 时从模板补齐（不合并任何其它文件）
+   * @private
+   */
+  ensureChatbotDefaults(config, defaultFile) {
+    const out = config && typeof config === 'object' ? { ...config } : {};
+    if (out.default && typeof out.default === 'object' && !Array.isArray(out.default)) {
+      return out;
+    }
+    try {
+      const { config: tpl } = loadYamlFromCandidates([defaultFile], 'chatbot');
+      if (tpl?.default && typeof tpl.default === 'object') {
+        out.default = structuredClone(tpl.default);
+      }
+    } catch {
+      /* ignore */
+    }
+    return out;
   }
 
   getConfig(name) {
@@ -176,7 +197,6 @@ class RuntimeConfig {
 
   get server() { return this.getServerConfig('server'); }
   get chatbot() { return this.getServerConfig('chatbot'); }
-  get group() { return this.getServerConfig('group'); }
 
   get volcengine_llm() { return this.getServerConfig('volcengine_llm'); }
   get xiaomimimo_llm() { return this.getServerConfig('xiaomimimo_llm'); }
@@ -209,11 +229,23 @@ class RuntimeConfig {
     return masters;
   }
 
+  /**
+   * 群生效配置 = chatbot.default ∪ 根级群号覆盖（固定键名不会当群号）
+   */
   getGroup(groupId = '') {
-    const config = this.group || {};
-    const defaultCfg = config.default || {};
-    const groupCfg = groupId ? config[String(groupId)] : null;
-    return groupCfg ? { ...defaultCfg, ...groupCfg } : defaultCfg;
+    const config = this.chatbot || {};
+    const defaultCfg =
+      config.default && typeof config.default === 'object' && !Array.isArray(config.default)
+        ? config.default
+        : {};
+    if (!groupId) return { ...defaultCfg };
+    const id = String(groupId);
+    if (CHATBOT_FIXED_ROOT_KEYS.includes(id)) return { ...defaultCfg };
+    const override = config[id];
+    if (!override || typeof override !== 'object' || Array.isArray(override)) {
+      return { ...defaultCfg };
+    }
+    return { ...defaultCfg, ...override };
   }
 
   getRendererConfig(type) {

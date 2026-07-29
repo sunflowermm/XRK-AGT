@@ -49,7 +49,6 @@ flowchart TB
         pathS["📁 data/server_bots/port/"]
         S1["server.yaml"]
         S2["chatbot.yaml"]
-        S3["group.yaml"]
         S4["ai-workflow.yaml"]
         S5["volcengine_llm.yaml"]
         S6["其他工厂配置..."]
@@ -115,8 +114,7 @@ const deviceConfig = runtimeConfig.getGlobalConfig('device');
 | 配置名称             | 文件路径                                          | 说明                                                      |
 | ---------------- | --------------------------------------------- | ------------------------------------------------------- |
 | `server`         | `data/server_bots/{port}/server.yaml`         | 服务器配置（端口、代理等）                                           |
-| `chatbot`        | `data/server_bots/{port}/chatbot.yaml`        | 聊天机器人配置                                                 |
-| `group`          | `data/server_bots/{port}/group.yaml`          | 群组配置                                                    |
+| `chatbot`        | `data/server_bots/{port}/chatbot.yaml`        | 机器人业务（主人/黑白名单/私聊 + 群默认与按群号覆盖）                         |
 | `ai-workflow`       | `data/server_bots/{port}/ai-workflow.yaml`       | AI 工作流、工厂默认提供商（`llm`/`asr`/`tts`）等，见 `docs/ai-workflow.md` |
 | `volcengine_llm` | `data/server_bots/{port}/volcengine_llm.yaml` | 火山引擎 LLM 配置                                             |
 | `其他工厂配置`         | `data/server_bots/{port}/*.yaml`              | 其他 LLM/ASR/TTS 提供商配置                                    |
@@ -130,7 +128,8 @@ const serverConfig = runtimeConfig.server;
 const chatbotConfig = runtimeConfig.chatbot;
 
 // 或通过方法
-const groupConfig = runtimeConfig.getServerConfig('group');
+const chatbotConfig = runtimeConfig.chatbot;
+const groupDefaults = runtimeConfig.getGroup(); // 或 getGroup(群号)
 ```
 
 ### runtimeConfig 对象 API
@@ -164,8 +163,7 @@ const groupConfig = runtimeConfig.getServerConfig('group');
 
 - `runtimeConfig.aiWorkflow` - AI 工作流与工厂默认提供商等（`getServerConfig('ai-workflow')`，文件在端口目录）
 - `runtimeConfig.server` - 服务器配置
-- `runtimeConfig.chatbot` - 聊天机器人配置
-- `runtimeConfig.group` - 群组配置
+- `runtimeConfig.chatbot` - 机器人业务（主人/黑白名单/私聊 + 群默认与按群号覆盖）
 - `runtimeConfig.volcengine_llm` - 火山引擎 LLM 配置
 - `runtimeConfig.renderer` - 渲染器配置（合并 puppeteer + playwright）
 
@@ -173,7 +171,7 @@ const groupConfig = runtimeConfig.getServerConfig('group');
 
 - `runtimeConfig.masterQQ` - 获取主人 QQ 号列表
 - `runtimeConfig.master` - 获取主人映射对象
-- `runtimeConfig.getGroup(groupId)` - 获取群组配置
+- `runtimeConfig.getGroup(groupId)` - 从 chatbot 合并群生效配置（default ∪ 群号覆盖）
 - `runtimeConfig.port` - 获取当前端口号（只读）
 
 ### 配置加载流程
@@ -216,7 +214,7 @@ export default class MyPlugin extends PluginBase {
     const redisConfig = runtimeConfig.redis;
     const aiWorkflowConfig = runtimeConfig.aiWorkflow;
     
-    // 读取群组配置
+    // 读取群生效配置（chatbot.default ∪ 群号覆盖）
     const groupConfig = runtimeConfig.getGroup(e.group_id);
     
     // 使用配置

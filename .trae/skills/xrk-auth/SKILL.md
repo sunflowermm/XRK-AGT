@@ -17,7 +17,7 @@ description: 当你需要解释/排查 HTTP 或 WebSocket 的 401、127 回环�
 
 ## API Key 携带
 
-Header：`X-API-Key`、`Authorization: Bearer|Token|ApiKey <key>`、`X-Auth-Token` 等；或 query/body 的 `api_key`（及别名）。
+Header：`X-API-Key`、`Api-Key`、`Authorization: Bearer|Token|ApiKey <key>`；查询仅 `api_key` / `apiKey`。不接受 body 与 `token`/`key` 等易撞字段。
 
 ## Node 26
 

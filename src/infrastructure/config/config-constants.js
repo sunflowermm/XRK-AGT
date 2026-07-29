@@ -11,7 +11,20 @@
 export const GLOBAL_CONFIGS = ['agt', 'device', 'monitor', 'redis', 'sqlite'];
 
 // 服务器配置列表（随端口变化，存储在server_bots/{port}/）
-export const SERVER_CONFIGS = ['server', 'chatbot', 'group', 'ai-workflow'];
+export const SERVER_CONFIGS = ['server', 'chatbot', 'ai-workflow'];
+
+/**
+ * chatbot.yaml 根级固定键（其余根级键视为群号覆盖，供 getGroup / collections 排除）
+ */
+export const CHATBOT_FIXED_ROOT_KEYS = [
+  'master',
+  'auto',
+  'private',
+  'whitelist',
+  'blacklist',
+  'guild',
+  'default',
+];
 
 // 工厂配置名称模式（随端口变化）
 export const FACTORY_CONFIG_PATTERNS = [

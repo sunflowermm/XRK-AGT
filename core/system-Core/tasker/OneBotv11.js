@@ -1,5 +1,6 @@
 import path from "node:path"
 import { ulid } from "ulid"
+import { collectForwardIds as collectForwardIdsShared } from "#utils/onebot-message-seg.js"
 
 /** NapCat 出站：url/path 优先；Buffer 勿 String()（TRSS 直传 makeFile） */
 function pickOutboundFileRef(data) {
@@ -16,7 +17,7 @@ function pickOutboundFileRef(data) {
   return file || url || p || undefined
 }
 
-const RICH_MEDIA = new Set(["image", "video", "record"])
+const RICH_MEDIA = new Set(["image", "video", "record", "file"])
 
 AgentRuntime.tasker.push(
   new (class OneBotv11Tasker {
@@ -109,13 +110,21 @@ AgentRuntime.tasker.push(
           case "node":
             forward.push(...i.data)
             continue
-          case "forward":
-            AgentRuntime.makeLog(
-              "warn",
-              `忽略无法直接发送的 forward 段 id=${i.data?.id ?? i.data?.message_id ?? "?"}`,
-              "OneBotv11",
-            )
+          case "forward": {
+            const fid = String(i.data?.id ?? i.data?.message_id ?? "").trim()
+            if (fid) {
+              // 裸 forward：保留段交给协议端按 id 转发；无法直发时由 sendForwardMsg 路径处理
+              i.data = { id: fid, message_id: fid }
+              msgs.push(i)
+            } else {
+              AgentRuntime.makeLog(
+                "warn",
+                `忽略无 id 的 forward 段`,
+                "OneBotv11",
+              )
+            }
             continue
+          }
           case "raw":
             i = i.data
             break
@@ -370,22 +379,7 @@ AgentRuntime.tasker.push(
 
     /** 收集 forward 段所有可用的 message_id */
     collectForwardIds(seg, contextMessageId) {
-      const ids = []
-      if (contextMessageId != null && contextMessageId !== "") ids.push(String(contextMessageId))
-      if (seg == null) return [...new Set(ids)]
-      if (typeof seg !== "object") {
-        ids.push(String(seg))
-        return [...new Set(ids)]
-      }
-      for (const k of ["message_id", "id"]) {
-        if (seg[k] != null && seg[k] !== "") ids.push(String(seg[k]))
-      }
-      if (seg.data && typeof seg.data === "object") {
-        for (const k of ["message_id", "id"]) {
-          if (seg.data[k] != null && seg.data[k] !== "") ids.push(String(seg.data[k]))
-        }
-      }
-      return [...new Set(ids)]
+      return collectForwardIdsShared(seg, contextMessageId)
     }
 
     /** 拉取聊天记录，支持多 ID 回退与嵌套展开 */
@@ -2182,6 +2176,13 @@ AgentRuntime.tasker.push(
       // 标准化消息数据
       if (!this.normalizeMessageData(data)) {
         return false
+      }
+
+      // 按需展开合并转发（插件可 await e.expandForward()）
+      data.expandForward = async (depth = 0) => {
+        if (!Array.isArray(data.message)) return []
+        data.message = await this.expandForwardSegments(data, data.message, depth)
+        return data.message
       }
       
       // 根据消息类型处理
