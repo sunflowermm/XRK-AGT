@@ -34,6 +34,8 @@ class TaskerLoader {
       })
     );
 
+    this.dedupeTaskers(bot);
+
     summary.registered = bot.tasker.length - adapterCountBefore;
     RuntimeUtil.makeLog(
       summary.failed ? 'warn' : 'info',
@@ -41,6 +43,28 @@ class TaskerLoader {
       this.loggerNs
     );
     return summary;
+  }
+
+  /** 按 path（无则 id）去重；OPQ/OneBot 同 id=QQ 但 path 不同，均保留 */
+  dedupeTaskers(bot) {
+    const seen = new Set();
+    const next = [];
+    for (const t of bot.tasker) {
+      const key = String(t?.path || t?.id || '');
+      if (!key) {
+        next.push(t);
+        continue;
+      }
+      if (seen.has(key)) {
+        RuntimeUtil.makeLog('warn', `跳过重复 tasker: ${t?.name || '?'}(${key})`, this.loggerNs);
+        continue;
+      }
+      seen.add(key);
+      next.push(t);
+    }
+    if (next.length === bot.tasker.length) return;
+    bot.tasker.length = 0;
+    bot.tasker.push(...next);
   }
 
   async getAdapterFiles() {

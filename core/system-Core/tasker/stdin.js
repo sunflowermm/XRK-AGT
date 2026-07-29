@@ -407,4 +407,10 @@ export default class StdinTasker {
   }
 }
 
-AgentRuntime.tasker.push(new StdinTasker());
+/** 按 path（无则 id）去重注册，避免 HTTP init 与 TaskerLoader 双 import 各 push 一次 */
+function registerStdinTasker() {
+  if (AgentRuntime.tasker.some((t) => (t.path || t.id) === 'stdin')) return
+  AgentRuntime.tasker.push(new StdinTasker())
+}
+
+registerStdinTasker()

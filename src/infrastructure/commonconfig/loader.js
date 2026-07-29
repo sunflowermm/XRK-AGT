@@ -56,11 +56,7 @@ class CommonConfigRegistry {
       configInstance.key = key;
       configInstance.filePath = filePath;
       this.configs.set(key, configInstance);
-      // 短名别名：仅在未占用时写入，便于 CommonConfigRegistry.get('ai_config')
-      const shortName = path.basename(filePath, '.js');
-      if (!this.configs.has(shortName)) {
-        this.configs.set(shortName, configInstance);
-      }
+      // 短名用 get() 回退解析（system-Core/x → x），勿再 Map 双挂同一实例
       RuntimeUtil.makeLog('debug', `加载配置: ${configInstance.displayName ?? key}`, 'CommonConfigRegistry');
       return true;
     } catch (error) {
@@ -153,10 +149,7 @@ class CommonConfigRegistry {
         onChange: (filePath) => this.reloadFile(filePath),
         onUnlink: (filePath) => {
           const key = resolveQualifiedCoreModuleKey(filePath, configDirs, 'commonconfig');
-          const shortName = path.basename(filePath, '.js');
-          const inst = this.configs.get(key);
           this.configs.delete(key);
-          if (inst && this.configs.get(shortName) === inst) this.configs.delete(shortName);
         }
       });
       if (started) this._hotReload = hotReload;

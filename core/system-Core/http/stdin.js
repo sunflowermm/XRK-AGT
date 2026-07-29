@@ -121,11 +121,12 @@ export default {
   },
 
   async init(app, AgentRuntime) {
-    if (!getRuntimeGlobal('stdinHandler')) {
-      const StdinModule = await import('../tasker/stdin.js');
-      const instance = new StdinModule.default();
-      instance.load();
-    }
+    if (getRuntimeGlobal('stdinHandler')) return
+
+    // 只触发模块注册（去重 push），勿再 new 第二份实例
+    await import('../tasker/stdin.js')
+    const instance = AgentRuntime.tasker.find((t) => (t.path || t.id) === 'stdin')
+    instance?.load?.()
 
     if (!AgentRuntime.url && AgentRuntime.getServerUrl) {
       AgentRuntime.url = AgentRuntime.getServerUrl();

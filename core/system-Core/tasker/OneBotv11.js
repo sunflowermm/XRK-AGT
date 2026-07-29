@@ -1664,7 +1664,7 @@ AgentRuntime.tasker.push(
      * 关键优化：先初始化基础信息并立即触发connect事件，耗时操作异步执行
      */
     async connect(data, ws) {
-      const self_id = data.self_id
+      const self_id = data.self_id != null ? String(data.self_id) : data.self_id
       
       // 初始化AgentRuntime基础结构（保留OneBot特定功能）
       AgentRuntime[self_id] = {
