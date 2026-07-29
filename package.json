@@ -70,6 +70,7 @@
   "scripts": {
     "start": "node app.js",
     "dev": "node app.js",
+    "build:www": "node scripts/build-www-static.mjs",
     "debug": "node debug.js",
     "setup:browsers": "node -e \"import { installPlaywrightChromium } from './src/utils/bootstrap-deps.js'; await installPlaywrightChromium();\"",
     "start:windows": "start.bat server",

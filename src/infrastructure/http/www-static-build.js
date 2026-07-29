@@ -6,20 +6,24 @@
  * 2. enabled=true  / serve=proxy  → FrontendLauncher：启进程 + 反代（不走这里）
  *
  * Windows 下不能 `execFile('pnpm')`（ENOENT）；统一走 `#utils/command-spawn.js` 解析。
+ *
+ * 2c2g：勿在 AGT 已加载后同机 Vite（易 OOM）。启动前用
+ * `buildSignedStaticWwwBeforeRuntime`（Bootstrap）或 `pnpm run build:www`。
  */
 import path from 'node:path';
 import fsSync from 'node:fs';
-import os from 'node:os';
 import { spawn } from 'node:child_process';
 import RuntimeUtil from '#utils/runtime-util.js';
+import paths from '#utils/paths.js';
 import {
   getPnpmInstallHint,
   resolveCommandSpawn,
 } from '#utils/command-spawn.js';
-import { resolveWwwStaticRoot, isWwwSignedStaticRootOk } from '#infrastructure/http/www-app-resolve.js';
-
-/** ≤ 此物理内存视为低配（2c2g 等）；AGT+Vite 同机易 OOM */
-export const WWW_LOW_MEM_BYTES = 2.5 * 1024 * 1024 * 1024;
+import {
+  resolveWwwAppMount,
+  resolveWwwStaticRoot,
+  isWwwSignedStaticRootOk,
+} from '#infrastructure/http/www-app-resolve.js';
 
 const BUILD_WALK_SKIP = new Set([
   'node_modules',
@@ -32,53 +36,9 @@ const BUILD_WALK_SKIP = new Set([
   'dist-ssr',
 ]);
 
-/**
- * @param {number} [totalBytes]
- */
-export function isWwwLowMemHost(totalBytes = os.totalmem()) {
-  const n = Number(totalBytes);
-  return Number.isFinite(n) && n > 0 && n <= WWW_LOW_MEM_BYTES;
-}
-
-/**
- * 合并 NODE_OPTIONS，低配时补 --max-old-space-size（已有则不覆盖）。
- * @param {string} [existing]
- * @param {number} mb
- */
-export function ensureMaxOldSpaceSize(existing, mb) {
-  const cur = String(existing || '').trim();
-  if (/--max-old-space-size=\d+/i.test(cur)) return cur;
-  const flag = `--max-old-space-size=${mb}`;
-  return cur ? `${cur} ${flag}` : flag;
-}
-
-/**
- * 子进程构建环境：低配机限制堆/线程，避免拖垮同进程树里的 AGT。
- * sign.build.env 与显式 XRK_WWW_BUILD_LOW_MEM=1 可强制开启。
- *
- * @param {Record<string, string>} [signEnv]
- * @param {{ totalmem?: number }} [opts]
- */
-export function resolveWwwBuildChildEnv(signEnv = {}, opts = {}) {
-  const env = { ...signEnv };
-  const force =
-    env.XRK_WWW_BUILD_LOW_MEM === '1' ||
-    process.env.XRK_WWW_BUILD_LOW_MEM === '1';
-  const low = force || isWwwLowMemHost(opts.totalmem ?? os.totalmem());
-  if (!low) return env;
-
-  env.XRK_WWW_BUILD_LOW_MEM = '1';
-  env.UV_THREADPOOL_SIZE = env.UV_THREADPOOL_SIZE || '2';
-  env.GOMAXPROCS = env.GOMAXPROCS || '1';
-  env.OMP_NUM_THREADS = env.OMP_NUM_THREADS || '1';
-  const mergedNodeOpts = ensureMaxOldSpaceSize(
-    env.NODE_OPTIONS || process.env.NODE_OPTIONS,
-    768,
-  );
-  env.NODE_OPTIONS = mergedNodeOpts;
-  return env;
-}
-/**
+function wwwBuildLog(level, message) {
+  RuntimeUtil.makeLog(level, message, 'AgentRuntime');
+}/**
  * @param {unknown} raw
  * @param {string} appDir
  * @returns {{ command: string, args: string[], cwd: string, env: Record<string, string> } | null}
@@ -344,48 +304,31 @@ function runResolvedCommand(command, args, opts) {
 export async function runSignedStaticBuild(appDir, sign, label = appDir) {
   const spec = resolveSignedStaticBuildSpec(sign, appDir);
   if (!spec) {
-    RuntimeUtil.makeLog(
-      'warn',
-      `${label}: 静态模式无法 build（需 package.json 或 sign.build）`,
-      'AgentRuntime',
-    );
+    wwwBuildLog('warn', `${label}: 静态模式无法 build（需 package.json 或 sign.build）`);
     return false;
   }
 
   const display = `${spec.command} ${spec.args.join(' ')}`.trim();
-  const childEnv = resolveWwwBuildChildEnv(spec.env);
-  if (childEnv.XRK_WWW_BUILD_LOW_MEM === '1') {
-    RuntimeUtil.makeLog(
-      'warn',
-      `${label}: 低内存主机，前端构建将限制堆/并行（仍可能很慢）。2c2g 建议本机或 CI 预编 dist，并设 sign.buildOnStart=false`,
-      'AgentRuntime',
-    );
-  }
-  RuntimeUtil.makeLog(
-    'info',
-    `前端工程静态模式：构建产物（不启进程）: ${label} (${display})`,
-    'AgentRuntime',
-  );
+  wwwBuildLog('info', `前端工程静态模式：构建产物（不启进程）: ${label} (${display})`);
 
   try {
     const { stdout, stderr } = await runResolvedCommand(spec.command, spec.args, {
       cwd: spec.cwd,
-      env: childEnv,
+      env: spec.env,
     });
     if (stdout?.trim()) {
-      RuntimeUtil.makeLog('debug', `build stdout (${label}): ${stdout.trim().slice(-800)}`, 'AgentRuntime');
+      wwwBuildLog('debug', `build stdout (${label}): ${stdout.trim().slice(-800)}`);
     }
     if (stderr?.trim()) {
-      RuntimeUtil.makeLog('debug', `build stderr (${label}): ${stderr.trim().slice(-800)}`, 'AgentRuntime');
+      wwwBuildLog('debug', `build stderr (${label}): ${stderr.trim().slice(-800)}`);
     }
-    RuntimeUtil.makeLog('info', `前端工程构建完成: ${label}`, 'AgentRuntime');
+    wwwBuildLog('info', `前端工程构建完成: ${label}`);
     return true;
   } catch (err) {
     const msg = err?.stderr || err?.message || String(err);
-    RuntimeUtil.makeLog(
+    wwwBuildLog(
       'error',
       `前端工程构建失败: ${label} — ${String(msg).trim().slice(0, 500)}`,
-      'AgentRuntime',
     );
     return false;
   }
@@ -405,11 +348,7 @@ export async function ensureSignedStaticArtifacts(appDir, sign, mountPath) {
   if (!shouldRunSignedStaticBuild(sign, resolved, appDir)) {
     const policy = normalizeWwwBuildOnStart(sign);
     if (policy === 'if-stale' && resolveSignedStaticBuildSpec(sign, appDir)) {
-      RuntimeUtil.makeLog(
-        'info',
-        `前端工程产物已是最新，跳过构建: ${label}`,
-        'AgentRuntime',
-      );
+      wwwBuildLog('info', `前端工程产物已是最新，跳过构建: ${label}`);
     }
     return {
       ...resolved,
@@ -433,4 +372,59 @@ export async function ensureSignedStaticArtifacts(appDir, sign, mountPath) {
     ok: isWwwSignedStaticRootOk(appDir, sign, resolved),
     buildFailed: false,
   };
+}
+
+/**
+ * AGT 加载前按需构建各 Core 有 sign 的静态前端（与挂载阶段解耦，避免同机 OOM）。
+ * 忽略 sign.buildOnStart=never（挂载侧用 never；启动前仍按 stale 编）。
+ * `XRK_SKIP_WWW_BUILD=1` 跳过。
+ *
+ * @param {{ log?: (level: string, msg: string) => void }} [opts]
+ * @returns {Promise<{ skipped: boolean, built: string[], failed: string[] }>}
+ */
+export async function buildSignedStaticWwwBeforeRuntime(opts = {}) {
+  if (process.env.XRK_SKIP_WWW_BUILD === '1') {
+    return { skipped: true, built: [], failed: [] };
+  }
+
+  const log =
+    typeof opts.log === 'function'
+      ? opts.log
+      : (level, msg) => wwwBuildLog(level, msg);
+
+  const built = [];
+  const failed = [];
+  const coreDirs = await paths.getCoreDirs();
+
+  for (const coreDir of coreDirs) {
+    const wwwDir = path.join(coreDir, 'www');
+    if (!fsSync.existsSync(wwwDir)) continue;
+    let entries = [];
+    try {
+      entries = fsSync.readdirSync(wwwDir, { withFileTypes: true }).filter((e) => e.isDirectory());
+    } catch {
+      continue;
+    }
+
+    for (const ent of entries) {
+      const appDir = path.join(wwwDir, ent.name);
+      const decision = resolveWwwAppMount(appDir);
+      if (decision.kind !== 'signed' || decision.mode !== 'static' || !decision.sign) continue;
+      if (!resolveSignedStaticBuildSpec(decision.sign, appDir)) continue;
+
+      const label = decision.mountPath || `/${ent.name}`;
+      const resolved = resolveWwwStaticRoot(appDir, decision.sign);
+      if (!isSignedStaticBuildStale(appDir, decision.sign, resolved)) {
+        log('info', `启动前：前端产物已是最新，跳过 ${label}`);
+        continue;
+      }
+
+      log('info', `启动前：构建前端 ${label}（AGT 尚未加载）`);
+      const ok = await runSignedStaticBuild(appDir, decision.sign, label);
+      if (ok) built.push(label);
+      else failed.push(label);
+    }
+  }
+
+  return { skipped: false, built, failed };
 }

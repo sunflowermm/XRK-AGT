@@ -144,7 +144,7 @@ export async function mountCoreWwwStatic(app, staticOptions = {}) {
             'error',
             `有 sign 无可用静态根，跳过挂载: ${mountPath} (dir=${subDirName}, core: ${coreName})` +
               (after.buildFailed
-                ? ' — 构建失败，请在该目录执行 pnpm install && pnpm build'
+                ? ' — 构建失败，请启动前执行 pnpm run build:www 或在该目录 pnpm build'
                 : ' — 请先构建 dist，或设 staticRoot: "." 挂纯静态'),
             'AgentRuntime',
           );
@@ -154,7 +154,7 @@ export async function mountCoreWwwStatic(app, staticOptions = {}) {
         reason =
           after.via === '.'
             ? `有 sign 纯静态 → .`
-            : `有 sign 静态（按需 build）→ ${after.via}`;
+            : `有 sign 静态 → ${after.via}`;
         warn = after.warn;
       }
 

@@ -90,10 +90,10 @@ Vite `base` 必须与该 URL 一致。
 
 - `command` / `port` 在此模式下**不会用到**（留给切到反代时用）。
 - `buildOnStart`：
-  - 省略 / `"if-stale"`（默认）：比较 `src`/`public`/配置文件与 `dist` 的 mtime，过期才 build
-  - `true` / `"always"`：每次启动都编
-  - `false` / `"never"`：永不自动编（自行保证 dist）
-- **低配机（约 ≤2.5G 内存，如 2c2g）**：启动时同机跑 Vite 极易 OOM 拖垮 AGT。框架会自动注入 `XRK_WWW_BUILD_LOW_MEM`（限制 Node 堆 / Rollup 并行）。仍建议在本机或 CI 预编 `dist`，并把 `buildOnStart` 设为 `false`。
+  - 省略 / `"if-stale"`（默认）：挂载时比较 `src`/`public`/配置与 `dist` mtime，过期才 build
+  - `true` / `"always"`：每次挂载都编（**2c2g 勿用**，易与 AGT 同机 OOM）
+  - `false` / `"never"`：挂载阶段永不自动编（`/xrk` 默认）
+- **启动前构建**：`node app.js server` 时 Bootstrap 在加载 AGT 之前按 stale 编各有 sign 静态前端（`pnpm run build:www` 等同）；`XRK_SKIP_WWW_BUILD=1` 或 `XRK_SKIP_FRONTEND_BOOTSTRAP=1` 可跳过。编完子进程退出后再启 AGT，避免同机抢内存。
 - `pnpm`/`npm` 经 `#utils/command-spawn.js` 解析（Windows `.cmd`、PATH、`pnpm.cjs`、corepack、`npm exec pnpm`），避免葵子/精简 PATH 下 `spawn pnpm ENOENT`。
 
 ### ③ 反代：`enabled: true`

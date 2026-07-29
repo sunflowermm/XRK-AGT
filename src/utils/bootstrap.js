@@ -53,6 +53,26 @@ export class Bootstrap {
     if (process.env.XRK_SKIP_FRONTEND_BOOTSTRAP !== '1') {
       await this.dependencyManager.ensureFrontendDependencies(root);
     }
+    if (
+      process.env.XRK_SKIP_WWW_BUILD !== '1' &&
+      process.env.XRK_SKIP_FRONTEND_BOOTSTRAP !== '1'
+    ) {
+      const { buildSignedStaticWwwBeforeRuntime } = await import(
+        '#infrastructure/http/www-static-build.js'
+      );
+      const r = await buildSignedStaticWwwBeforeRuntime({
+        log: (level, msg) => {
+          if (level === 'error') return this.logger.error(msg);
+          if (level === 'warn') return this.logger.warning(msg);
+          return this.logger.info(msg);
+        },
+      });
+      if (r.failed?.length) {
+        await this.logger.warning(
+          `启动前前端构建失败: ${r.failed.join(', ')}（将尝试挂已有 dist；可手动 pnpm run build:www）`,
+        );
+      }
+    }
     await loadDynamicImports(this.dependencyManager, rootPkg);
     await logBrowserEnvironment(this.logger, root);
   }
