@@ -750,15 +750,13 @@ onMounted(loadList);
                   }"
                   :title="f.path"
                 >
-                  <div class="meta">
-                    <label :for="`f-${f.path}`" :title="f.description || f.path">
-                      {{ f.label }}
-                      <span v-if="f.required" class="req">*</span>
-                    </label>
-                    <p v-if="f.description" class="desc" :class="{ compact: !isFieldFullSpan(f) }">
-                      {{ f.description }}
-                    </p>
-                  </div>
+                  <label :for="`f-${f.path}`" class="fname" :title="f.description || f.path">
+                    {{ f.label }}
+                    <span v-if="f.required" class="req">*</span>
+                  </label>
+                  <p class="desc" :class="{ compact: !isFieldFullSpan(f) }" :title="f.description || undefined">
+                    {{ f.description || '' }}
+                  </p>
                   <div class="ctrl">
                     <ConfigArrayForm
                       v-if="fieldControl(f) === 'array'"
@@ -781,33 +779,33 @@ onMounted(loadList);
                     />
                     <div
                       v-else-if="fieldControl(f) === 'nested' && nestedFieldEntries(f).length"
-                      class="nested-block"
+                      class="nested-block field-grid"
                     >
                       <div
                         v-for="[nk, ns] in nestedFieldEntries(f)"
                         :key="nk"
-                        class="field nested-item"
+                        class="field"
                         :class="{
                           full: isFieldFullSpan({ ...ns, path: `${f.path}.${nk}` }),
                         }"
                       >
-                        <div class="meta">
-                          <label :title="ns.description || nk">{{ ns.label || nk }}</label>
-                          <p
-                            v-if="ns.description"
-                            class="desc"
-                            :class="{
-                              compact: !isFieldFullSpan({ ...ns, path: `${f.path}.${nk}` }),
-                            }"
-                          >
-                            {{ ns.description }}
-                          </p>
+                        <label class="fname" :title="ns.description || nk">{{ ns.label || nk }}</label>
+                        <p
+                          class="desc"
+                          :class="{
+                            compact: !isFieldFullSpan({ ...ns, path: `${f.path}.${nk}` }),
+                          }"
+                          :title="ns.description || undefined"
+                        >
+                          {{ ns.description || '' }}
+                        </p>
+                        <div class="ctrl">
+                          <ConfigFieldControl
+                            :schema="ns"
+                            :model-value="ensureNestedObj(f.path)[nk]"
+                            @update:model-value="(v) => setNestedValue(f.path, nk, v)"
+                          />
                         </div>
-                        <ConfigFieldControl
-                          :schema="ns"
-                          :model-value="ensureNestedObj(f.path)[nk]"
-                          @update:model-value="(v) => setNestedValue(f.path, nk, v)"
-                        />
                       </div>
                     </div>
                     <ConfigJsonEditor
@@ -1121,17 +1119,16 @@ header h2 {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   column-gap: 16px;
-  row-gap: 4px;
-  align-items: start;
+  row-gap: 6px;
+  align-items: stretch;
 }
 .field {
   display: flex;
   flex-direction: column;
   gap: 6px;
   min-width: 0;
-  padding: 10px 4px;
+  padding: 8px 4px 10px;
   border-bottom: 1px solid var(--config-divider);
-  contain: layout;
 }
 .field.full { grid-column: 1 / -1; }
 .field.dirty {
@@ -1143,9 +1140,6 @@ header h2 {
   background: color-mix(in srgb, var(--red) 10%, transparent);
   box-shadow: inset 3px 0 0 var(--red);
 }
-.field-grid {
-  contain: layout style;
-}
 .dirty-hint {
   font-size: var(--font-xs);
   opacity: 0.65;
@@ -1155,23 +1149,40 @@ header h2 {
   white-space: nowrap;
   font-family: var(--mono);
 }
-.nested-block {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  width: 100%;
-  border: 1px dashed color-mix(in srgb, var(--ink) 28%, transparent);
-  border-radius: 6px;
-  padding: 8px;
-  box-sizing: border-box;
+.dense .field-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  column-gap: 12px;
 }
-.nested-item {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
+/* 同行三轨：名字 / 注释 / 控件，按最高对齐 */
+@supports (grid-template-rows: subgrid) {
+  .field:not(.full) {
+    display: grid;
+    grid-template-rows: subgrid;
+    grid-row: span 3;
+    gap: 0;
+    align-items: stretch;
+  }
+  .field:not(.full):has(> .example) {
+    grid-row: span 4;
+  }
+  .field:not(.full) > .fname,
+  .field:not(.full) > label.fname {
+    grid-row: 1;
+    align-self: start;
+  }
+  .field:not(.full) > .desc {
+    grid-row: 2;
+    align-self: start;
+  }
+  .field:not(.full) > .ctrl {
+    grid-row: 3;
+    align-self: start;
+  }
+  .field:not(.full) > .example {
+    grid-row: 4;
+  }
 }
-/* 上标签+注释，下控件 */
-.meta label {
+.fname {
   display: block;
   font-size: var(--font-sm);
   font-weight: 700;
@@ -1180,24 +1191,15 @@ header h2 {
   word-break: keep-all;
   overflow-wrap: break-word;
 }
-.dense .field-grid {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  column-gap: 12px;
-}
-.meta {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  flex: 0 0 auto;
-}
 .req { color: var(--red); }
-.meta .desc {
+.desc {
   margin: 0;
+  min-height: 1.45em;
   font-size: var(--font-xs);
   color: var(--muted);
   line-height: 1.45;
 }
-.meta .desc.compact {
+.desc.compact {
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
@@ -1208,7 +1210,15 @@ header h2 {
   min-height: 28px;
   display: flex;
   flex-direction: column;
-  justify-content: center;
+  justify-content: flex-start;
+  width: 100%;
+}
+.nested-block {
+  width: 100%;
+  border: 1px dashed color-mix(in srgb, var(--ink) 28%, transparent);
+  border-radius: 6px;
+  padding: 8px;
+  box-sizing: border-box;
 }
 .example {
   margin-top: 6px;

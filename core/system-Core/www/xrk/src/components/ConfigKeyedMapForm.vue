@@ -307,12 +307,11 @@ function setAllOpen(open) {
               >
                 <label :title="schema.description || fk">{{ schema.label || fk }}</label>
                 <p
-                  v-if="schema.description"
                   class="desc"
                   :class="{ compact: !isFull(fk, schema) }"
-                  :title="schema.description"
+                  :title="schema.description || undefined"
                 >
-                  {{ schema.description }}
+                  {{ schema.description || '' }}
                 </p>
                 <ConfigFieldControl
                   :schema="schema"

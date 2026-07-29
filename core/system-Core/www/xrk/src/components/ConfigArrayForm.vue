@@ -213,12 +213,11 @@ function setAllOpen(open) {
                     >
                       <label :title="ns.description || nk">{{ ns.label || nk }}</label>
                       <p
-                        v-if="ns.description"
                         class="desc"
                         :class="{ compact: !isFull(nk, ns) }"
-                        :title="ns.description"
+                        :title="ns.description || undefined"
                       >
-                        {{ ns.description }}
+                        {{ ns.description || '' }}
                       </p>
                       <ConfigFieldControl
                         :schema="ns"
@@ -236,12 +235,11 @@ function setAllOpen(open) {
                 >
                   <label :title="schema.description || key">{{ schema.label || key }}</label>
                   <p
-                    v-if="schema.description"
                     class="desc"
                     :class="{ compact: !isFull(key, schema) }"
-                    :title="schema.description"
+                    :title="schema.description || undefined"
                   >
-                    {{ schema.description }}
+                    {{ schema.description || '' }}
                   </p>
                   <ConfigFieldControl
                     :schema="schema"

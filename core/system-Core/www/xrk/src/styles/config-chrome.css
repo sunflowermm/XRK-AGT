@@ -186,14 +186,14 @@
 .cfg-entry-list .field-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px 14px;
-  align-items: start;
-  contain: layout style;
+  column-gap: 14px;
+  row-gap: 6px;
+  align-items: stretch;
 }
 
 .cfg-entry-list.dense .field-grid {
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px 12px;
+  column-gap: 12px;
 }
 
 .cfg-entry-list .field {
@@ -201,12 +201,39 @@
   flex-direction: column;
   gap: 6px;
   min-width: 0;
-  padding: 4px 0;
-  contain: layout;
+  padding: 4px 0 10px;
+  border-bottom: 1px solid color-mix(in srgb, var(--ink) 12%, transparent);
 }
 
 .cfg-entry-list .field.full {
   grid-column: 1 / -1;
+}
+
+/* 同行：名字 / 注释 / 控件各占一行轨，按最高对齐 */
+@supports (grid-template-rows: subgrid) {
+  .cfg-entry-list .field:not(.full) {
+    display: grid;
+    grid-template-rows: subgrid;
+    grid-row: span 3;
+    gap: 0;
+    align-items: stretch;
+  }
+
+  .cfg-entry-list .field:not(.full) > label {
+    grid-row: 1;
+    align-self: start;
+  }
+
+  .cfg-entry-list .field:not(.full) > .desc {
+    grid-row: 2;
+    align-self: start;
+  }
+
+  .cfg-entry-list .field:not(.full) > :deep(.cfg-ctrl) {
+    grid-row: 3;
+    align-self: start;
+    width: 100%;
+  }
 }
 
 .cfg-entry-list .field label {
@@ -220,6 +247,7 @@
 
 .cfg-entry-list .desc {
   margin: 0;
+  min-height: 1.45em;
   font-size: var(--font-xs);
   color: var(--muted);
   line-height: 1.45;
@@ -230,6 +258,10 @@
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
+}
+
+.cfg-entry-list .desc:empty::before {
+  content: '\00a0';
 }
 
 .cfg-entry-list .nested {
