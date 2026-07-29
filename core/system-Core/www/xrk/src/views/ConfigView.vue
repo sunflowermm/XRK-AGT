@@ -15,6 +15,7 @@ import {
 } from 'naive-ui';
 import { apiFetch, apiJson } from '@/api/client';
 import { deepClone } from '@/utils/http';
+import { useAuthReload } from '@/composables/useAuthReload';
 import {
   arraySchemasFromFlatTemplates,
   buildArraySchemaIndex,
@@ -550,6 +551,7 @@ watch(selectedChild, async (v, prev) => {
 });
 
 onMounted(loadList);
+useAuthReload(loadList);
 </script>
 
 <template>

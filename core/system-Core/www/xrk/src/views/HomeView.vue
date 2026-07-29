@@ -14,6 +14,7 @@ import {
 import { useHomeCharts } from '@/home/useHomeCharts';
 import HomeTagCloud from '@/components/HomeTagCloud.vue';
 import { useViewport } from '@/composables/useViewport';
+import { useAuthReload } from '@/composables/useAuthReload';
 
 const { isMobile } = useViewport();
 const message = useMessage();
@@ -37,7 +38,8 @@ const host = reactive({
   nodeVersion: '—',
   cpuModel: '—',
   cpuCores: '—',
-  loadavg: ['0.00', '0.00', '0.00'],
+  loadavg: ['—'],
+  loadavgText: '—',
   memUsedText: '—',
   memFreeText: '—',
   memTotalText: '—',
@@ -117,7 +119,8 @@ function applyOverview(data) {
     nodeVersion: d.nodeVersion ?? '—',
     cpuModel: d.cpuModel ?? '—',
     cpuCores: d.cpuCores ?? '—',
-    loadavg: d.loadavg ?? ['0.00', '0.00', '0.00'],
+    loadavg: d.loadavg ?? ['—'],
+    loadavgText: d.loadavgText ?? (Array.isArray(d.loadavg) ? d.loadavg.join(' · ') : '—'),
     memUsedText: d.memUsedText ?? '—',
     memFreeText: d.memFreeText ?? '—',
     memTotalText: d.memTotalText ?? '—',
@@ -325,13 +328,15 @@ watch(
   () => nextTick(() => paint()),
 );
 
+useAuthReload(() => load({ force: true }));
+
 const statCards = computed(() => [
   {
     k: 'CPU 使用率',
     v: metrics.cpuText,
     c: 'var(--pink)',
     bar: metrics.cpu,
-    sub: `${host.cpuCores} 核 · 负载 ${host.loadavg.join('/')}`,
+    sub: `${host.cpuCores} 核 · 负载 ${host.loadavgText}`,
   },
   {
     k: '内存使用',
@@ -365,7 +370,7 @@ const hostFacts = computed(() => [
   { k: '系统', v: `${host.platform} / ${host.arch}` },
   { k: 'Node', v: host.nodeVersion },
   { k: 'CPU', v: `${host.cpuCores} 核` },
-  { k: '负载', v: host.loadavg.join(' · ') },
+  { k: '负载', v: host.loadavgText },
   { k: '服务端口', v: String(host.botPort) },
   { k: 'RSS', v: host.rss },
   { k: 'Swap', v: host.swapText },

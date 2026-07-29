@@ -212,7 +212,8 @@ async function buildSystemSnapshot(AgentRuntime, { includeHistory = false } = {}
       cores: cpus.length,
       usage: process.cpuUsage(),
       percent: __cpuCache.percent || 0,
-      loadavg: os.loadavg(),
+      // Windows 上 os.loadavg() 恒为 [0,0,0]，勿当成真实负载
+      loadavg: os.platform() === 'win32' ? null : os.loadavg(),
     },
     memory: {
       total: mem.total,
@@ -246,7 +247,7 @@ async function buildSystemSnapshot(AgentRuntime, { includeHistory = false } = {}
     system,
     bot: {
       url: AgentRuntime.url,
-      port: AgentRuntime.port,
+      port: AgentRuntime.actualPort ?? AgentRuntime.httpPort ?? null,
       startTime: AgentRuntime.stat?.start_time || Date.now() / 1000,
       uptime: AgentRuntime.stat?.start_time
         ? Date.now() / 1000 - AgentRuntime.stat.start_time
@@ -314,6 +315,7 @@ export default {
         HttpResponse.success(res, {
           timestamp: snapshot.timestamp,
           system: snapshot.system,
+          bot: snapshot.bot,
           panels: snapshot.panels,
           workflows: snapshot.workflows,
           bots: snapshot.bots,

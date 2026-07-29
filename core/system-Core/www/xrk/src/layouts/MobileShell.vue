@@ -34,8 +34,8 @@ function go(name) {
           placeholder="Key"
           class="m-key"
           @keyup.enter="onKeyEnter"
-          @blur="saveKey"
         />
+        <NButton size="tiny" type="primary" secondary @click="saveKey">保存</NButton>
         <NTooltip>
           <template #trigger>
             <NButton size="small" secondary class="icon-btn" :aria-label="auth.dark ? '切换浅色' : '切换深色'" @click="auth.toggleDark()">

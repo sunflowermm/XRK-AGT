@@ -111,9 +111,27 @@ export function extractMetrics(data) {
     });
   }
 
-  const loadavg = Array.isArray(system?.cpu?.loadavg) ? system.cpu.loadavg : [0, 0, 0];
+  const platform = system?.platform || '—';
+  const loadavgRaw = system?.cpu?.loadavg;
+  // win32 无 loadavg（后端发 null；旧后端可能仍发 [0,0,0]）
+  const loadavg =
+    Array.isArray(loadavgRaw) && platform !== 'win32'
+      ? loadavgRaw.map((n) => toFiniteNumber(n, 0).toFixed(2))
+      : null;
   const swapTotal = system?.swap?.total ?? 0;
   const swapUsed = system?.swap?.used ?? 0;
+
+  let botPort = data?.bot?.port;
+  if (botPort == null || botPort === '') {
+    try {
+      botPort = new URL(String(data?.bot?.url || ''), window.location.origin).port || null;
+    } catch {
+      botPort = null;
+    }
+  }
+  if (botPort == null || botPort === '') {
+    botPort = window.location.port || null;
+  }
 
   return {
     cpu,
@@ -122,12 +140,13 @@ export function extractMetrics(data) {
     uptime: formatUptime(uptimeSec),
     detail: {
       hostname: system?.hostname || '—',
-      platform: system?.platform || '—',
+      platform,
       arch: system?.arch || '—',
       nodeVersion: system?.nodeVersion || '—',
       cpuModel: (system?.cpu?.model || '—').trim(),
       cpuCores: system?.cpu?.cores ?? '—',
-      loadavg: loadavg.map((n) => toFiniteNumber(n, 0).toFixed(2)),
+      loadavg: loadavg || ['—'],
+      loadavgText: loadavg ? loadavg.join(' · ') : '不适用',
       memUsed,
       memFree,
       memTotal,
@@ -145,7 +164,7 @@ export function extractMetrics(data) {
       txText: `${txSec.toFixed(1)} KB/s`,
       disks,
       ifaces,
-      botPort: data?.bot?.port ?? '—',
+      botPort: botPort ?? '—',
       botUrl: data?.bot?.url || '—',
     },
   };

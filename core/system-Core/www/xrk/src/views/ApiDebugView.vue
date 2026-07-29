@@ -17,6 +17,7 @@ import {
 import { authHeaders, getServerUrl } from '@/api/client';
 import FileDropZone from '@/components/FileDropZone.vue';
 import XrkIcon from '@/components/XrkIcon.vue';
+import { useAuthReload } from '@/composables/useAuthReload';
 import { useListPaneWidth } from '@/composables/useListPaneWidth';
 import { useViewport } from '@/composables/useViewport';
 import { copyText } from '@/utils/http';
@@ -417,6 +418,7 @@ async function loadCatalog() {
 }
 
 onMounted(loadCatalog);
+useAuthReload(loadCatalog);
 
 function paramControl(p) {
   const t = String(p.type || 'text').toLowerCase();

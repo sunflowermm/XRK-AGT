@@ -73,10 +73,10 @@ function toggleCollapse() {
             show-password-on="click"
             placeholder="X-API-Key"
             style="width: 148px"
-            title="回车保存；清空后回车可清除已存 Key"
+            title="填写后点保存或回车；清空后回车可清除"
             @keyup.enter="onKeyEnter"
-            @blur="saveKey"
           />
+          <NButton size="small" type="primary" secondary @click="saveKey">保存</NButton>
           <NTooltip>
             <template #trigger>
               <NButton size="small" secondary class="icon-btn" :aria-label="auth.dark ? '切换浅色' : '切换深色'" @click="auth.toggleDark()">

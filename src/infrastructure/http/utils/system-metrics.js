@@ -77,6 +77,20 @@ export async function readMem() {
   return { total, used: Math.max(0, total - free), free, swapTotal: 0, swapUsed: 0 };
 }
 
+/** 回环 / docker / Hyper-V 等；勿把 eth0/ens 仅因 virtual:true 算进来 */
+const VIRTUAL_IFACE_RE =
+  /^(lo\d*|veth|br-|docker|virbr|tun|tap|wg|isatap|teredo|vEthernet)/i;
+
+export function isSkippableNetIface(name, meta = null) {
+  const iface = String(name || '');
+  if (!iface) return true;
+  if (meta?.internal) return true;
+  if (/loopback/i.test(iface)) return true;
+  if (VIRTUAL_IFACE_RE.test(iface)) return true;
+  // systeminformation 在部分云主机把 eth0/ens 标成 virtual，不能据此跳过
+  return false;
+}
+
 /** 累加各网卡字节；跳过回环与明显虚拟口，避免 Windows vEthernet / docker 双计 */
 export function sumNetworkBytes(stats, skipIfaces) {
   const skip = skipIfaces instanceof Set ? skipIfaces : null;
@@ -86,13 +100,41 @@ export function sumNetworkBytes(stats, skipIfaces) {
     const iface = String(n.iface || n.interface || '');
     if (!iface) continue;
     if (skip?.has(iface)) continue;
-    if (/^lo\d*$/i.test(iface) || /loopback/i.test(iface)) continue;
-    if (/^(veth|br-|docker|virbr|tun|tap|wg|isatap|teredo)/i.test(iface)) continue;
-    if (/^vEthernet/i.test(iface)) continue;
+    if (isSkippableNetIface(iface)) continue;
     rx += Number(n.rx_bytes || n.bytes_recv || 0);
     tx += Number(n.tx_bytes || n.bytes_sent || 0);
   }
   return { rx, tx };
+}
+
+/** 从 ifaces 元数据构建 skip 集合（仅 internal / 名字像虚拟口） */
+export function buildNetworkSkipSet(ifaces) {
+  const skip = new Set();
+  for (const i of Array.isArray(ifaces) ? ifaces : []) {
+    const name = String(i?.iface || '');
+    if (!name) continue;
+    if (isSkippableNetIface(name, i)) skip.add(name);
+  }
+  return skip;
+}
+
+function pickFallbackNetBytes(stats, ifaces) {
+  const list = (Array.isArray(stats) ? stats : []).filter(
+    (n) => !isSkippableNetIface(String(n?.iface || n?.interface || '')),
+  );
+  if (!list.length) return { rx: 0, tx: 0 };
+  const defName = (Array.isArray(ifaces) ? ifaces : []).find((i) => i?.default)?.iface;
+  const pick =
+    (defName && list.find((n) => n.iface === defName)) ||
+    list.reduce((a, b) => {
+      const ba = Number(a.rx_bytes || 0) + Number(a.tx_bytes || 0);
+      const bb = Number(b.rx_bytes || 0) + Number(b.tx_bytes || 0);
+      return bb > ba ? b : a;
+    });
+  return {
+    rx: Number(pick.rx_bytes || pick.bytes_recv || 0),
+    tx: Number(pick.tx_bytes || pick.bytes_sent || 0),
+  };
 }
 
 export async function readNetworkBytes() {
@@ -100,11 +142,10 @@ export async function readNetworkBytes() {
     si.networkStats('*').catch(() => si.networkStats().catch(() => [])),
     si.networkInterfaces().catch(() => []),
   ]);
-  const skip = new Set();
-  for (const i of Array.isArray(ifaces) ? ifaces : []) {
-    if (i?.virtual || i?.internal) skip.add(String(i.iface || ''));
-  }
-  return sumNetworkBytes(stats, skip);
+  const skip = buildNetworkSkipSet(ifaces);
+  const summed = sumNetworkBytes(stats, skip);
+  if (summed.rx > 0 || summed.tx > 0) return summed;
+  return pickFallbackNetBytes(stats, ifaces);
 }
 
 /** 一次性 CPU 占用（#状态等） */

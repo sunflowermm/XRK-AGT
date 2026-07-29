@@ -21,7 +21,8 @@ export const useAuthStore = defineStore('auth', () => {
   const authEnforced = ref('unknown');
 
   let probeInflight = null;
-  let probeAt = 0;
+  /** 每次 setApiKey 递增；页面 watch 后强制重拉，无需切页 */
+  const keyEpoch = ref(0);
 
   const hasKey = computed(() => Boolean(apiKey.value?.trim()));
   const isLocalHost = computed(() => isLocalHostname());
@@ -91,7 +92,7 @@ export const useAuthStore = defineStore('auth', () => {
     apiKey.value = String(value || '');
     serverAuth.value = 'unknown';
     authEnforced.value = 'unknown';
-    probeAt = 0;
+    keyEpoch.value += 1;
     if (apiKey.value) localStorage.setItem(KEY, apiKey.value);
     else localStorage.removeItem(KEY);
     void probeAuthEnforcement({ force: true });
@@ -127,7 +128,6 @@ export const useAuthStore = defineStore('auth', () => {
       } catch {
         /* 网络失败不改状态 */
       } finally {
-        probeAt = Date.now();
         probeInflight = null;
       }
       return authEnforced.value;
@@ -154,6 +154,7 @@ export const useAuthStore = defineStore('auth', () => {
 
   return {
     apiKey,
+    keyEpoch,
     dark,
     hasKey,
     isLocalHost,

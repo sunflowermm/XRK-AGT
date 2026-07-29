@@ -2,7 +2,7 @@ import { ref, watch } from 'vue';
 import { useDialog } from 'naive-ui';
 import { useAuthStore } from '@/stores/auth';
 
-/** 顶栏 API Key 草稿与保存 / 清除（桌面壳 / 手机壳共用） */
+/** 顶栏 API Key：草稿 → 点保存 / 回车写入 store，并触发各页按 keyEpoch 重拉 */
 export function useShellAuth() {
   const auth = useAuthStore();
   const dialog = useDialog();
@@ -19,9 +19,10 @@ export function useShellAuth() {
     const next = String(keyDraft.value || '').trim();
     if (!next) {
       keyDraft.value = auth.apiKey;
-      return;
+      return false;
     }
     auth.setApiKey(next);
+    return true;
   }
 
   function clearKey() {
