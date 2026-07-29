@@ -11,12 +11,17 @@ export const useAuthStore = defineStore('auth', () => {
 
   const hasKey = computed(() => Boolean(apiKey.value?.trim()));
 
+  const isLocalHost = computed(() => {
+    const h = String(window.location.hostname || '').toLowerCase();
+    return h === 'localhost' || h === '::1' || /^127\./.test(h);
+  });
+
   const authBadge = computed(() => {
     if (serverAuth.value === 'unauthorized') {
       return {
         type: 'error',
         text: '鉴权失败',
-        title: '接口返回 401，请核对控制台填写的 API Key',
+        title: '接口返回 401，请填写正确的 API Key（公网访问必须带 Key）',
       };
     }
     if (hasKey.value) {
@@ -30,16 +35,25 @@ export const useAuthStore = defineStore('auth', () => {
       };
     }
     if (serverAuth.value === 'ok') {
+      if (!isLocalHost.value) {
+        return {
+          type: 'error',
+          text: '须填 Key',
+          title: '公网访问必须填写 API Key；若接口仍通，服务端鉴权可能未生效，请升级并重启 AGT',
+        };
+      }
       return {
-        type: 'info',
-        text: '本机免填',
-        title: '当前请求已成功。本机 127.0.0.1 默认免 Key；外网访问仍需填写',
+        type: 'success',
+        text: '已连通',
+        title: '本机打开且接口可用，通常不用填 Key',
       };
     }
     return {
       type: 'warning',
-      text: '未填 Key',
-      title: '尚未填写 API Key；外网或强制鉴权场景下接口可能 401',
+      text: isLocalHost.value ? '未填 Key' : '须填 Key',
+      title: isLocalHost.value
+        ? '还没填 API Key，也还没确认接口是否放行'
+        : '公网访问请填写 API Key（见服务端 api_key.json）',
     };
   });
 

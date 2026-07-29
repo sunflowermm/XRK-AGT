@@ -2,13 +2,76 @@ import { HttpResponse } from '#utils/http-utils.js';
 import { getAiWorkflowConfigOptional } from '#utils/ai-workflow-config.js';
 import runtimeConfig from '#infrastructure/config/config.js';
 
+/** 规范化 IP / Host 字符串（去 IPv6 mapped、zone id、端口、括号） */
+export function normalizeIpOrHost(value) {
+  if (!value || typeof value !== 'string') return '';
+  let s = value.toLowerCase().trim();
+  if (s.startsWith('[') && s.includes(']')) {
+    s = s.slice(1, s.indexOf(']'));
+  } else if (s.includes(':') && /^[\d.]+:\d+$/.test(s)) {
+    s = s.slice(0, s.lastIndexOf(':'));
+  }
+  return s.replace(/^::ffff:/, '').replace(/%.+$/, '');
+}
+
 /** 是否为本机 127.* 回环（AgentRuntime.checkApiAuthorization 与单测共用） */
 export function isLoopback127Connection(address) {
-  if (!address || typeof address !== 'string') return false;
-  const ip = address.toLowerCase().trim()
-    .replace(/^::ffff:/, '')
-    .replace(/%.+$/, '');
+  const ip = normalizeIpOrHost(address);
   return /^127\./.test(ip);
+}
+
+/** Host / hostname 是否表示本机访问（仅此时允许「回环免 Key」） */
+export function isLoopbackHost(hostHeader) {
+  const host = normalizeIpOrHost(String(hostHeader || '').split(',')[0]);
+  if (!host) return false;
+  return host === 'localhost' || host === '::1' || isLoopback127Connection(host);
+}
+
+/**
+ * 从常见反代头取客户端 IP（仅当 TCP 对端已是回环时才应调用，防直连伪造）。
+ * @returns {string|null}
+ */
+export function extractProxiedClientAddress(req) {
+  const headers = req?.headers || {};
+  const candidates = [
+    headers['cf-connecting-ip'],
+    headers['true-client-ip'],
+    headers['x-real-ip'],
+    typeof headers['x-forwarded-for'] === 'string'
+      ? headers['x-forwarded-for'].split(',')[0]
+      : Array.isArray(headers['x-forwarded-for'])
+        ? headers['x-forwarded-for'][0]
+        : null,
+  ];
+  for (const raw of candidates) {
+    const ip = normalizeIpOrHost(String(raw || '').trim());
+    if (ip) return ip;
+  }
+  return null;
+}
+
+/**
+ * 是否适用「本机回环免 API Key」。
+ * 反代 / frp 场景下 socket 常为 127.*，但 Host 为公网 IP 或带 X-Forwarded-*：不得免鉴权。
+ */
+export function isLoopbackAuthExempt(req) {
+  if (!req) return false;
+  if (!isLoopbackHost(req.headers?.host || req.headers?.Host)) {
+    return false;
+  }
+  const socketAddr = req.socket?.remoteAddress || '';
+  if (!isLoopback127Connection(socketAddr)) {
+    return false;
+  }
+  const proxied = extractProxiedClientAddress(req);
+  if (proxied && !isLoopback127Connection(proxied) && normalizeIpOrHost(proxied) !== '::1') {
+    return false;
+  }
+  const expressIp = normalizeIpOrHost(req.ip || '');
+  if (expressIp && !isLoopback127Connection(expressIp) && expressIp !== '::1') {
+    return false;
+  }
+  return true;
 }
 
 /**

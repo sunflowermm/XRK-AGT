@@ -12,7 +12,7 @@ description: 当你需要解释/排查 HTTP 或 WebSocket 的 401、127 回环�
 ## 原则
 
 - `/api/` 由 `HttpApi` + `AgentRuntime.checkApiAuthorization`；公开路由 `systemAuth: false`。
-- 一般仅 `127.*` 回环免系统 Key；`ai-workflow.tools.file.runEnabled=true` 时 loopback 也强制 Key。
+- 一般仅「本机 Host + 127 对端」免系统 Key（`isLoopbackAuthExempt`）；公网 Host / 反代客户端不得因 socket=127 放行。`ai-workflow.tools.file.runEnabled=true` 时 loopback 也强制 Key。
 - WS：`wsConnect` → `runtime-ws`；`AgentRuntime.wsf[path]` 可为 `{ handler, skipAuth: true }` 跳过系统 Key。
 
 ## API Key 携带

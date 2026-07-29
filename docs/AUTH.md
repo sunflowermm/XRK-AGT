@@ -25,10 +25,14 @@
 除此之外，Server 不会基于 URL 前缀自动放行/拒绝；是否需要 Key、如何校验，完全交给上层模块处理。  
 当上层调用 `AgentRuntime.checkApiAuthorization(req)` 时，底层会统一执行（实现：`runtime-auth.js` + `auth.js`）：
 
-- **一般** `127.*`（含 `::ffff:127.*`）来源免鉴权；
-- **例外**：当 `ai-workflow.tools.file.runEnabled === true`（或同类危险能力开启）时，loopback **也强制** API Key（可用 `server.auth.requireLoopbackAuthWhenToolsRun: false` 显式关闭，不推荐）；
+- **本机回环免 Key**（须同时满足，见 `isLoopbackAuthExempt`）：
+  - `Host` 为本机（`127.*` / `localhost`）；
+  - TCP 对端为 `127.*`（含 `::ffff:127.*`）；
+  - 无指向公网客户端的反代头（`X-Forwarded-For` / `X-Real-IP` / `CF-Connecting-IP` 等），且 `req.ip` 亦非公网。
+- **公网域名或公网 IP 的 Host**（即便经 nginx / frp 转到本机 127 端口）**必须**带 API Key；不得仅因 `socket.remoteAddress === 127.*` 放行。
+- **例外**：当 `ai-workflow.tools.file.runEnabled === true`（或同类危险能力开启）时，本机回环 **也强制** API Key（可用 `server.auth.requireLoopbackAuthWhenToolsRun: false` 显式关闭，不推荐）；
 - **可选白名单**：若 `server.auth.whitelist` 配置了前缀/正则规则，命中时免鉴权；
-- 非 `127.*` 来源按 API Key 规则严格校验。
+- 其余来源按 API Key 规则严格校验。
 
 默认 `tools.file.runEnabled: false`（见 `config/default_config/ai-workflow.yaml`）。
 

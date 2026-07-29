@@ -2,10 +2,36 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   isLoopback127Connection,
+  isLoopbackHost,
+  isLoopbackAuthExempt,
   isPrivateOrLoopbackAddress,
   shouldForceAuthOnLoopbackWhenToolsRun,
 } from '../../src/infrastructure/http/auth.js';
 import * as runtimeAuth from '../../src/infrastructure/http/runtime-auth.js';
+
+function mockRuntime(apiKey = 'k'.repeat(32)) {
+  return {
+    apiKey,
+    _authWhitelistCache: { ref: undefined, rules: [] },
+  };
+}
+
+function mockReq({
+  remoteAddress = '127.0.0.1',
+  ip = '127.0.0.1',
+  host = '127.0.0.1:11451',
+  headers = {},
+  path = '/api/x',
+} = {}) {
+  return {
+    socket: { remoteAddress },
+    ip,
+    path,
+    headers: { host, ...headers },
+    query: {},
+    body: {},
+  };
+}
 
 describe('HTTP 鉴权：127 回环判定', () => {
   it('127.0.0.1 为回环', () => {
@@ -17,6 +43,13 @@ describe('HTTP 鉴权：127 回环判定', () => {
     assert.equal(isLoopback127Connection('192.168.1.1'), false);
     assert.equal(isLoopback127Connection('::1'), false);
     assert.equal(isLoopback127Connection(''), false);
+  });
+
+  it('Host 为本机才算 loopback host', () => {
+    assert.equal(isLoopbackHost('127.0.0.1:11451'), true);
+    assert.equal(isLoopbackHost('localhost'), true);
+    assert.equal(isLoopbackHost('115.190.181.211:11451'), false);
+    assert.equal(isLoopbackHost('example.com'), false);
   });
 });
 
@@ -39,58 +72,71 @@ describe('限流 skip：私网/回环（与鉴权 127-only 刻意不同）', () 
   });
 });
 
+describe('HTTP 鉴权：反代/frp 不得因 socket=127 免 Key', () => {
+  it('公网 Host + socket 回环 → 不免', () => {
+    assert.equal(
+      isLoopbackAuthExempt(mockReq({ host: '115.190.181.211:11451', remoteAddress: '127.0.0.1' })),
+      false,
+    );
+  });
+
+  it('本机 Host + socket 回环 → 免', () => {
+    assert.equal(
+      isLoopbackAuthExempt(mockReq({ host: '127.0.0.1:11451', remoteAddress: '127.0.0.1' })),
+      true,
+    );
+  });
+
+  it('本机 Host + X-Forwarded-For 公网 → 不免', () => {
+    assert.equal(
+      isLoopbackAuthExempt(mockReq({
+        host: '127.0.0.1:11451',
+        remoteAddress: '127.0.0.1',
+        headers: { 'x-forwarded-for': '8.8.8.8' },
+      })),
+      false,
+    );
+  });
+
+  it('checkApiAuthorization：公网 Host 缺 Key 拒绝', () => {
+    const runtime = mockRuntime();
+    const req = mockReq({ host: '115.190.181.211:11451', remoteAddress: '127.0.0.1' });
+    assert.equal(runtimeAuth.checkApiAuthorization(runtime, req), false);
+  });
+
+  it('checkApiAuthorization：公网 Host 正确 Key 通过', () => {
+    const key = 'a'.repeat(32);
+    const runtime = mockRuntime(key);
+    const req = mockReq({
+      host: '115.190.181.211:11451',
+      remoteAddress: '127.0.0.1',
+      headers: { 'x-api-key': key },
+    });
+    assert.equal(runtimeAuth.checkApiAuthorization(runtime, req), true);
+  });
+});
+
 describe('HTTP 鉴权：forceAuth / runtime-auth', () => {
   it('shouldForceAuthOnLoopbackWhenToolsRun 返回 boolean', () => {
     assert.equal(typeof shouldForceAuthOnLoopbackWhenToolsRun(), 'boolean');
   });
 
   it('forceAuth 时 loopback 缺 Key 拒绝', () => {
-    const runtime = {
-      apiKey: 'k'.repeat(32),
-      _authWhitelistCache: { ref: undefined, rules: [] },
-    };
-    const req = {
-      socket: { remoteAddress: '127.0.0.1' },
-      ip: '127.0.0.1',
-      path: '/api/x',
-      headers: {},
-      query: {},
-      body: {},
-    };
+    const runtime = mockRuntime();
+    const req = mockReq();
     assert.equal(runtimeAuth.checkApiAuthorization(runtime, req, { forceAuth: true }), false);
   });
 
   it('forceAuth 时正确 Key 通过', () => {
     const key = 'a'.repeat(32);
-    const runtime = {
-      apiKey: key,
-      _authWhitelistCache: { ref: undefined, rules: [] },
-    };
-    const req = {
-      socket: { remoteAddress: '127.0.0.1' },
-      ip: '127.0.0.1',
-      path: '/api/x',
-      headers: { 'x-api-key': key },
-      query: {},
-      body: {},
-    };
+    const runtime = mockRuntime(key);
+    const req = mockReq({ headers: { 'x-api-key': key } });
     assert.equal(runtimeAuth.checkApiAuthorization(runtime, req, { forceAuth: true }), true);
   });
 
   it('无 forceAuth 时 loopback 免 Key', () => {
-    const runtime = {
-      apiKey: 'k'.repeat(32),
-      _authWhitelistCache: { ref: undefined, rules: [] },
-    };
-    const req = {
-      socket: { remoteAddress: '127.0.0.1' },
-      ip: '127.0.0.1',
-      path: '/api/x',
-      headers: {},
-      query: {},
-      body: {},
-    };
-    // 仅当当前进程配置未因 runEnabled 强制时成立；forceAuth=false 且非 tools 强制 → true
+    const runtime = mockRuntime();
+    const req = mockReq();
     if (!shouldForceAuthOnLoopbackWhenToolsRun()) {
       assert.equal(runtimeAuth.checkApiAuthorization(runtime, req), true);
     }

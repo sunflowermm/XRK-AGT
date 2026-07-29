@@ -10,7 +10,7 @@ import RuntimeUtil from '#utils/runtime-util.js';
 import runtimeConfig from '#infrastructure/config/config.js';
 import paths from '#utils/paths.js';
 import {
-  isLoopback127Connection,
+  isLoopbackAuthExempt,
   shouldForceAuthOnLoopbackWhenToolsRun,
 } from '#infrastructure/http/auth.js';
 
@@ -90,8 +90,9 @@ export function checkApiAuthorization(runtime, req, options = {}) {
   }
 
   const forceAuth = options.forceAuth === true || shouldForceAuthOnLoopbackWhenToolsRun();
-  const remoteAddress = req.socket?.remoteAddress || req.ip || '';
-  if (!forceAuth && isLoopback127Connection(remoteAddress)) {
+  // 仅「Host 为本机 + TCP 对端为 127.* + 无公网反代客户端头」才免 Key。
+  // 公网域名/IP 经 nginx/frp 转到 127 时 socket 仍是回环，旧逻辑会误放行。
+  if (!forceAuth && isLoopbackAuthExempt(req)) {
     return true;
   }
 
