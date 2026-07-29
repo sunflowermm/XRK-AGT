@@ -74,6 +74,19 @@ export async function generateApiKey(runtime) {
 }
 
 /**
+ * 控制台读取：是否要求 API Key（公开，不泄露密钥）。
+ * @param {import('../../agent-runtime.js').default} [runtime]
+ */
+export function getAuthModePublicSnapshot(runtime) {
+  const enabled = runtimeConfig.server?.auth?.apiKey?.enabled !== false;
+  const hasKey = Boolean(runtime?.apiKey || RuntimeUtil.apiKey);
+  return {
+    apiKeyEnabled: enabled,
+    requiresKey: enabled && hasKey,
+  };
+}
+
+/**
  * @param {import('../../agent-runtime.js').default} runtime
  * @param {object} req
  * @param {object} [options]

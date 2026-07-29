@@ -5,6 +5,13 @@
       "title": "核心系统",
       "apis": [
         {
+          "id": "system-auth-mode",
+          "method": "GET",
+          "path": "/api/system/auth-mode",
+          "title": "鉴权模式",
+          "description": "公开：是否要求 API Key（requiresKey），控制台用此接口而非 401 探测"
+        },
+        {
           "id": "system-status",
           "method": "GET",
           "path": "/api/status",

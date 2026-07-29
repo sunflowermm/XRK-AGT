@@ -180,3 +180,16 @@ describe('HTTP 鉴权：forceAuth', () => {
     assert.equal(runtimeAuth.checkApiAuthorization(runtime, req, { forceAuth: true }), true);
   });
 });
+
+describe('getAuthModePublicSnapshot', () => {
+  it('有密钥时 requiresKey=true', () => {
+    const snap = runtimeAuth.getAuthModePublicSnapshot(mockRuntime());
+    assert.equal(snap.apiKeyEnabled, true);
+    assert.equal(snap.requiresKey, true);
+  });
+
+  it('无密钥时 requiresKey=false', () => {
+    const snap = runtimeAuth.getAuthModePublicSnapshot(mockRuntime(''));
+    assert.equal(snap.requiresKey, false);
+  });
+});

@@ -98,7 +98,10 @@ A：`src/agent-runtime.js` 只做静态资源放行；`/api/*` 由 `HttpApi` 在
 A：在 `core/<your-core>/http/*.js` 导出 `HttpApi` 路由对象即可；路径以 `/api/` 开头会自动鉴权。非 `/api/` 路径或不用 `HttpApi` 时，在 handler 内调用 `ensureSystemCoreAuth(req, res, bot, 'context')`（`src/infrastructure/http/auth.js`）。
 
 **Q：本地调试可以不带 Key 吗？**  
-A：默认可以——仅当来源是 `127.*`（或 `::ffff:127.*`）时自动放行；内网地址（如 `192.168.*`、`10.*`、`172.16-31.*`）不会自动放行。若开启了 `ai-workflow.tools.file.runEnabled`，则 loopback 也必须带 Key。
+A：**默认不可以。** 凡启用 API Key，本机也须带 Key。仅当显式配置 `server.auth.loopbackExempt: true` 且请求满足 `isLoopbackAuthExempt`（本机 Host + socket 127 + 无公网反代头）时才免 Key。公网 / nginx / frp **勿开** loopbackExempt。
+
+**Q：控制台如何判断「鉴权是否生效」？**  
+A：公开接口 `GET /api/system/auth-mode`（`systemAuth: false`）返回 `requiresKey`；控制台 `refreshAuthMode` 读此接口。**不要**用无 Key 打受保护接口再看 401。
 
 **Q：新增 HTTP 路由时鉴权要注意什么？**  
 A：经 `HttpApi` 注册且路径以 `/api/` 开头时**默认**鉴权；公开接口写 `systemAuth: false`。实现见 `src/infrastructure/http/http.js` 与 `src/infrastructure/http/auth.js`。

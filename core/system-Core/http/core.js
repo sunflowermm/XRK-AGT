@@ -4,6 +4,7 @@ import runtimeConfig from '#infrastructure/config/config.js';
 import AiWorkflowLoader from '#infrastructure/ai-workflow/loader.js';
 import { collectBotInventory, summarizeBots } from '#infrastructure/http/utils/botInventory.js';
 import { readDisks, readMem, readNetworkBytes } from '#infrastructure/http/utils/system-metrics.js';
+import { getAuthModePublicSnapshot } from '#infrastructure/http/runtime-auth.js';
 import { HttpResponse } from '#utils/http-utils.js';
 
 let __lastNetSample = null;
@@ -294,6 +295,14 @@ export default {
     __ensureSysSamplers();
   },
   routes: [
+    {
+      method: 'GET',
+      path: '/api/system/auth-mode',
+      systemAuth: false,
+      handler: HttpResponse.asyncHandler(async (_req, res, AgentRuntime) => {
+        return HttpResponse.success(res, getAuthModePublicSnapshot(AgentRuntime));
+      }, 'system.auth-mode'),
+    },
     {
       method: 'GET',
       path: '/api/system/status',

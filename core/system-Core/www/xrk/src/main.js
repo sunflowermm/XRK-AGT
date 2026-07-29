@@ -13,6 +13,6 @@ app.use(router);
 
 const auth = useAuthStore(pinia);
 auth.initTheme();
-void auth.probeAuthEnforcement({ force: true });
+void auth.refreshAuthMode({ force: true });
 
 app.mount('#app');

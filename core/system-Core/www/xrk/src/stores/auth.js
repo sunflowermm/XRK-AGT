@@ -1,101 +1,78 @@
 import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
-import { abortTimeout } from '@/utils/http';
+import { abortTimeout, unwrapSuccess } from '@/utils/http';
 
 const KEY = 'apiKey';
-
-function isLocalHostname(hostname = window.location.hostname) {
-  const h = String(hostname || '').toLowerCase();
-  return h === 'localhost' || h === '::1' || /^127\./.test(h);
-}
+const AUTH_MODE_PATH = '/api/system/auth-mode';
 
 export const useAuthStore = defineStore('auth', () => {
   const apiKey = ref(localStorage.getItem(KEY) || '');
   const dark = ref(document.documentElement.classList.contains('dark'));
   /** @type {import('vue').Ref<'unknown'|'ok'|'unauthorized'>} */
   const serverAuth = ref('unknown');
-  /**
-   * 服务端是否真的在拦无 Key 请求（与「填了 Key 且业务接口 200」分开）。
-   * @type {import('vue').Ref<'unknown'|'enforced'|'bypass'>}
-   */
-  const authEnforced = ref('unknown');
+  /** @type {import('vue').Ref<'unknown'|'enforced'|'bypass'>} */
+  const authMode = ref('unknown');
 
-  let probeInflight = null;
-  /** 每次 setApiKey 递增；页面 watch 后强制重拉，无需切页 */
+  let modeInflight = null;
+  /** 每次 setApiKey 递增；页面 watch 后强制重拉 */
   const keyEpoch = ref(0);
 
   const hasKey = computed(() => Boolean(apiKey.value?.trim()));
-  const isLocalHost = computed(() => isLocalHostname());
 
   const authBadge = computed(() => {
-    if (authEnforced.value === 'bypass') {
+    if (authMode.value === 'bypass') {
       return {
         type: 'error',
-        text: '鉴权失效',
-        title:
-          '无 Key 也能访问 /api。公网等于裸奔：请部署含 isLoopbackAuthExempt 的修复并重启 AGT；填什么 Key 都不会被校验',
+        text: '鉴权关闭',
+        title: '服务端未启用或未加载 API Key，/api 可匿名访问（公网危险）',
       };
     }
     if (serverAuth.value === 'unauthorized') {
       return {
         type: 'error',
         text: '鉴权失败',
-        title: '接口返回 401，请填写正确的 API Key（公网访问必须带 Key）',
+        title: '接口返回 401，请填写正确的 API Key',
+      };
+    }
+    if (hasKey.value && serverAuth.value === 'ok' && authMode.value === 'enforced') {
+      return {
+        type: 'success',
+        text: '已鉴权',
+        title: '服务端要求 API Key，且当前 Key 已通过业务请求校验',
       };
     }
     if (hasKey.value) {
-      const ok = serverAuth.value === 'ok' && authEnforced.value === 'enforced';
-      if (ok) {
-        return {
-          type: 'success',
-          text: '已鉴权',
-          title: '无 Key 会被拒绝，且当前 Key 已通过校验',
-        };
-      }
-      if (serverAuth.value === 'ok' && authEnforced.value === 'unknown') {
-        return {
-          type: 'warning',
-          text: '已填 Key',
-          title: '正在确认服务端是否真正校验 API Key…',
-        };
-      }
       return {
         type: 'warning',
         text: '已填 Key',
-        title: '本地已保存 Key，尚未确认服务端是否接受（无 Key 请求须 401 才算鉴权生效）',
+        title:
+          authMode.value === 'unknown'
+            ? '已保存 Key，正在读取服务端鉴权模式…'
+            : '已保存 Key，等待业务接口确认',
       };
     }
-    if (serverAuth.value === 'ok') {
-      if (!isLocalHost.value) {
-        return {
-          type: 'error',
-          text: '须填 Key',
-          title: '公网访问必须填写 API Key',
-        };
-      }
+    if (authMode.value === 'enforced') {
       return {
-        type: 'success',
-        text: '已连通',
-        title: '本机打开且接口可用，通常不用填 Key',
+        type: 'warning',
+        text: '须填 Key',
+        title: '服务端要求 API Key（见 config/server_config/api_key.json）',
       };
     }
     return {
       type: 'warning',
-      text: isLocalHost.value ? '未填 Key' : '须填 Key',
-      title: isLocalHost.value
-        ? '还没填 API Key，也还没确认接口是否放行'
-        : '公网访问请填写 API Key（见服务端 api_key.json）',
+      text: '未填 Key',
+      title: '尚未填写 API Key，也尚未确认服务端鉴权模式',
     };
   });
 
   function setApiKey(value) {
     apiKey.value = String(value || '');
     serverAuth.value = 'unknown';
-    authEnforced.value = 'unknown';
+    authMode.value = 'unknown';
     keyEpoch.value += 1;
     if (apiKey.value) localStorage.setItem(KEY, apiKey.value);
     else localStorage.removeItem(KEY);
-    void probeAuthEnforcement({ force: true });
+    void refreshAuthMode({ force: true });
   }
 
   function noteAuthorized() {
@@ -104,36 +81,38 @@ export const useAuthStore = defineStore('auth', () => {
 
   function noteUnauthorized() {
     serverAuth.value = 'unauthorized';
-    authEnforced.value = 'enforced';
+    authMode.value = 'enforced';
   }
 
   /**
-   * 故意不带 Key 打一枪：401 → 鉴权生效；200 → 旁路。
-   * 只在启动 / 改 Key 时调用，勿挂在每次业务成功上（否则日志会被无 Key 的 401 刷屏）。
+   * 读公开 GET /api/system/auth-mode（免 Key）。
    * @param {{ force?: boolean }} [opts]
    */
-  async function probeAuthEnforcement(opts = {}) {
-    if (!opts.force && authEnforced.value !== 'unknown') return authEnforced.value;
-    if (!opts.force && probeInflight) return probeInflight;
+  async function refreshAuthMode(opts = {}) {
+    if (!opts.force && authMode.value !== 'unknown') return authMode.value;
+    if (!opts.force && modeInflight) return modeInflight;
 
-    probeInflight = (async () => {
+    modeInflight = (async () => {
       try {
-        const res = await fetch(`${window.location.origin}/api/system/status`, {
+        const res = await fetch(`${window.location.origin}${AUTH_MODE_PATH}`, {
           method: 'GET',
           cache: 'no-store',
           signal: abortTimeout(8000),
         });
-        if (res.status === 401) authEnforced.value = 'enforced';
-        else if (res.ok) authEnforced.value = 'bypass';
+        if (!res.ok) return authMode.value;
+        const json = await res.json().catch(() => null);
+        if (!json) return authMode.value;
+        const body = json.success === true ? unwrapSuccess(json) : json;
+        authMode.value = body?.requiresKey === true ? 'enforced' : 'bypass';
       } catch {
         /* 网络失败不改状态 */
       } finally {
-        probeInflight = null;
+        modeInflight = null;
       }
-      return authEnforced.value;
+      return authMode.value;
     })();
 
-    return probeInflight;
+    return modeInflight;
   }
 
   function applyTheme(isDark) {
@@ -157,14 +136,13 @@ export const useAuthStore = defineStore('auth', () => {
     keyEpoch,
     dark,
     hasKey,
-    isLocalHost,
     serverAuth,
-    authEnforced,
+    authMode,
     authBadge,
     setApiKey,
     noteAuthorized,
     noteUnauthorized,
-    probeAuthEnforcement,
+    refreshAuthMode,
     toggleDark,
     initTheme,
   };
