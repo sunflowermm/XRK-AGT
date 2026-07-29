@@ -1,6 +1,22 @@
 import PluginBase from './plugin-base.js'
 
 /**
+ * tasker 短名 → 与 Listener.markAdapter / EventNormalizer 一致的旗标。
+ * 禁止再用 `is${Capitalize(tasker)}`（会把 onebot 写成 isOnebot，与 isOneBot 并存）。
+ */
+const TASKER_FLAG = Object.freeze({
+  onebot: 'isOneBot',
+  opqbot: 'isOpqbot',
+  stdin: 'isStdin',
+  device: 'isDevice',
+})
+
+function flagForTasker(tasker) {
+  if (!tasker) return ''
+  return TASKER_FLAG[tasker] || `is${tasker.charAt(0).toUpperCase()}${tasker.slice(1)}`
+}
+
+/**
  * Enhancer基类
  * 提供通用的增强逻辑，减少重复代码
  */
@@ -22,7 +38,8 @@ export default class EnhancerBase extends PluginBase {
    */
   isTargetEvent(e, taskerName) {
     if (!this.tasker) return false
-    return taskerName === this.tasker || e[`is${this.tasker.charAt(0).toUpperCase() + this.tasker.slice(1)}`] === true
+    const flag = flagForTasker(this.tasker)
+    return taskerName === this.tasker || e[flag] === true
   }
 
   /**
@@ -31,12 +48,13 @@ export default class EnhancerBase extends PluginBase {
    */
   enhanceEvent(e) {
     if (!this.tasker) return
-    
-    // 设置任务类型标识
-    e[`is${this.tasker.charAt(0).toUpperCase() + this.tasker.slice(1)}`] = true
+
+    const flag = flagForTasker(this.tasker)
+    if (flag && !e[flag]) e[flag] = true
+    // 错写 isOnebot 等历史字段：有规范旗标时清掉
+    if (flag === 'isOneBot' && e.isOnebot != null && e.isOneBot) delete e.isOnebot
     e.tasker = this.tasker
-    
-    // 确保日志文本
+
     this.ensureLogText(e, this.name || 'Enhancer', this.getEventScope(e), this.getEventType(e))
   }
 

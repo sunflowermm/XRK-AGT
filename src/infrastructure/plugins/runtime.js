@@ -78,6 +78,9 @@ class RuntimeExtensionRegistry {
 
 const extensionRegistry = new RuntimeExtensionRegistry()
 
+/** 事件句柄放 WeakMap，避免 own 属性 `runtime.e` ↔ `e.runtime` 自指嵌套 */
+const runtimeEvents = new WeakMap()
+
 /**
  * 核心运行时类
  * 
@@ -102,7 +105,7 @@ const extensionRegistry = new RuntimeExtensionRegistry()
  */
 export default class PluginRuntime {
   constructor(e) {
-    this.e = e
+    runtimeEvents.set(this, e)
     this._extensions = {}
 
     this.handler = {
@@ -113,6 +116,11 @@ export default class PluginRuntime {
 
     // 动态加载已注册的扩展
     this._loadExtensions()
+  }
+
+  /** @returns {object|undefined} 当前事件（API：e.runtime.e / this.e） */
+  get e() {
+    return runtimeEvents.get(this)
   }
 
   /**

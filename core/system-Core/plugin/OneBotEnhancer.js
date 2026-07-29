@@ -18,7 +18,7 @@ export default class OneBotEnhancer extends EnhancerBase {
   }
 
   enhanceEvent(e) {
-    super.enhanceEvent(e) // 设置 isOnebot, tasker 和 logText
+    super.enhanceEvent(e) // 设置 isOneBot, tasker 和 logText
 
     // 设置消息类型标识（EventNormalizer已处理message_type，这里补充标识）
     e.isPrivate = e.message_type === 'private' || (!e.group_id && e.user_id)

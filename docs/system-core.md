@@ -412,7 +412,7 @@ flowchart LR
 
 - **OneBotEnhancer**  
   - OneBotv11 事件增强插件（位于 `core/system-Core/plugin/OneBotEnhancer.js`）  
-  - 负责为 OneBot 事件挂载 `isOneBot/isPrivate/isGroup/friend/group/member` 等属性，并统一日志格式、别名与 onlyReplyAt 策略。
+  - 负责为 OneBot 事件挂载 `isOneBot`（与 `markAdapter` 同名，勿再写 `isOnebot`）、`isPrivate/isGroup/friend/group/member` 等，并统一日志、别名与 onlyReplyAt。
 - **OPQEnhancer**  
   - OPQ 协议增强插件，补齐 OPQ 事件的 Tasker 特定字段与日志文本。
 - **DeviceEnhancer**  
