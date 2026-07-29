@@ -79,3 +79,14 @@ status:
   showProcess: true
   showDisk: true
 
+# ----------------------------------------
+# 自动更新（update 插件定时任务）
+# ----------------------------------------
+autoUpdate:
+  # 是否启用自动更新
+  enabled: true
+  # node-schedule：秒 分 时 日 月 周（默认每天 12:00）；也可写数组挂多条
+  cron: "0 0 12 * * *"
+  # 冲突才强制（与 #全部强制更新 同策略）
+  forceOnConflict: true
+

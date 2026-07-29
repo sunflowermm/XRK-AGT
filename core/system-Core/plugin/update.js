@@ -1,37 +1,107 @@
-import { createRequire } from 'module'
-import lodash from 'lodash'
+/**
+ * 更新 — 对齐 Yunzai/TRSS「全部更新」习惯：
+ * - #强制更新[ Core]：始终 reset --hard
+ * - #全部(强制)更新：先普通 pull；仅冲突时再强制（已最新不强制）
+ * - 静默 / 定时：跳过「开始」「已是最新」；有更新或失败才说话（群/主人）
+ */
 import fs from 'node:fs'
+import path from 'node:path'
+import lodash from 'lodash'
 import common from '#utils/common.js'
+import { exec } from '#utils/exec-async.js'
+import runtimeConfig from '#infrastructure/config/config.js'
+import { EXIT_RESTART } from '#utils/process-signals.js'
 import { Restart } from './restart.js'
 
-const require = createRequire(import.meta.url)
-const { execSync } = require('child_process')
+const GIT_TIMEOUT_MS = 600_000
+const DEFAULT_CRON = '0 0 12 * * *'
+const CONFLICT_RE = /be overwritten by merge|CONFLICT|Would be overwritten|unmerged|needs merge/i
 
 let uping = false
+
+/** @typedef {'hard'|'onConflict'|'none'} ForceMode */
+
+function autoUpdateCfg() {
+  return runtimeConfig.agt?.autoUpdate || {}
+}
+
+function cronList(cfg) {
+  const raw = cfg.cron
+  const list = Array.isArray(raw) ? raw : (raw != null && String(raw).trim() ? [raw] : [DEFAULT_CRON])
+  return list.map((c) => String(c).trim()).filter(Boolean)
+}
 
 export class update extends PluginBase {
   constructor() {
     super({
       name: '更新',
-      dsc: '#更新 #强制更新',
+      dsc: '#更新 #强制更新 #全部更新；静默/定时有变更才通知',
       event: 'message',
       priority: 4000,
       rule: [
-        {
-          reg: '^#(强制)?更新(?:\\s*(.*))?$',
-          fnc: 'update'
-        },
-        {
-          reg: '^#(静默)?全部(强制)?更新$',
-          fnc: 'updateAll',
-          permission: 'master'
-        },
-        {
-          reg: '^#(?:更新|查看)?日志(?:\\s*(.*))?$',
-          fnc: 'updateLog'
-        }
-      ]
+        { reg: '^#(强制)?更新(?:\\s*(.*))?$', fnc: 'update' },
+        { reg: '^#(静默)?全部(强制)?更新$', fnc: 'updateAll', permission: 'master' },
+        { reg: '^#(?:更新|查看)?日志(?:\\s*(.*))?$', fnc: 'updateLog' },
+      ],
     })
+  }
+
+  /** 对齐 TRSS：静默消息不刷「开始 / 已是最新」 */
+  get quiet() {
+    return /^#静默全部(强制)?更新$/.test(this.e?.msg || '')
+  }
+
+  async init() {
+    const cfg = autoUpdateCfg()
+    if (cfg.enabled === false) {
+      this.task = null
+      return
+    }
+
+    const tasks = cronList(cfg).map((cron) => ({
+      name: '定时更新',
+      cron,
+      fnc: () => this.scheduledUpdateAll(),
+      log: false,
+    }))
+    this.task = tasks.length === 1 ? tasks[0] : tasks
+  }
+
+  /** @returns {ForceMode} */
+  _forceModeFromMsg(msg = '') {
+    if (/^#强制更新/.test(msg)) return 'hard'
+    if (/全部强制更新/.test(msg)) return 'onConflict'
+    return 'none'
+  }
+
+  async _git(cmd, cwd) {
+    try {
+      const { stdout, stderr } = await exec(cmd, {
+        cwd,
+        timeout: GIT_TIMEOUT_MS,
+        windowsHide: true,
+        encoding: 'utf8',
+        maxBuffer: 10 * 1024 * 1024,
+      })
+      return { ok: true, stdout: String(stdout || ''), stderr: String(stderr || '') }
+    } catch (err) {
+      return {
+        ok: false,
+        error: err,
+        stdout: String(err?.stdout || ''),
+        stderr: String(err?.stderr || ''),
+        message: String(err?.message || err),
+      }
+    }
+  }
+
+  _isConflict(ret) {
+    const blob = `${ret.message || ''}\n${ret.stdout || ''}\n${ret.stderr || ''}`
+    return CONFLICT_RE.test(blob)
+  }
+
+  _isLatest(stdout) {
+    return /Already up|已经是最新/i.test(stdout || '')
   }
 
   async update() {
@@ -43,33 +113,22 @@ export class update extends PluginBase {
     if (/详细|详情|面板|面版/.test(this.e.msg)) return false
 
     uping = true
-    const updatedTargets = new Set()
     let isUp = false
-    const oldCommitId = null
-    
     try {
       const targetName = (this.e.msg.replace(/#(强制)?更新/, '').trim()) || ''
+      const forceMode = this._forceModeFromMsg(this.e.msg)
 
       if (targetName) {
-        // 更新指定 Core
         if (!this.isValidGitCore(targetName)) {
           await this.reply(`指定的 Core 目录 ${targetName} 不存在或不是有效的 git 仓库`)
           return false
         }
-        const result = await this.runUpdate(targetName, oldCommitId)
-        if (result) {
-          updatedTargets.add(targetName)
-          isUp = true
-        }
+        const result = await this.runUpdate(targetName, { forceMode })
+        isUp = !!result.updated
       } else {
-        // 更新整个项目
-        const result = await this.runUpdate('', oldCommitId)
-        if (result) {
-          updatedTargets.add('project-root')
-          isUp = true
-        }
+        const result = await this.runUpdate('', { forceMode })
+        isUp = !!result.updated
       }
-
       this._scheduleRestartIfUpdated(isUp)
     } catch (error) {
       logger.error(`更新失败: ${error.message}`, error)
@@ -78,95 +137,115 @@ export class update extends PluginBase {
     } finally {
       uping = false
     }
-    
     return true
   }
 
-
-
-  async runUpdate(coreName = '', oldCommitId = null) {
+  /**
+   * @param {string} coreName
+   * @param {{ forceMode?: ForceMode, muteStart?: boolean, quiet?: boolean }} [opts]
+   * @returns {Promise<{ updated: boolean, status: string, lines: string[] }>}
+   */
+  async runUpdate(coreName = '', opts = {}) {
+    const forceMode = opts.forceMode ?? this._forceModeFromMsg(this.e?.msg || '')
     const isProjectUpdate = !coreName
-    const targetPath = isProjectUpdate ? '.' : `./core/${coreName}`
+    const targetPath = isProjectUpdate ? '.' : path.join('core', coreName)
     const targetDisplayName = isProjectUpdate ? 'XRK-AGT 项目' : coreName
-    const isForce = this.e.msg.includes('强制')
-    const type = isForce ? '强制更新' : '更新'
-    const cm = isForce 
-      ? `git reset --hard && git pull --rebase --allow-unrelated-histories`
-      : 'git pull --no-rebase'
-
-    const currentOldCommitId = oldCommitId || await this.getCommitId(targetPath)
-    logger.mark(`${this.e.logFnc} 开始${type}：${targetDisplayName}`)
-    await this.reply(`开始${type} ${targetDisplayName}`)
-
-    try {
-      const stdout = execSync(cm, { cwd: targetPath, encoding: 'utf-8', windowsHide: true })
-      const time = await this.getTime(targetPath)
-      
-      if (/Already up|已经是最新/g.test(stdout)) {
-        await this.reply(`${targetDisplayName} 已是最新\n最后更新时间：${time}`)
-        return false
-      } else {
-        await this.reply(`${targetDisplayName} 更新成功\n更新时间：${time}`)
-        const updateLog = await this.getLog(targetPath, targetDisplayName, currentOldCommitId)
-        if (updateLog) {
-          await this.reply(updateLog)
-        }
-        logger.mark(`${this.e.logFnc} 最后更新时间：${time}`)
-        return true
-      }
-    } catch (error) {
-      logger.error(`${this.e.logFnc} 更新失败：${targetDisplayName}`, error)
-      await this.handleGitError(error, error.stdout || error.stderr || '')
-      return false
+    const lines = []
+    const reply = async (msg) => {
+      lines.push(msg)
+      if (this.reply) await this.reply(msg)
     }
+
+    const softCmd = 'git pull --no-rebase'
+    const hardCmd = 'git reset --hard && git pull --rebase --allow-unrelated-histories'
+    const oldCommitId = await this.getCommitId(targetPath)
+
+    if (forceMode === 'hard') {
+      if (!opts.muteStart) await reply(`开始强制更新 ${targetDisplayName}`)
+      if (!opts.quiet) logger.mark(`${this.e?.logFnc || '[更新]'} 强制更新：${targetDisplayName}`)
+      const ret = await this._git(hardCmd, targetPath)
+      return this._finishUpdate(ret, {
+        targetPath, targetDisplayName, oldCommitId, lines, reply, forced: true, quiet: opts.quiet,
+      })
+    }
+
+    if (!opts.muteStart) await reply(`开始更新 ${targetDisplayName}`)
+    if (!opts.quiet) logger.mark(`${this.e?.logFnc || '[更新]'} 更新：${targetDisplayName}`)
+    let ret = await this._git(softCmd, targetPath)
+
+    if (!ret.ok && forceMode === 'onConflict' && this._isConflict(ret)) {
+      await reply(`${targetDisplayName} 拉取冲突，改为强制更新…`)
+      if (!opts.quiet) logger.mark(`${this.e?.logFnc || '[更新]'} 冲突后强制：${targetDisplayName}`)
+      ret = await this._git(hardCmd, targetPath)
+      return this._finishUpdate(ret, {
+        targetPath, targetDisplayName, oldCommitId, lines, reply, forced: true, quiet: opts.quiet,
+      })
+    }
+
+    if (!ret.ok) {
+      await this.handleGitError(ret.error || new Error(ret.message), ret.stdout || ret.stderr)
+      lines.push(`更新失败：${targetDisplayName}`)
+      return { updated: false, status: 'failed', lines }
+    }
+
+    return this._finishUpdate(ret, {
+      targetPath, targetDisplayName, oldCommitId, lines, reply, forced: false, quiet: opts.quiet,
+    })
   }
 
+  async _finishUpdate(ret, ctx) {
+    const { targetPath, targetDisplayName, oldCommitId, lines, reply, forced, quiet } = ctx
+    if (!ret.ok) {
+      await this.handleGitError(ret.error || new Error(ret.message), ret.stdout || ret.stderr)
+      lines.push(`更新失败：${targetDisplayName}`)
+      return { updated: false, status: 'failed', lines }
+    }
 
+    const time = await this.getTime(targetPath)
+    if (this._isLatest(ret.stdout)) {
+      // 定时任务不收集「已是最新」
+      if (!quiet) await reply(`${targetDisplayName} 已是最新\n最后更新时间：${time}`)
+      else lines.push(`${targetDisplayName} 已是最新`)
+      return { updated: false, status: 'latest', lines }
+    }
+
+    const tag = forced ? '强制更新成功' : '更新成功'
+    await reply(`${targetDisplayName} ${tag}\n更新时间：${time}`)
+    const updateLog = await this.getLog(targetPath, targetDisplayName, oldCommitId)
+    if (updateLog) await reply(updateLog)
+    if (!quiet) logger.mark(`${this.e?.logFnc || '[更新]'} ${tag}：${targetDisplayName} @ ${time}`)
+    return { updated: true, status: forced ? 'forced' : 'updated', lines }
+  }
 
   async getCommitId(cwd = '.') {
-    try {
-      return lodash.trim(execSync('git rev-parse --short HEAD', { cwd, encoding: 'utf-8', windowsHide: true }))
-    } catch (error) {
-      logger.error(`获取 commit ID 失败 [${cwd}]:`, error)
-      return 'unknown'
-    }
+    const ret = await this._git('git rev-parse --short HEAD', cwd)
+    return ret.ok ? lodash.trim(ret.stdout) : 'unknown'
   }
 
   async getTime(cwd = '.') {
-    try {
-      return lodash.trim(execSync('git log -1 --pretty=%cd --date=format:"%F %T"', {
-        cwd,
-        encoding: 'utf-8',
-        windowsHide: true
-      })) || '获取时间失败'
-    } catch (error) {
-      logger.error(`获取时间失败 [${cwd}]:`, error)
-      return '获取时间失败'
-    }
+    const ret = await this._git('git log -1 --pretty=%cd --date=format:"%F %T"', cwd)
+    return ret.ok ? (lodash.trim(ret.stdout) || '获取时间失败') : '获取时间失败'
   }
 
   async handleGitError(err, stdout) {
     const msg = '更新失败！'
     const errMsg = err?.message || String(err)
     const stdoutStr = String(stdout || '')
-    const errorMap = [
-      {
-        test: /Timed out|timeout/i,
-        message: (msg) => `${msg}\n连接超时：${this.extractRemoteUrl(errMsg)}`
-      },
-      {
-        test: /Failed to connect|unable to access|Could not read from remote/i,
-        message: (msg) => `${msg}\n连接失败：${this.extractRemoteUrl(errMsg)}`
-      },
-      {
-        test: /be overwritten by merge|CONFLICT/i,
-        message: (msg) => `${msg}\n存在冲突，请解决冲突后再更新，或者执行#强制更新，放弃本地修改`
-      }
-    ]
-
-    const matchedError = errorMap.find(e => e.test.test(errMsg) || e.test.test(stdoutStr))
-    const errorMessage = matchedError ? matchedError.message(msg) : `${msg}\n${errMsg}${stdoutStr ? '\n' + stdoutStr : ''}`
-    await this.reply(errorMessage)
+    if (/Timed out|ETIMEDOUT|timeout/i.test(errMsg)) {
+      await this.reply?.(`${msg}\n命令超时（>${Math.round(GIT_TIMEOUT_MS / 60000)} 分钟），请检查网络`)
+      return
+    }
+    if (/Failed to connect|unable to access|Could not read from remote/i.test(errMsg)) {
+      await this.reply?.(`${msg}\n连接失败：${this.extractRemoteUrl(errMsg)}`)
+      return
+    }
+    if (CONFLICT_RE.test(errMsg) || CONFLICT_RE.test(stdoutStr)) {
+      await this.reply?.(
+        `${msg}\n存在冲突，请解决后再更新；或对单仓执行 #强制更新 <Core名> / #强制更新（根仓）放弃本地修改`
+      )
+      return
+    }
+    await this.reply?.(`${msg}\n${errMsg}${stdoutStr ? `\n${stdoutStr}` : ''}`)
   }
 
   extractRemoteUrl(str) {
@@ -175,119 +254,217 @@ export class update extends PluginBase {
 
   isValidGitCore(coreName) {
     if (!coreName) return false
-    const corePath = `core/${coreName}`
-    return fs.existsSync(corePath) && 
-           fs.statSync(corePath).isDirectory() && 
-           fs.existsSync(`${corePath}/.git`)
+    const corePath = path.join('core', coreName)
+    return fs.existsSync(corePath)
+      && fs.statSync(corePath).isDirectory()
+      && fs.existsSync(path.join(corePath, '.git'))
   }
 
-  async updateAll() {
-    if (!this.e.isMaster) return false
-    
-    const updatedTargets = new Set()
-    const messages = []
-    let isUp = false
-    const oldCommitId = null
-
-    const isSilent = /^#静默全部(强制)?更新$/.test(this.e.msg)
-    const originalReply = this.reply
-    if (isSilent) {
-      await this.reply(`开始执行静默全部更新，请稍等...`)
-      this.reply = (message) => {
-        messages.push(message)
-      }
+  /**
+   * @param {{ forceMode?: ForceMode, silent?: boolean, fromSchedule?: boolean }} [opts]
+   */
+  async updateAll(opts = {}) {
+    if (this.e && !this.e.isMaster) return false
+    if (uping) {
+      await this.reply?.('已有命令更新中..请勿重复操作')
+      return false
     }
+
+    const msg = this.e?.msg || ''
+    const cfg = autoUpdateCfg()
+    const isSilent = opts.silent === true || opts.fromSchedule === true || this.quiet
+    const forceMode = opts.forceMode ?? (
+      opts.fromSchedule
+        ? (cfg.forceOnConflict === false ? 'none' : 'onConflict')
+        : this._forceModeFromMsg(msg)
+    )
+    // 对齐 TRSS quiet：静默不刷开始/已是最新，有更新或失败才汇总出口
+    const quiet = isSilent
+
+    const collected = []
+    const originalReply = this.reply?.bind(this)
+    if (isSilent) {
+      this.reply = async (message) => {
+        collected.push(message)
+      }
+    } else if (forceMode === 'onConflict') {
+      await this.reply?.('开始全部更新：已最新跳过强制，遇冲突再强制…')
+    }
+
+    uping = true
+    let isUp = false
+    const summary = { updated: [], latest: [], forced: [], failed: [] }
 
     try {
-      const coreDir = './core'
+      const coreDir = path.join('.', 'core')
       if (fs.existsSync(coreDir)) {
-        const coreSubdirs = fs.readdirSync(coreDir)
-        for (const subdir of coreSubdirs) {
-          if (updatedTargets.has(subdir)) continue
+        for (const subdir of fs.readdirSync(coreDir)) {
           if (!this.isValidGitCore(subdir)) continue
-          
-          await common.sleep(1500)
-          const result = await this.runUpdate(subdir, oldCommitId)
-          if (result) {
-            updatedTargets.add(subdir)
-            isUp = true
-          }
+          await common.sleep(quiet ? 400 : 800)
+          const result = await this.runUpdate(subdir, { forceMode, muteStart: isSilent, quiet })
+          if (result.updated) isUp = true
+          if (result.status === 'updated') summary.updated.push(subdir)
+          else if (result.status === 'latest') summary.latest.push(subdir)
+          else if (result.status === 'failed') summary.failed.push(subdir)
+          else if (result.status === 'forced') summary.forced.push(subdir)
         }
       }
-      
-      // 最后更新项目根目录
-      if (!updatedTargets.has('project-root')) {
-        const result = await this.runUpdate('', oldCommitId)
-        if (result) {
-          updatedTargets.add('project-root')
-          isUp = true
-        }
-      }
+
+      await common.sleep(quiet ? 400 : 800)
+      const root = await this.runUpdate('', { forceMode, muteStart: isSilent, quiet })
+      if (root.updated) isUp = true
+      const rootLabel = 'XRK-AGT'
+      if (root.status === 'updated') summary.updated.push(rootLabel)
+      else if (root.status === 'latest') summary.latest.push(rootLabel)
+      else if (root.status === 'failed') summary.failed.push(rootLabel)
+      else if (root.status === 'forced') summary.forced.push(rootLabel)
     } catch (error) {
-      logger.error(`检查core目录失败: ${error.message}`, error)
-      if (!isSilent) {
-        await this.reply(`更新过程中出错: ${error.message}`)
-      }
+      logger.error(`全部更新失败: ${error.message}`, error)
+      collected.push(`更新过程中出错: ${error.message}`)
+      summary.failed.push('(过程异常)')
+      if (!isSilent) await this.reply?.(`更新过程中出错: ${error.message}`)
     } finally {
-      if (isSilent) {
-        this.reply = originalReply
-        if (messages.length > 0) {
-          await this.reply(await common.makeForwardMsg(this.e, messages))
-        }
-      }
+      uping = false
+      if (isSilent && originalReply) this.reply = originalReply
     }
 
-    this._scheduleRestartIfUpdated(isUp)
+    const hasNews = isUp || summary.failed.length > 0
+    const digest = this._formatSummary(summary, forceMode, { omitLatest: isSilent })
+    const pack = [
+      digest,
+      ...collected.filter((m) => typeof m !== 'string' || !/已是最新/.test(m)),
+    ].filter(Boolean)
+
+    if (opts.fromSchedule) {
+      if (hasNews) await this.notifyMasters(pack, '定时更新汇总')
+      this._scheduleRestartIfUpdated(isUp, true)
+      return true
+    }
+
+    if (isSilent) {
+      // 群里/会话：有更新或失败才发汇总；全是最新不说话
+      if (hasNews && originalReply && pack.length) {
+        await originalReply(await common.makeForwardMsg(this.e, pack, '全部更新汇总'))
+      }
+    } else {
+      await this.reply?.(digest)
+    }
+
+    this._scheduleRestartIfUpdated(isUp, false)
     return true
   }
 
-  /** 有拉取到新代码时延迟重启，逻辑只保留一处 */
-  _scheduleRestartIfUpdated(didUpdate) {
-    if (didUpdate) setTimeout(() => new Restart(this.e).restart(), 2000)
+  _formatSummary(summary, forceMode, opts = {}) {
+    const modeHint = forceMode === 'hard'
+      ? '模式：硬强制'
+      : forceMode === 'onConflict'
+        ? '模式：冲突才强制'
+        : '模式：普通拉取'
+    const lines = [
+      `【更新汇总】${modeHint}`,
+      summary.updated.length ? `已更新：${summary.updated.join('、')}` : null,
+      summary.forced.length ? `冲突后强制：${summary.forced.join('、')}` : null,
+      (!opts.omitLatest && summary.latest.length) ? `已是最新：${summary.latest.length} 个` : null,
+      summary.failed.length ? `失败：${summary.failed.join('、')}` : null,
+    ].filter(Boolean)
+    if (lines.length === 1) lines.push('无仓库变更')
+    return lines.join('\n')
+  }
+
+  /** 定时入口：假 e + 静默全部（对齐 TRSS init 里的 #全部静更新） */
+  async scheduledUpdateAll() {
+    if (uping) return
+    this.e = {
+      isMaster: true,
+      msg: '#静默全部强制更新',
+      logFnc: '[定时更新]',
+      user_id: runtimeConfig.masterQQ?.[0],
+    }
+    try {
+      await this.updateAll({ silent: true, fromSchedule: true })
+    } catch (err) {
+      logger.error(`[更新] 定时更新失败: ${err?.message || err}`, err)
+    }
+  }
+
+  async notifyMasters(messages, title = '更新汇总') {
+    const masters = (runtimeConfig.masterQQ || []).map((q) => String(q)).filter(Boolean)
+    const botIds = (Array.isArray(AgentRuntime.uin) ? [...AgentRuntime.uin] : [])
+      .map(String)
+      .filter((id) => id && id !== 'stdin')
+    if (!masters.length || !botIds.length) return
+
+    const flat = messages.flatMap((m) => {
+      if (m == null) return []
+      if (typeof m === 'string' || typeof m === 'number') return [String(m)]
+      return [m]
+    })
+    if (!flat.length) return
+
+    for (const botId of botIds) {
+      const bot = AgentRuntime[botId]
+      if (!bot) continue
+      for (const qq of masters) {
+        try {
+          let payload = flat.join('\n\n')
+          const friend = bot.pickFriend?.(qq) || bot.pickFriend?.(Number(qq))
+          if (friend?.makeForwardMsg) {
+            const nodes = [{ message: title }, ...flat.map((message) => ({ message }))]
+            payload = await friend.makeForwardMsg(nodes)
+          } else {
+            payload = `${title}\n\n${payload}`
+          }
+          await AgentRuntime.sendFriendMsg(botId, qq, payload)
+        } catch (err) {
+          logger.error(`[更新] 推送主人失败 ${botId}/${qq}: ${err?.message || err}`)
+        }
+      }
+    }
+  }
+
+  _scheduleRestartIfUpdated(didUpdate, fromSchedule = false) {
+    if (!didUpdate) return
+    if (fromSchedule) {
+      setTimeout(() => process.exit(EXIT_RESTART), 2000)
+      return
+    }
+    setTimeout(() => new Restart(this.e).restart(), 2000)
   }
 
   async getLog(cwd = '.', displayName = '', oldCommitId = null) {
     try {
-      // 获取最近的100条提交日志
-      const logAll = execSync(
-        'git log -100 --pretty="%h||[%cd] %s" --date=format:\"%F %T\"',
-        { cwd, encoding: 'utf-8', windowsHide: true }
+      const ret = await this._git(
+        'git log -100 --pretty="%h||[%cd] %s" --date=format:"%F %T"',
+        cwd
       )
+      if (!ret.ok || !ret.stdout) return false
 
-      if (!logAll) return false
-
-      // 处理日志行，过滤掉合并提交
-      const logLines = logAll.trim().split('\n')
       const log = []
-      
-      for (const str of logLines) {
+      for (const str of ret.stdout.trim().split('\n')) {
         const parts = str.split('||')
         if (oldCommitId && parts[0] === oldCommitId) break
         if (parts[1]?.includes('Merge branch')) continue
         log.push(parts[1])
       }
-      
-      const line = log.length
-      const logText = log.join('\n\n')
-      if (logText.length <= 0) return ''
+      if (!log.length) return ''
 
-      // 获取仓库URL
       let repoUrl = ''
-      try {
-        const config = execSync('git config -l', { cwd, encoding: 'utf-8', windowsHide: true })
-        repoUrl = config
+      const cfg = await this._git('git config -l', cwd)
+      if (cfg.ok) {
+        repoUrl = cfg.stdout
           ?.match(/remote\..*\.url=.+/g)
-          ?.map(url => url.replace(/remote\..*\.url=/, '').replace(/\/\/([^@]+)@/, '//'))
+          ?.map((url) => url.replace(/remote\..*\.url=/, '').replace(/\/\/([^@]+)@/, '//'))
           .join('\n\n') || ''
-      } catch (error) {
-        logger.error('获取仓库URL失败:', error)
       }
 
-      return common.makeForwardMsg(
-        this.e, 
-        [logText, repoUrl].filter(Boolean), 
-        `${displayName} 更新日志，共${line}条`
-      )
+      if (this.e?.group || this.e?.friend) {
+        return common.makeForwardMsg(
+          this.e,
+          [log.join('\n\n'), repoUrl].filter(Boolean),
+          `${displayName} 更新日志，共${log.length}条`
+        )
+      }
+      return `${displayName} 更新日志，共${log.length}条\n\n${log.join('\n')}${repoUrl ? `\n\n${repoUrl}` : ''}`
     } catch (error) {
       logger.error('获取更新日志失败:', error)
       return `获取更新日志失败: ${error.message}`
@@ -296,15 +473,13 @@ export class update extends PluginBase {
 
   async updateLog() {
     const targetName = (this.e.msg.replace(/#(?:更新|查看)?日志/, '').trim()) || ''
-    
     if (targetName) {
       if (!this.isValidGitCore(targetName)) {
         await this.reply(`指定的 Core 目录 ${targetName} 不存在或不是有效的 git 仓库`)
         return false
       }
-      return this.reply(await this.getLog(`./core/${targetName}`, targetName))
+      return this.reply(await this.getLog(path.join('core', targetName), targetName))
     }
-    
     return this.reply(await this.getLog('.', 'XRK-AGT 项目'))
   }
 }

@@ -6,153 +6,130 @@
   <title>{{ title }}</title>
   <base href="{{ _baseUrl }}/">
   <style>
-    @font-face {
-      font-family: "Genshin";
-      src: url("resources/fonts/Genshin.ttf") format("truetype");
-      font-weight: 400;
-      font-style: normal;
-      font-display: swap;
-    }
     :root {
-      --bg-0: #0a1222;
-      --bg-1: #111d33;
-      --card: rgba(255, 255, 255, 0.07);
-      --card-border: rgba(255, 255, 255, 0.14);
-      --text-main: #f2f6ff;
-      --text-sub: rgba(242, 246, 255, 0.72);
-      --text-muted: rgba(242, 246, 255, 0.5);
-      --accent: #57d5ff;
-      --accent-soft: rgba(87, 213, 255, 0.18);
-      --ok: #49e7b4;
+      --bg: #0f1210;
+      --sheet: #171b17;
+      --line: #2c352c;
+      --ink: #e4ebdf;
+      --dim: #8a9584;
+      --cmd: #b6e36a;
+      --head: #f0c35a;
     }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
-      font-family: "Genshin", "原神", "Noto Sans SC", "PingFang SC", "Microsoft YaHei UI", sans-serif;
-      -webkit-font-smoothing: antialiased;
-      background:
-        radial-gradient(900px 420px at 10% -10%, #1d3e74 0%, transparent 65%),
-        radial-gradient(720px 360px at 100% 0%, #0f4f64 0%, transparent 58%),
-        linear-gradient(155deg, var(--bg-0) 0%, var(--bg-1) 100%);
+      font-family: "Cascadia Mono", "Sarasa Mono SC", "Consolas", "Microsoft YaHei UI", monospace;
+      background: var(--bg);
+      color: var(--ink);
       min-height: 100vh;
-      padding: 38px 44px 52px;
-      color: var(--text-main);
-      font-size: 14px;
-      line-height: 1.55;
-      letter-spacing: 0.01em;
-    }
-    #container { max-width: 740px; margin: 0 auto; }
-    .header {
-      margin-bottom: 26px;
-      text-align: center;
-    }
-    h1 {
-      font-size: 30px;
-      font-weight: 700;
-      letter-spacing: 0.04em;
-      line-height: 1.2;
-      margin-bottom: 8px;
-    }
-    .intro {
+      padding: 24px;
       font-size: 13px;
-      color: var(--text-sub);
-      letter-spacing: 0.03em;
+      line-height: 1.4;
+      -webkit-font-smoothing: antialiased;
     }
-    .highlight {
-      margin: 16px auto 0;
-      max-width: 620px;
-      padding: 12px 16px;
-      border: 1px solid rgba(73, 231, 180, 0.38);
-      border-radius: 12px;
-      background: rgba(73, 231, 180, 0.1);
-      color: #d6ffef;
+    #container {
+      max-width: 752px;
+      margin: 0 auto;
+      background: var(--sheet);
+      border: 1px solid var(--line);
+    }
+    .mast {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--line);
+    }
+    .mast h1 {
+      font-size: 20px;
+      letter-spacing: 0.06em;
+      font-weight: 700;
+      color: #f5f8f1;
+    }
+    .mast h1 i {
+      font-style: normal;
+      color: var(--cmd);
+      margin-right: 6px;
+    }
+    .mast .sub {
+      color: var(--dim);
       font-size: 12px;
-      line-height: 1.5;
     }
-    .grid {
+    .block {
+      padding: 14px 20px 16px;
+      border-bottom: 1px solid var(--line);
+    }
+    .block:last-of-type { border-bottom: none; }
+    .name {
+      margin-bottom: 10px;
+      color: var(--head);
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.16em;
+    }
+    .name::before {
+      content: "// ";
+      color: var(--dim);
+      letter-spacing: 0;
+    }
+    .rows {
       display: grid;
       grid-template-columns: 1fr 1fr;
-      gap: 22px 20px;
-      margin-top: 24px;
+      column-gap: 28px;
+      row-gap: 6px;
     }
-    .card {
-      background: var(--card);
-      border: 1px solid var(--card-border);
-      border-radius: 14px;
-      padding: 20px 22px;
-      backdrop-filter: blur(2px);
-    }
-    .card.full { grid-column: 1 / -1; }
-    .section-title {
-      font-size: 14px;
-      font-weight: 700;
-      letter-spacing: 0.04em;
-      color: var(--text-main);
-    }
-    .section-desc {
-      margin-top: 6px;
-      margin-bottom: 16px;
-      font-size: 12px;
-      color: var(--text-muted);
-    }
+    .rows.one { grid-template-columns: 1fr; }
     .item {
       display: grid;
-      grid-template-columns: 108px 1fr;
-      gap: 10px;
-      align-items: start;
-      padding: 8px 0;
+      grid-template-columns: minmax(88px, max-content) 1fr;
+      gap: 8px 12px;
+      align-items: baseline;
+      min-width: 0;
     }
-    .item .cmd {
-      color: var(--accent);
-      font-size: 12px;
+    .cmd {
+      color: var(--cmd);
       font-weight: 700;
-      line-height: 1.45;
-      letter-spacing: 0.02em;
-      background: var(--accent-soft);
-      border: 1px solid rgba(87, 213, 255, 0.32);
-      border-radius: 8px;
-      padding: 2px 8px;
-      text-align: center;
+      font-size: 12.5px;
       white-space: nowrap;
     }
-    .item .desc {
-      color: var(--text-sub);
-      font-size: 13px;
-      line-height: 1.62;
+    .desc {
+      color: var(--ink);
+      opacity: 0.88;
+      font-size: 12.5px;
+      min-width: 0;
+      overflow-wrap: anywhere;
     }
-    .footer {
-      text-align: center;
-      font-size: 12px;
-      color: var(--text-muted);
-      margin-top: 24px;
-      padding-top: 8px;
-      border-top: 1px solid rgba(255, 255, 255, 0.1);
-      letter-spacing: 0.03em;
+    .foot {
+      display: flex;
+      justify-content: space-between;
+      padding: 10px 20px 12px;
+      border-top: 1px solid var(--line);
+      color: var(--dim);
+      font-size: 11px;
+      letter-spacing: 0.04em;
     }
+    .foot b { color: var(--cmd); font-weight: 700; }
   </style>
 </head>
 <body>
   <div id="container">
-    <div class="header">
-      <h1>{{ title }}</h1>
-      <div class="intro">{{ subtitle }}</div>
-      {{ if highlight }}
-      <div class="highlight">{{ highlight }}</div>
-      {{ /if }}
-    </div>
-    <div class="grid">
-      {{ each sections }}
-      <div class="card{{ if $value.full }} full{{ /if }}">
-        <div class="section-title">{{ $value.name }}</div>
-        {{ if $value.desc }}
-        <div class="section-desc">{{ $value.desc }}</div>
-        {{ /if }}
+    <header class="mast">
+      <h1><i>$</i>{{ title }}</h1>
+      <div class="sub">{{ subtitle }}</div>
+    </header>
+    {{ each sections }}
+    <section class="block">
+      <div class="name">{{ $value.name }}</div>
+      <div class="rows{{ if $value.full || ($value.items && $value.items.length < 3) }} one{{ /if }}">
         {{ each $value.items }}
         <div class="item"><span class="cmd">{{ $value.cmd }}</span><span class="desc">{{ $value.desc }}</span></div>
         {{ /each }}
       </div>
-      {{ /each }}
-    </div>
-    <div class="footer">{{ footer }}</div>
+    </section>
+    {{ /each }}
+    <footer class="foot">
+      <span><b>{{ footer }}</b></span>
+      <span>help</span>
+    </footer>
   </div>
 </body>
 </html>

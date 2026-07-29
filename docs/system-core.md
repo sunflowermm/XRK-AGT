@@ -429,7 +429,10 @@ flowchart LR
 - **restart** (`restart.js`)  
   - 进程级重启与启停插件：`#重启` → `exit(1)` 热重启；`#热关机`/`#停机` → Redis 标记停消息（`#开机` 恢复）；`#关机` → `exit(0)` 真关机回菜单。
 - **update** (`update.js`)  
-  - 项目与 Core 更新插件：支持 `#更新/#强制更新` 指定 Core 或整仓库，`#全部更新/#静默全部更新` 批量更新 `core/*` 与项目根目录，自动拉取 Git 日志并在更新后联动 `restart` 插件重启。
+  - `#更新` / `#强制更新[ Core]`：单仓；强制=始终 `reset --hard`。  
+  - `#全部更新` / `#全部强制更新` / `#静默…`：批量 `core/*`+根仓；「全部强制」=先普通 pull，**仅冲突再强制**，已最新不强制。
+  - `#静默全部(强制)更新`：对齐 TRSS quiet——不刷「开始 / 已是最新」；**有更新或失败**才在会话汇总；全是最新不说话。
+  - 定时（`agt.autoUpdate.cron`，默认 `12:00`；可数组）：同上静默策略，有新闻才推 `masterQQ`；有变更则热重启。
 - **sendLog** (`sendLog.js`)  
   - 运行日志发送插件：通过 `#日志/#错误日志/#追踪日志/#debug日志` 等命令，按级别/关键词筛选最近日志文件，分批生成转发消息发到群/私聊，支持通过配置调整每批行数、总行数与单行最大长度。
 - **status** (`status.js`，类名 `stattools`)  
@@ -441,7 +444,9 @@ flowchart LR
 - **mock-scheduled-stdin** (`mock-scheduled-stdin.js`)  
   - 定时 STDIN 模拟插件：每天固定时间（如 12:00）构造模拟 `stdin` 事件，通过 `PluginLoader.deal()` 触发插件系统执行预设命令（例如 `#你是谁`），用于演示和测试定时任务 + 业务链路。
 - **help** (`help.js`)  
-  - 内置命令帮助与用法说明。
+  - `#帮助`：渲染命令速查图（模板 `resources/帮助/help.html`）。
+
+![帮助页示例](../resources/mdimg/docs/help-page.png)
 - **music** (`music.js`)  
   - 点歌示例插件（外部 API 调用演示）。
 - **ai** (`ai.js`，类名 `XRKAIAssistant`)  

@@ -2,7 +2,7 @@ export class Help extends PluginBase {
   constructor() {
     super({
       name: '帮助',
-      dsc: '发送 #帮助 获取帮助页截图',
+      dsc: '#帮助',
       event: 'message',
       priority: 4000,
       rule: [{ reg: '^#帮助$', fnc: 'help' }]
@@ -14,94 +14,80 @@ export class Help extends PluginBase {
       saveId: `help_${Date.now()}`,
       imgType: 'png',
       quality: 100,
-      /** 渲染器按设备像素比截图，提高文字/边框清晰度（1–4，过大易占内存） */
       sys: { scale: 3 },
-      title: 'XRK-AGT 帮助',
-      subtitle: '常用指令速查 · 按任务分组',
-      highlight: '提示：先看「常用」与「设备 / Web」，再按需使用高级命令。',
+      title: 'XRK-AGT',
+      subtitle: '#帮助',
       sections: [
         {
           name: '常用',
-          desc: '高频操作，建议优先记住',
           items: [
-            { cmd: '#帮助', desc: '本帮助页' },
-            { cmd: '#状态', desc: '系统状态' },
-            { cmd: '#更新', desc: '更新 Core' },
-            { cmd: '#重启', desc: '热重启服务(主人)' },
-            { cmd: '#热关机/#停机', desc: '停消息/可#开机(主人)' },
-            { cmd: '#关机', desc: '真关机回菜单(主人)' },
-            { cmd: '#开机', desc: '解除热关机(主人)' }
+            { cmd: '#状态', desc: '运行状态' },
+            { cmd: '#更新', desc: '更新指定/根仓' },
+            { cmd: '#重启', desc: '热重启 · 主人' },
+            { cmd: '#热关机', desc: '停消息，可 #开机 · 主人' },
+            { cmd: '#关机', desc: '退出进程 · 主人' },
+            { cmd: '#开机', desc: '解除热关机 · 主人' },
+            { cmd: '#点歌', desc: '#点歌 歌名' },
+            { cmd: '#复读', desc: '主动复读' },
           ]
         },
         {
-          name: '更新与日志',
-          desc: '版本维护与问题排查',
+          name: '更新',
           items: [
-            { cmd: '#强制更新', desc: '强制更新' },
-            { cmd: '#全部更新', desc: '静默全部更新' },
-            { cmd: '#查看日志', desc: '更新日志' },
-            { cmd: '#日志[N]', desc: '运行/错误/追踪日志' }
+            { cmd: '#强制更新', desc: '单仓 reset --hard · 主人' },
+            { cmd: '#全部更新', desc: 'core/* + 根仓 · 主人' },
+            { cmd: '#全部强制更新', desc: '冲突才强制 · 主人' },
+            { cmd: '#静默全部更新', desc: '有变更才回汇总 · 主人' },
+            { cmd: '#查看日志', desc: 'git 更新日志' },
+            { cmd: '#日志', desc: '#日志 / #日志错误 / #日志追踪' },
           ]
         },
         {
-          name: '消息与违禁词',
-          desc: '词条维护与风控管理',
+          name: '词条',
           items: [
-            { cmd: '#添加/#删除', desc: '消息词条' },
-            { cmd: '#消息/#词条', desc: '列表' },
-            { cmd: '#违禁词', desc: '增加/删除/列表/开启关闭' },
-            { cmd: '#清空违禁词', desc: '清空(主人)' }
+            { cmd: '#添加', desc: '#添加 / #删除' },
+            { cmd: '#消息', desc: '#消息 / #词条 列表' },
+            { cmd: '#违禁词', desc: '增删列开关' },
+            { cmd: '#清空违禁词', desc: '清空 · 主人' },
           ]
         },
         {
-          name: '终端与脚本',
-          desc: '高权限命令，建议仅管理员使用',
+          name: '终端',
           items: [
-            { cmd: 'rx <cmd>', desc: '项目目录执行' },
-            { cmd: 'rh <cmd>', desc: '用户主目录执行' },
-            { cmd: 'roj <code>', desc: 'JavaScript 执行' },
-            { cmd: 'roi <expr>', desc: '对象检查' },
-            { cmd: 'rj <expr>', desc: '快速表达式' },
-            { cmd: 'rrl [n]', desc: '命令历史' },
-            { cmd: 'rc [set]', desc: '工具配置' }
+            { cmd: 'rx', desc: '项目目录 shell' },
+            { cmd: 'rh', desc: '用户目录 shell' },
+            { cmd: 'roj', desc: '跑 JS' },
+            { cmd: 'roi', desc: '查对象' },
+            { cmd: 'rj', desc: '表达式' },
+            { cmd: 'rrl', desc: '历史' },
+            { cmd: 'rc', desc: '配置' },
           ]
         },
         {
-          name: '子服务端',
-          desc: '在子服务进程终端操作（与主服 > 分离）',
+          name: '子服终端',
           items: [
-            { cmd: '帮助', desc: '列出已装载插件组' },
-            { cmd: '<组名> 状态', desc: '例: media-tools 状态' },
-            { cmd: '<组名> 更新', desc: '例: web-fetch 更新' },
-            { cmd: '退出', desc: '关闭终端 REPL，HTTP 继续' }
-          ]
-        },
-        {
-          name: '其他',
-          desc: '辅助能力',
-          items: [
-            { cmd: '#点歌 歌名', desc: '搜索分享歌曲' },
-            { cmd: '#复读', desc: '主动复读' }
+            { cmd: '帮助', desc: '已装插件组' },
+            { cmd: '<组> 状态', desc: '如 media-tools 状态' },
+            { cmd: '<组> 更新', desc: '如 web-fetch 更新' },
+            { cmd: '退出', desc: '关 REPL，HTTP 仍在' },
           ]
         },
         {
           name: '设备 / Web',
-          full: true,
-          desc: '控制台模式说明',
           items: [
-            { cmd: 'Event 对话', desc: '戳一戳、发消息走事件链(OneBot v11 notice/message)' },
-            { cmd: 'AI 对话', desc: '与工作流对话' }
+            { cmd: 'Event', desc: '走事件链（戳一戳 / 发消息）' },
+            { cmd: 'AI', desc: '工作流对话' },
           ]
         }
       ],
-      footer: 'XRK-AGT · 帮助页由渲染器生成'
+      footer: 'XRK-AGT'
     }
     try {
       const result = await this.e.runtime.render('帮助', 'help', data, { retType: 'base64' })
-      await this.reply(result || '生成帮助页失败。')
+      await this.reply(result || '帮助页生成失败')
     } catch (err) {
       logger.error(`[帮助] 渲染失败: ${err.message}`)
-      await this.reply('生成帮助页时出错，请检查渲染器配置。')
+      await this.reply(`帮助页失败: ${err.message}`)
     }
     return true
   }

@@ -292,6 +292,34 @@ export const agtConfig = {
             component: 'Switch'
               }
             }
+          },
+          autoUpdate: {
+            type: 'object',
+            label: '自动更新',
+            description: '定时/间隔静默更新；有更新或失败才推送主人',
+            component: 'SubForm',
+            fields: {
+              enabled: {
+                type: 'boolean',
+                label: '启用定时更新',
+                default: true,
+                component: 'Switch'
+              },
+              cron: {
+                type: 'string',
+                label: 'Cron',
+                description: 'node-schedule：秒 分 时 日 月 周，默认每天 12:00；YAML 也可写成数组',
+                default: '0 0 12 * * *',
+                component: 'Input'
+              },
+              forceOnConflict: {
+                type: 'boolean',
+                label: '冲突才强制',
+                description: '先普通 pull，仅冲突时 reset --hard',
+                default: true,
+                component: 'Switch'
+              }
+            }
           }
         }
       }
