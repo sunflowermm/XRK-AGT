@@ -535,25 +535,33 @@ function paramControl(p) {
             <template v-if="activeId === 'custom'">
               <section class="form-sec">
                 <h3>请求</h3>
-                <label class="lbl">方法</label>
-                <NSelect v-model:value="custom.method" size="small" :options="methodOptions" />
-                <label class="lbl">URL</label>
-                <NInput
-                  v-model:value="custom.url"
-                  size="small"
-                  class="mono"
-                  placeholder="/api/status 或 https://..."
-                />
-                <label class="lbl">Body (JSON)</label>
-                <NInput
-                  v-model:value="custom.body"
-                  type="textarea"
-                  :rows="8"
-                  size="small"
-                  class="mono"
-                  placeholder="{}"
-                />
-                <p class="hint">仅非 GET 时发送；JSON 非法则不带 body</p>
+                <div class="custom-row">
+                  <div class="custom-method">
+                    <label class="lbl">方法</label>
+                    <NSelect v-model:value="custom.method" size="small" :options="methodOptions" />
+                  </div>
+                  <div class="custom-url">
+                    <label class="lbl">URL</label>
+                    <NInput
+                      v-model:value="custom.url"
+                      size="small"
+                      class="mono"
+                      placeholder="/api/status 或 https://..."
+                    />
+                  </div>
+                </div>
+                <template v-if="String(custom.method || 'GET').toUpperCase() !== 'GET'">
+                  <label class="lbl">Body (JSON)</label>
+                  <NInput
+                    v-model:value="custom.body"
+                    type="textarea"
+                    :rows="isMobile ? 4 : 8"
+                    size="small"
+                    class="mono"
+                    placeholder="{}"
+                  />
+                  <p class="hint">JSON 非法则不带 body</p>
+                </template>
               </section>
             </template>
 
@@ -669,37 +677,38 @@ function paramControl(p) {
           </div>
 
           <div class="preview-col">
-            <div class="pane">
-              <div class="pane-h">
+            <details class="pane preview-pane" :open="!isMobile">
+              <summary class="pane-h">
                 <span>请求预览</span>
-                <NSpace size="small">
-                  <NButton size="tiny" secondary @click="refreshPreview">刷新</NButton>
-                  <NButton size="tiny" secondary @click="copyPreview">复制</NButton>
+                <NSpace size="small" @click.stop>
+                  <NButton size="tiny" secondary @click.prevent="refreshPreview">刷新</NButton>
+                  <NButton size="tiny" secondary @click.prevent="copyPreview">复制</NButton>
                 </NSpace>
-              </div>
+              </summary>
               <NInput
                 v-model:value="previewText"
                 type="textarea"
-                class="mono"
-                :rows="14"
+                class="mono preview-ta"
+                :rows="isMobile ? 4 : 14"
+                size="small"
                 readonly
               />
-            </div>
+            </details>
           </div>
         </div>
 
-        <div class="pane resp-pane">
-          <div class="pane-h">
+        <details class="pane resp-pane" open>
+          <summary class="pane-h">
             <span>响应</span>
-            <NSpace size="small" align="center">
+            <NSpace size="small" align="center" @click.stop>
               <span class="mono status">{{ statusLine }}</span>
-              <NButton size="tiny" secondary @click="copyResponse">复制</NButton>
+              <NButton size="tiny" secondary @click.prevent="copyResponse">复制</NButton>
             </NSpace>
-          </div>
+          </summary>
           <div class="resp ink-scroll">
             <NCode :code="responseText" language="json" word-wrap />
           </div>
-        </div>
+        </details>
       </template>
     </section>
   </div>
@@ -871,6 +880,20 @@ function paramControl(p) {
   padding-bottom: 6px;
   border-bottom: 2px solid color-mix(in srgb, var(--ink) 35%, transparent);
 }
+.custom-row {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr);
+  gap: 8px;
+  align-items: end;
+  margin-bottom: 6px;
+}
+.custom-method,
+.custom-url {
+  min-width: 0;
+}
+.custom-row .lbl {
+  margin-bottom: 3px;
+}
 .field {
   margin-bottom: 8px;
 }
@@ -904,6 +927,21 @@ function paramControl(p) {
   align-items: center;
   font-size: var(--font-xs);
   font-weight: 800;
+  list-style: none;
+  cursor: pointer;
+  user-select: none;
+}
+.pane-h::-webkit-details-marker {
+  display: none;
+}
+details.pane > summary.pane-h::before {
+  content: '▸';
+  display: inline-block;
+  margin-right: 4px;
+  transition: transform 0.12s ease;
+}
+details.pane[open] > summary.pane-h::before {
+  transform: rotate(90deg);
 }
 .status {
   font-size: var(--font-xs);
@@ -929,8 +967,28 @@ function paramControl(p) {
   .api {
     display: flex;
     flex-direction: column;
-    gap: var(--gap);
+    gap: 4px;
     position: relative;
+  }
+  .side,
+  .main {
+    padding: 6px;
+  }
+  .main {
+    gap: 6px;
+  }
+  .form-sec {
+    padding: 6px 8px;
+    margin-bottom: 6px;
+    box-shadow: none;
+  }
+  .form-sec h3 {
+    margin: 0 0 6px;
+    padding-bottom: 4px;
+  }
+  .custom-row {
+    grid-template-columns: 84px minmax(0, 1fr);
+    gap: 6px;
   }
   .list-toggle {
     display: inline-flex;
@@ -1000,13 +1058,14 @@ function paramControl(p) {
   }
   .form-grid {
     grid-template-columns: 1fr;
+    gap: 6px;
   }
-  /* 列表开关 | 标题 | 操作 —— 同一行，不再单独占整行 */
   .api-head {
     display: grid;
     grid-template-columns: auto minmax(0, 1fr) auto;
     align-items: start;
-    gap: 6px 8px;
+    gap: 4px 6px;
+    padding-bottom: 6px;
   }
   .head-left {
     display: contents;
@@ -1015,7 +1074,7 @@ function paramControl(p) {
     min-width: 0;
   }
   .head-meta h2 {
-    font-size: 14px;
+    font-size: 13px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -1034,9 +1093,18 @@ function paramControl(p) {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    font-size: var(--font-xs);
+  }
+  .resp-pane {
+    min-height: 0;
+    flex: 0 0 auto;
   }
   .resp {
-    max-height: min(50vh, 360px);
+    min-height: 96px;
+    max-height: min(36vh, 220px);
+  }
+  .preview-pane:not([open]) {
+    padding-bottom: 4px;
   }
 }
 @media (max-width: 480px) {
@@ -1045,7 +1113,14 @@ function paramControl(p) {
   }
   .head-acts {
     grid-column: 1 / -1;
-    justify-self: end;
+    justify-self: stretch;
+  }
+  .head-acts :deep(.n-space) {
+    width: 100%;
+    justify-content: flex-end;
+  }
+  .custom-row {
+    grid-template-columns: 1fr;
   }
 }
 </style>
