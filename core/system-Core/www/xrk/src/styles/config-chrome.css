@@ -113,16 +113,57 @@
   color: var(--muted);
 }
 
-.cfg-entry-list .add-row {
+.cfg-entry-list .empty-add {
   display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  min-height: 44px;
+  margin: 0;
+  padding: 10px 12px;
+  border: 1.5px dashed var(--ink);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--paper-2) 40%, var(--card));
+  color: var(--ink);
+  font: inherit;
+  font-size: var(--font-sm);
+  font-weight: 800;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.cfg-entry-list .empty-add:active {
+  transform: translate(1px, 1px);
+}
+
+.cfg-entry-list .add-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   gap: 6px;
   align-items: center;
   width: 100%;
 }
 
 .cfg-entry-list .add-key {
-  flex: 1;
   min-width: 0;
+}
+
+@media (max-width: 480px) {
+  .cfg-entry-list .add-row {
+    grid-template-columns: 1fr;
+  }
+  .cfg-entry-list .add-row .cfg-tb-btn {
+    width: 100%;
+    justify-content: center;
+    min-height: 36px;
+  }
+  .cfg-entry-list .bar {
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .cfg-entry-list .bar .add-main {
+    min-height: 32px;
+  }
 }
 
 .cfg-entry-list .card {

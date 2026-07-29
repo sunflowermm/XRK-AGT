@@ -1,18 +1,18 @@
 <script setup>
 /**
- * 字符串数组：与 NInput 同高的芯片条，回车添加
+ * 字符串数组：芯片列表 + 输入框旁「添加」按钮（手机可点，不必靠回车）
  */
-import { computed, nextTick, ref } from 'vue';
-import { NTag } from 'naive-ui';
+import { computed, ref } from 'vue';
+import { NButton, NInput, NTag } from 'naive-ui';
+import XrkIcon from '@/components/XrkIcon.vue';
 
 const props = defineProps({
   modelValue: { type: [Array, String], default: () => [] },
-  placeholder: { type: String, default: '输入后回车添加' },
+  placeholder: { type: String, default: '输入内容' },
 });
 
 const emit = defineEmits(['update:modelValue']);
 const draft = ref('');
-const inputEl = ref(null);
 
 const tags = computed(() => {
   if (Array.isArray(props.modelValue)) {
@@ -31,11 +31,7 @@ function commit(next) {
 function addDraft() {
   const t = draft.value.trim();
   if (!t) return;
-  if (tags.value.includes(t)) {
-    draft.value = '';
-    return;
-  }
-  commit([...tags.value, t]);
+  if (!tags.value.includes(t)) commit([...tags.value, t]);
   draft.value = '';
 }
 
@@ -47,91 +43,108 @@ function onKeydown(e) {
   if (e.key === 'Enter') {
     e.preventDefault();
     addDraft();
-    return;
   }
-  if (e.key === 'Backspace' && !draft.value && tags.value.length) {
-    e.preventDefault();
-    removeAt(tags.value.length - 1);
-  }
-}
-
-async function focusInput() {
-  await nextTick();
-  inputEl.value?.focus();
 }
 </script>
 
 <template>
-  <div
-    class="tags-bar"
-    role="group"
-    :aria-label="placeholder"
-    @click="focusInput"
-  >
-    <NTag
-      v-for="(t, i) in tags"
-      :key="`${t}-${i}`"
-      size="small"
-      closable
-      class="tags-chip"
-      @close="removeAt(i)"
-    >
-      {{ t }}
-    </NTag>
-    <input
-      ref="inputEl"
-      v-model="draft"
-      class="tags-input"
-      type="text"
-      :placeholder="tags.length ? '' : placeholder"
-      @keydown="onKeydown"
-      @blur="addDraft"
-    />
+  <div class="tags-ed">
+    <div v-if="tags.length" class="tags-list" role="list">
+      <NTag
+        v-for="(t, i) in tags"
+        :key="`${t}-${i}`"
+        size="small"
+        closable
+        class="tags-chip"
+        role="listitem"
+        @close="removeAt(i)"
+      >
+        {{ t }}
+      </NTag>
+    </div>
+    <p v-else class="tags-empty">暂无项，在下方填写后点添加</p>
+
+    <div class="tags-add">
+      <NInput
+        v-model:value="draft"
+        size="small"
+        class="tags-add-input"
+        :placeholder="placeholder"
+        clearable
+        @keydown="onKeydown"
+      />
+      <NButton
+        size="small"
+        type="primary"
+        class="tags-add-btn"
+        :disabled="!draft.trim()"
+        aria-label="添加"
+        @click="addDraft"
+      >
+        <XrkIcon name="plus" :size="14" />
+        <span>添加</span>
+      </NButton>
+    </div>
   </div>
 </template>
 
 <style scoped>
-.tags-bar {
+.tags-ed {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  min-width: 0;
+}
+.tags-list {
   display: flex;
   flex-wrap: wrap;
-  align-items: center;
   gap: 4px;
-  width: 100%;
-  min-height: 28px;
-  max-height: 72px;
+  max-height: 88px;
   overflow-y: auto;
-  padding: 2px 8px;
-  box-sizing: border-box;
-  border: 1.5px solid var(--ink);
-  border-radius: 3px;
-  background: var(--card);
-  cursor: text;
-}
-.tags-bar:focus-within {
-  border-color: var(--pink);
 }
 .tags-chip {
   border: 1.5px solid var(--ink) !important;
   font-weight: 700;
   max-width: 100%;
-  height: 22px !important;
 }
-.tags-input {
-  flex: 1 1 72px;
-  min-width: 72px;
-  height: 22px;
+.tags-empty {
   margin: 0;
-  padding: 0;
-  border: 0;
-  outline: none;
-  background: transparent;
-  color: var(--ink);
-  font: inherit;
-  font-size: var(--font-sm);
-  line-height: 22px;
-}
-.tags-input::placeholder {
+  font-size: var(--font-xs);
   color: var(--muted);
-  opacity: 0.85;
+  line-height: 1.35;
+}
+.tags-add {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 6px;
+  align-items: center;
+}
+.tags-add-input {
+  min-width: 0;
+}
+.tags-add-btn {
+  display: inline-flex !important;
+  align-items: center;
+  gap: 4px;
+  font-weight: 700 !important;
+  white-space: nowrap !important;
+  flex-shrink: 0;
+  padding: 0 10px !important;
+}
+.tags-add-btn .n-button__content {
+  display: inline-flex !important;
+  align-items: center;
+  gap: 4px;
+}
+
+@media (max-width: 480px) {
+  .tags-add {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .tags-add-btn {
+    min-height: 32px;
+    min-width: 44px;
+  }
 }
 </style>

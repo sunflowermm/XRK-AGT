@@ -236,20 +236,19 @@ function setAllOpen(open) {
           v-model:value="draftKey"
           size="small"
           class="add-key"
-          :placeholder="keyPlaceholder || keyLabel"
+          :placeholder="keyPlaceholder || `填写${keyLabel || '键名'}`"
           @keyup.enter="addEntry"
         />
         <NButton size="small" type="primary" class="cfg-tb-btn cfg-tb-save" @click="addEntry">
           <XrkIcon name="plus" :size="14" />
-          <span>新增{{ label }}</span>
+          <span>添加</span>
         </NButton>
       </div>
 
       <p v-if="!entries.length" class="empty">
-        暂无{{ label }}。先填写{{ keyLabel || '键名' }}再点新增
-        <template v-if="hasSchema">，再按字段编辑</template>
+        先填{{ keyLabel || '键名' }}，再点右侧「添加」
+        <template v-if="hasSchema">；添加后按字段编辑</template>
         <template v-else>；无字段模板时可切 JSON</template>
-        。
       </p>
 
       <details v-for="(row, i) in entries" :key="rowKeys[i] || row.key" class="card" open>

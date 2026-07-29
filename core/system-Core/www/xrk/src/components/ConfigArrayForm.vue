@@ -136,14 +136,17 @@ function setAllOpen(open) {
           <NButton size="tiny" quaternary class="cfg-tb-btn" @click="setAllOpen(false)">全部折叠</NButton>
           <NButton size="tiny" quaternary class="cfg-tb-btn" @click="setAllOpen(true)">全部展开</NButton>
         </div>
-        <NButton size="small" type="primary" class="cfg-tb-btn cfg-tb-save" @click="addItem">
+        <NButton size="small" type="primary" class="cfg-tb-btn cfg-tb-save add-main" @click="addItem">
           <XrkIcon name="plus" :size="14" />
-          <span>新增{{ label }}</span>
+          <span>新增</span>
         </NButton>
       </div>
     </div>
 
-    <p v-if="!items.length" class="empty">暂无{{ label }}，点击「新增」添加。</p>
+    <button v-if="!items.length" type="button" class="empty-add" @click="addItem">
+      <XrkIcon name="plus" :size="16" />
+      <span>新增{{ label || '条目' }}</span>
+    </button>
 
     <details v-for="(item, i) in items" :key="rowKeys[i] || i" class="card" open>
       <summary class="card-head">
