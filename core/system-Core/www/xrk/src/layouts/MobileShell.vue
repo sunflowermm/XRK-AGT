@@ -44,7 +44,7 @@ function go(name) {
           </template>
           {{ auth.dark ? '切换浅色' : '切换深色' }}
         </NTooltip>
-        <NTag size="tiny" :type="auth.authBadge.type" :bordered="true">
+        <NTag size="tiny" :type="auth.authBadge.type" :bordered="true" :title="auth.authBadge.title">
           {{ auth.authBadge.text }}
         </NTag>
       </NSpace>

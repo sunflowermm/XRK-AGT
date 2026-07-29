@@ -17,6 +17,7 @@ export const aiWorkflowConfig = {
           global: {
             type: 'object',
             label: '全局设置',
+            description: '工作流系统级调试与通用开关',
             component: 'SubForm',
             fields: {
               debug: {
@@ -52,17 +53,20 @@ export const aiWorkflowConfig = {
               retry: {
                 type: 'object',
                 label: '重试配置',
+                description: 'LLM 请求失败时的自动重试策略',
                 component: 'SubForm',
                 fields: {
                   enabled: {
                     type: 'boolean',
                     label: '启用重试',
+                    description: '超时或网络错误时按条件自动重试',
                     default: true,
                     component: 'Switch'
                   },
                   maxAttempts: {
                     type: 'number',
                     label: '最大重试次数',
+                    description: '含首次请求在内的总尝试次数上限',
                     min: 1,
                     max: 10,
                     default: 3,
@@ -71,6 +75,7 @@ export const aiWorkflowConfig = {
                   delay: {
                     type: 'number',
                     label: '重试延迟（毫秒）',
+                    description: '两次重试之间的等待时间',
                     min: 100,
                     default: 2000,
                     component: 'InputNumber'
@@ -95,18 +100,21 @@ export const aiWorkflowConfig = {
                   enabled: {
                     type: 'boolean',
                     label: '启用自动提示缓存',
+                    description: '向 Provider 发送 prompt_cache_key 等缓存提示',
                     default: true,
                     component: 'Switch'
                   },
                   keyPrefix: {
                     type: 'string',
                     label: 'cache key 前缀',
+                    description: '生成 cache key 时的固定前缀',
                     default: 'xrk',
                     component: 'Input'
                   },
                   retention: {
                     type: 'string',
                     label: 'OpenAI 保留策略',
+                    description: 'OpenAI prompt cache 的保留时长策略',
                     enum: ['in-memory', '24h'],
                     default: 'in-memory',
                     component: 'Select'
@@ -114,6 +122,7 @@ export const aiWorkflowConfig = {
                   anthropicCache: {
                     type: 'boolean',
                     label: 'Anthropic system cache_control',
+                    description: '为 Anthropic 请求附加 system cache_control',
                     default: true,
                     component: 'Switch'
                   },
@@ -138,6 +147,7 @@ export const aiWorkflowConfig = {
               Provider: {
                 type: 'string',
                 label: 'ASR运营商',
+                description: '当前仅支持 volcengine，详情见对应工厂 YAML',
                 enum: ['volcengine'],
                 default: 'volcengine',
                 component: 'Select'
@@ -153,6 +163,7 @@ export const aiWorkflowConfig = {
               Provider: {
                 type: 'string',
                 label: 'TTS运营商',
+                description: '当前仅支持 volcengine，详情见对应工厂 YAML',
                 enum: ['volcengine'],
                 default: 'volcengine',
                 component: 'Select'
@@ -264,17 +275,20 @@ export const aiWorkflowConfig = {
               audit: {
                 type: 'object',
                 label: '工具审计',
+                description: '记录 MCP 工具调用历史至工作区',
                 component: 'SubForm',
                 fields: {
                   enabled: {
                     type: 'boolean',
                     label: '启用 MCP 工具审计',
+                    description: '将工具名、参数与结果写入审计日志',
                     default: true,
                     component: 'Switch'
                   },
                   maxEntries: {
                     type: 'number',
                     label: '每工作区最大审计条数',
+                    description: '超出后丢弃最旧的审计记录',
                     min: 10,
                     max: 500,
                     default: 200,
@@ -420,6 +434,7 @@ export const aiWorkflowConfig = {
               maxRulesChars: {
                 type: 'number',
                 label: '规则块最大字符',
+                description: '注入 rules 段的总字符预算上限',
                 min: 100,
                 default: 12000,
                 component: 'InputNumber'
@@ -427,6 +442,7 @@ export const aiWorkflowConfig = {
               maxAgentMdChars: {
                 type: 'number',
                 label: 'AGENT 文件最大字符',
+                description: 'AGENTS/AGENT 等助手模板注入的字符上限',
                 min: 100,
                 default: 12000,
                 component: 'InputNumber'
@@ -475,11 +491,13 @@ export const aiWorkflowConfig = {
               webFetch: {
                 type: 'object',
                 label: 'web_fetch',
+                description: '单页 URL 抓取、正文提取与缓存',
                 component: 'SubForm',
                 fields: {
                   timeoutSeconds: {
                     type: 'number',
                     label: '超时（秒）',
+                    description: '单次 HTTP 抓取的最长等待时间',
                     min: 1,
                     default: 30,
                     component: 'InputNumber'
@@ -487,6 +505,7 @@ export const aiWorkflowConfig = {
                   cacheTtlMinutes: {
                     type: 'number',
                     label: '缓存 TTL（分钟）',
+                    description: '相同 URL 抓取结果的内存缓存时长',
                     min: 0,
                     default: 15,
                     component: 'InputNumber'
@@ -494,6 +513,7 @@ export const aiWorkflowConfig = {
                   maxChars: {
                     type: 'number',
                     label: '正文最大字符',
+                    description: '提取正文截断前的最大字符数',
                     min: 100,
                     default: 50000,
                     component: 'InputNumber'
@@ -501,6 +521,7 @@ export const aiWorkflowConfig = {
                   maxResponseBytes: {
                     type: 'number',
                     label: '响应体最大字节',
+                    description: '拒绝超过此大小的 HTTP 响应体',
                     min: 32000,
                     default: 2000000,
                     component: 'InputNumber'
@@ -508,6 +529,7 @@ export const aiWorkflowConfig = {
                   maxRedirects: {
                     type: 'number',
                     label: '最大重定向次数',
+                    description: '跟随 3xx 重定向的上限',
                     min: 0,
                     default: 3,
                     component: 'InputNumber'
@@ -515,18 +537,21 @@ export const aiWorkflowConfig = {
                   pinDns: {
                     type: 'boolean',
                     label: 'DNS pinning（SSRF 加固）',
+                    description: '解析后锁定 IP，防止 DNS 重绑定攻击',
                     default: true,
                     component: 'Switch'
                   },
                   readabilityEnabled: {
                     type: 'boolean',
                     label: 'Readability 提取',
+                    description: '用 Readability 算法提取正文，否则返回原始 HTML',
                     default: true,
                     component: 'Switch'
                   },
                   userAgent: {
                     type: 'string',
                     label: 'User-Agent',
+                    description: '抓取请求使用的 UA，留空用内置默认值',
                     default: '',
                     component: 'Input',
                     layout: 'full'
@@ -534,6 +559,7 @@ export const aiWorkflowConfig = {
                   firecrawlApiKey: {
                     type: 'string',
                     label: 'Firecrawl API Key（回退抓取）',
+                    description: '直连失败时通过 Firecrawl 代理抓取',
                     default: '',
                     component: 'Input',
                     layout: 'full'
@@ -541,6 +567,7 @@ export const aiWorkflowConfig = {
                   firecrawlBaseUrl: {
                     type: 'string',
                     label: 'Firecrawl Base URL',
+                    description: 'Firecrawl API 端点地址',
                     default: 'https://api.firecrawl.dev',
                     component: 'Input',
                     layout: 'full'
@@ -557,11 +584,13 @@ export const aiWorkflowConfig = {
               webSearch: {
                 type: 'object',
                 label: 'web_search',
+                description: '联网搜索工具与各 Provider 凭据',
                 component: 'SubForm',
                 fields: {
                   enabled: {
                     type: 'boolean',
                     label: '启用 web_search',
+                    description: '关闭后 MCP web_search 工具不可用',
                     default: true,
                     component: 'Switch'
                   },
@@ -575,6 +604,7 @@ export const aiWorkflowConfig = {
                   timeoutSeconds: {
                     type: 'number',
                     label: '超时（秒）',
+                    description: '搜索 API 调用的最长等待时间',
                     min: 1,
                     default: 20,
                     component: 'InputNumber'
@@ -582,6 +612,7 @@ export const aiWorkflowConfig = {
                   cacheTtlMinutes: {
                     type: 'number',
                     label: '缓存 TTL（分钟）',
+                    description: '相同查询结果的内存缓存时长',
                     min: 0,
                     default: 15,
                     component: 'InputNumber'
@@ -589,12 +620,14 @@ export const aiWorkflowConfig = {
                   region: {
                     type: 'string',
                     label: 'DuckDuckGo region',
+                    description: 'DuckDuckGo 搜索的地区代码，如 wt-wt',
                     default: '',
                     component: 'Input'
                   },
                   safeSearch: {
                     type: 'string',
                     label: 'DuckDuckGo SafeSearch',
+                    description: 'DuckDuckGo 安全搜索严格程度',
                     enum: ['strict', 'moderate', 'off'],
                     default: 'moderate',
                     component: 'Select'
@@ -602,17 +635,20 @@ export const aiWorkflowConfig = {
                   country: {
                     type: 'string',
                     label: '国家/地区（2 字母）',
+                    description: '部分 Provider 使用的 ISO 3166-1 国家码',
                     default: '',
                     component: 'Input'
                   },
                   parallelFree: {
                     type: 'object',
                     label: 'parallel-free',
+                    description: '零配置 Parallel 免费搜索 MCP 端点',
                     component: 'SubForm',
                     fields: {
                       url: {
                         type: 'string',
                         label: 'MCP URL',
+                        description: 'parallel-free MCP 服务地址',
                         default: 'https://search.parallel.ai/mcp',
                         component: 'Input',
                         layout: 'full'
@@ -622,18 +658,21 @@ export const aiWorkflowConfig = {
                   brave: {
                     type: 'object',
                     label: 'Brave',
+                    description: 'Brave Search API',
                     component: 'SubForm',
                     fields: crawlProviderApiFields()
                   },
                   perplexity: {
                     type: 'object',
                     label: 'Perplexity',
+                    description: 'Perplexity 搜索；可用 OpenRouter 中转',
                     component: 'SubForm',
                     fields: {
                       ...crawlProviderApiFields(),
                       openRouterApiKey: {
                         type: 'string',
                         label: 'OpenRouter API Key（可选）',
+                        description: '经 OpenRouter 调用时填写；与直连 apiKey 二选一',
                         default: '',
                         component: 'Input',
                         layout: 'full'
@@ -641,6 +680,7 @@ export const aiWorkflowConfig = {
                       model: {
                         type: 'string',
                         label: 'Model（可选）',
+                        description: '覆盖默认搜索/对话模型名',
                         default: '',
                         component: 'Input'
                       }
@@ -649,30 +689,35 @@ export const aiWorkflowConfig = {
                   exa: {
                     type: 'object',
                     label: 'Exa',
+                    description: 'Exa 神经搜索 API',
                     component: 'SubForm',
                     fields: crawlProviderApiFields()
                   },
                   tavily: {
                     type: 'object',
                     label: 'Tavily',
+                    description: 'Tavily 搜索 API',
                     component: 'SubForm',
                     fields: crawlProviderApiFields()
                   },
                   parallel: {
                     type: 'object',
                     label: 'Parallel（付费）',
+                    description: 'Parallel.ai 付费搜索',
                     component: 'SubForm',
                     fields: crawlProviderApiFields()
                   },
                   gemini: {
                     type: 'object',
                     label: 'Gemini',
+                    description: 'Google Gemini 联网搜索能力',
                     component: 'SubForm',
                     fields: {
                       ...crawlProviderApiFields(),
                       model: {
                         type: 'string',
                         label: 'Model（可选）',
+                        description: 'Gemini 模型名，留空用默认',
                         default: '',
                         component: 'Input'
                       }
@@ -681,12 +726,14 @@ export const aiWorkflowConfig = {
                   kimi: {
                     type: 'object',
                     label: 'Kimi / Moonshot',
+                    description: '月之暗面搜索接口',
                     component: 'SubForm',
                     fields: {
                       ...crawlProviderApiFields(),
                       model: {
                         type: 'string',
                         label: 'Model（可选）',
+                        description: 'Kimi 模型名，留空用默认',
                         default: '',
                         component: 'Input'
                       }
@@ -695,12 +742,14 @@ export const aiWorkflowConfig = {
                   minimax: {
                     type: 'object',
                     label: 'MiniMax',
+                    description: 'MiniMax 搜索；可指定 region / host',
                     component: 'SubForm',
                     fields: {
                       ...crawlProviderApiFields(),
                       region: {
                         type: 'string',
                         label: 'Region',
+                        description: 'global / cn；空则按 apiHost 推断',
                         enum: ['', 'global', 'cn'],
                         default: '',
                         component: 'Select'
@@ -708,6 +757,7 @@ export const aiWorkflowConfig = {
                       apiHost: {
                         type: 'string',
                         label: 'API Host（可选，用于推断 cn）',
+                        description: '自定义 API 主机名；含国内域名时按 cn 处理',
                         default: '',
                         component: 'Input',
                         layout: 'full'
@@ -717,17 +767,20 @@ export const aiWorkflowConfig = {
                   firecrawl: {
                     type: 'object',
                     label: 'Firecrawl Search',
+                    description: 'Firecrawl 搜索接口（与 scrape 共用密钥体系）',
                     component: 'SubForm',
                     fields: crawlProviderApiFields()
                   },
                   searxng: {
                     type: 'object',
                     label: 'SearXNG',
+                    description: '自建 SearXNG 元搜索实例',
                     component: 'SubForm',
                     fields: {
                       baseUrl: {
                         type: 'string',
                         label: '实例 Base URL',
+                        description: '如 http://127.0.0.1:8080',
                         default: '',
                         component: 'Input',
                         layout: 'full'
@@ -735,12 +788,14 @@ export const aiWorkflowConfig = {
                       categories: {
                         type: 'string',
                         label: '默认 categories',
+                        description: 'SearXNG categories 参数，如 general,news',
                         default: '',
                         component: 'Input'
                       },
                       language: {
                         type: 'string',
                         label: '默认 language',
+                        description: 'SearXNG language 参数，如 zh-CN',
                         default: '',
                         component: 'Input'
                       }
@@ -749,11 +804,13 @@ export const aiWorkflowConfig = {
                   ollama: {
                     type: 'object',
                     label: 'Ollama',
+                    description: '本地或 Ollama Cloud 的 web search',
                     component: 'SubForm',
                     fields: {
                       baseUrl: {
                         type: 'string',
                         label: 'Base URL',
+                        description: '本地 Ollama 地址',
                         default: 'http://127.0.0.1:11434',
                         component: 'Input',
                         layout: 'full'
@@ -761,6 +818,7 @@ export const aiWorkflowConfig = {
                       apiKey: {
                         type: 'string',
                         label: '本地 API Key（可选）',
+                        description: '若本地实例启用了鉴权则填写',
                         default: '',
                         component: 'Input',
                         layout: 'full'
@@ -768,6 +826,7 @@ export const aiWorkflowConfig = {
                       cloudApiKey: {
                         type: 'string',
                         label: 'Ollama Cloud API Key（可选）',
+                        description: '使用 Ollama 云端搜索时填写',
                         default: '',
                         component: 'Input',
                         layout: 'full'
@@ -785,6 +844,7 @@ export const aiWorkflowConfig = {
                   browserType: {
                     type: 'string',
                     label: '浏览器类型',
+                    description: 'Playwright 启动的浏览器引擎',
                     enum: ['chromium', 'firefox', 'webkit'],
                     default: 'chromium',
                     component: 'Select'
@@ -792,12 +852,14 @@ export const aiWorkflowConfig = {
                   headless: {
                     type: 'boolean',
                     label: 'Headless',
+                    description: '无界面模式运行浏览器',
                     default: true,
                     component: 'Switch'
                   },
                   wsEndpoint: {
                     type: 'string',
                     label: 'WebSocket 端点（远程连接）',
+                    description: '连接已有 Playwright 远程实例，留空则本地启动',
                     default: '',
                     component: 'Input',
                     layout: 'full'
@@ -805,6 +867,7 @@ export const aiWorkflowConfig = {
                   executablePath: {
                     type: 'string',
                     label: '可执行文件路径',
+                    description: '自定义 Chromium/Firefox 可执行文件路径',
                     default: '',
                     component: 'Input',
                     layout: 'full'
@@ -812,6 +875,7 @@ export const aiWorkflowConfig = {
                   launchTimeoutMs: {
                     type: 'number',
                     label: '启动超时（毫秒）',
+                    description: '浏览器进程启动的最长等待时间',
                     min: 5000,
                     default: 120000,
                     component: 'InputNumber'
@@ -819,6 +883,7 @@ export const aiWorkflowConfig = {
                   navigationTimeoutMs: {
                     type: 'number',
                     label: '导航超时（毫秒）',
+                    description: 'page.goto 等导航操作超时',
                     min: 1000,
                     default: 60000,
                     component: 'InputNumber'
@@ -826,6 +891,7 @@ export const aiWorkflowConfig = {
                   maxTextChars: {
                     type: 'number',
                     label: 'page_text 最大字符',
+                    description: 'page_text 工具返回的正文截断上限',
                     min: 1000,
                     default: 50000,
                     component: 'InputNumber'
@@ -833,6 +899,7 @@ export const aiWorkflowConfig = {
                   screenshotMaxBytes: {
                     type: 'number',
                     label: '截图最大字节',
+                    description: '截图 PNG 文件大小上限',
                     min: 64000,
                     default: 4194304,
                     component: 'InputNumber'
@@ -840,6 +907,7 @@ export const aiWorkflowConfig = {
                   screenshotFontDir: {
                     type: 'string',
                     label: '截图字体目录',
+                    description: '渲染截图时加载的本地字体目录',
                     default: '',
                     component: 'Input',
                     layout: 'full'
@@ -847,6 +915,7 @@ export const aiWorkflowConfig = {
                   screenshotFontUrlBase: {
                     type: 'string',
                     label: '截图字体虚拟 URL 前缀',
+                    description: '通过 HTTP 提供字体文件的 URL 前缀',
                     default: '',
                     component: 'Input',
                     layout: 'full'
@@ -854,6 +923,7 @@ export const aiWorkflowConfig = {
                   screenshotFontFiles: {
                     type: 'array',
                     label: '截图字体文件',
+                    description: '截图渲染使用的字体文件名列表',
                     itemType: 'string',
                     default: [],
                     component: 'Tags'
@@ -861,17 +931,20 @@ export const aiWorkflowConfig = {
                   ssrfPolicy: {
                     type: 'object',
                     label: 'SSRF 策略',
+                    description: '限制浏览器访问内网与私网地址',
                     component: 'SubForm',
                     fields: {
                       allowPrivateNetwork: {
                         type: 'boolean',
                         label: '允许私网',
+                        description: '允许导航至 RFC1918 私网地址',
                         default: false,
                         component: 'Switch'
                       },
                       dangerouslyAllowPrivateNetwork: {
                         type: 'boolean',
                         label: '危险：允许私网（内网）',
+                        description: '显式绕过 SSRF 私网拦截，仅限可信环境',
                         default: false,
                         component: 'Switch'
                       }
@@ -904,6 +977,7 @@ export const aiWorkflowConfig = {
                   maxReadChars: {
                     type: 'number',
                     label: 'read 最大返回字符',
+                    description: 'file_read 工具单次返回的内容截断上限',
                     min: 1000,
                     default: 500000,
                     component: 'InputNumber'
@@ -911,6 +985,7 @@ export const aiWorkflowConfig = {
                   grepMaxResults: {
                     type: 'number',
                     label: 'grep 最大匹配条数',
+                    description: 'file_grep 工具返回的匹配行数上限',
                     min: 1,
                     max: 500,
                     default: 100,
@@ -919,12 +994,14 @@ export const aiWorkflowConfig = {
                   runEnabled: {
                     type: 'boolean',
                     label: '允许 run 执行命令',
+                    description: '开启后 LLM 可通过 run 工具执行 shell 命令',
                     default: false,
                     component: 'Switch'
                   },
                   runTimeoutMs: {
                     type: 'number',
                     label: 'run 超时（毫秒）',
+                    description: 'run 命令的最长执行时间',
                     min: 1000,
                     default: 120000,
                     component: 'InputNumber'
@@ -932,6 +1009,7 @@ export const aiWorkflowConfig = {
                   maxCommandOutputChars: {
                     type: 'number',
                     label: 'run 标准输出最大字符',
+                    description: 'run  stdout/stderr 合并后的截断上限',
                     min: 1000,
                     default: 200000,
                     component: 'InputNumber'
@@ -964,6 +1042,7 @@ export const aiWorkflowConfig = {
               runtimes: {
                 type: 'object',
                 label: '各 runtime 端点',
+                description: 'pyserver、goserver 等子服务的 baseUrl 与鉴权',
                 component: 'SubForm',
                 fields: subserverRuntimeSubFormFields()
               }

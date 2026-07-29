@@ -49,6 +49,7 @@ export function crawlProviderApiFields(extraFields = {}) {
     apiKey: {
       type: 'string',
       label: 'API Key',
+      description: '该搜索提供商的鉴权密钥；留空则跳过该提供商',
       default: '',
       component: 'Input',
       layout: 'full'
@@ -56,6 +57,7 @@ export function crawlProviderApiFields(extraFields = {}) {
     baseUrl: {
       type: 'string',
       label: 'Base URL（可选）',
+      description: '覆盖默认 API 根地址；自建/代理时填写',
       default: '',
       component: 'Input',
       layout: 'full'

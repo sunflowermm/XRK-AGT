@@ -85,7 +85,7 @@ function toggleCollapse() {
             </template>
             {{ auth.dark ? '切换浅色' : '切换深色' }}
           </NTooltip>
-          <NTag size="small" :type="auth.authBadge.type" :bordered="true">
+          <NTag size="small" :type="auth.authBadge.type" :bordered="true" :title="auth.authBadge.title">
             <span class="key-tag">
               <XrkIcon name="key" :size="12" />
               {{ auth.authBadge.text }}

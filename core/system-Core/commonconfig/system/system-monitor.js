@@ -143,17 +143,20 @@ export const monitorConfig = {
           cpu: {
             type: 'object',
             label: 'CPU监控',
+            description: '采样本机 CPU 占用并在超阈值时告警',
             component: 'SubForm',
             fields: {
               enabled: {
                 type: 'boolean',
                 label: '启用CPU监控',
+                description: '关闭则不做 CPU 采样',
                 default: true,
                 component: 'Switch'
               },
               threshold: {
                 type: 'number',
                 label: 'CPU使用率阈值（%）',
+                description: '持续超过该占用则告警',
                 min: 0,
                 max: 100,
                 default: 90,
@@ -162,6 +165,7 @@ export const monitorConfig = {
               checkDuration: {
                 type: 'number',
                 label: 'CPU检查持续时间（毫秒）',
+                description: '需在此窗口内持续超阈值才触发',
                 min: 1000,
                 default: 30000,
                 component: 'InputNumber'
@@ -171,6 +175,7 @@ export const monitorConfig = {
           optimize: {
             type: 'object',
             label: '优化策略',
+            description: '资源紧张时的清理与重启策略',
             component: 'SubForm',
             fields: {
               aggressive: {
@@ -190,6 +195,7 @@ export const monitorConfig = {
               restartThreshold: {
                 type: 'number',
                 label: '重启阈值（%）',
+                description: '资源占用达到该百分比且允许重启时触发',
                 min: 0,
                 max: 100,
                 default: 95,
@@ -200,17 +206,20 @@ export const monitorConfig = {
           report: {
             type: 'object',
             label: '报告配置',
+            description: '周期性汇总资源状态并推送',
             component: 'SubForm',
             fields: {
               enabled: {
                 type: 'boolean',
                 label: '启用报告',
+                description: '按间隔生成监控摘要',
                 default: true,
                 component: 'Switch'
               },
               interval: {
                 type: 'number',
                 label: '报告间隔（毫秒）',
+                description: '两次报告之间的最短间隔',
                 min: 1000,
                 default: 3600000,
                 component: 'InputNumber'
@@ -220,6 +229,7 @@ export const monitorConfig = {
           disk: {
             type: 'object',
             label: '磁盘优化',
+            description: '磁盘空间告警与可选的临时/日志清理',
             component: 'SubForm',
             fields: {
               enabled: {
@@ -246,18 +256,21 @@ export const monitorConfig = {
               tempMaxAge: {
                 type: 'number',
                 label: '临时文件最大年龄（毫秒）',
+                description: '超过该年龄的 temp 文件可被清理',
                 default: 86400000,
                 component: 'InputNumber'
               },
               logMaxAge: {
                 type: 'number',
                 label: '日志文件最大年龄（毫秒）',
+                description: '超过该年龄的日志可被清理',
                 default: 604800000,
                 component: 'InputNumber'
               },
               maxLogSize: {
                 type: 'number',
                 label: '单个日志文件最大大小（字节）',
+                description: '单文件超过该大小可被轮转/清理',
                 default: 104857600,
                 component: 'InputNumber'
               }
@@ -266,6 +279,7 @@ export const monitorConfig = {
           network: {
             type: 'object',
             label: '网络优化',
+            description: '连接数探测与空闲连接清理（默认关闭）',
             component: 'SubForm',
             fields: {
               enabled: {
@@ -278,6 +292,7 @@ export const monitorConfig = {
               maxConnections: {
                 type: 'number',
                 label: '最大连接数阈值',
+                description: '连接数超过该值时告警或清理',
                 min: 1,
                 default: 1000,
                 component: 'InputNumber'
@@ -285,6 +300,7 @@ export const monitorConfig = {
               cleanupIdle: {
                 type: 'boolean',
                 label: '清理空闲连接',
+                description: '尝试关闭长时间空闲的连接',
                 default: false,
                 component: 'Switch'
               }
@@ -293,6 +309,7 @@ export const monitorConfig = {
           process: {
             type: 'object',
             label: '进程优化',
+            description: '调整本进程优先级（默认关闭）',
             component: 'SubForm',
             fields: {
               enabled: {
@@ -305,6 +322,7 @@ export const monitorConfig = {
               priority: {
                 type: 'string',
                 label: '进程优先级',
+                description: '操作系统调度优先级档位',
                 enum: ['low', 'normal', 'high'],
                 default: 'normal',
                 component: 'Select'

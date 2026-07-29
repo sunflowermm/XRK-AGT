@@ -55,12 +55,13 @@ export const agtConfig = {
               object: {
             type: 'object',
             label: '日志对象检查',
-            description: '日志对象检查配置',
+            description: 'util.inspect 打印对象时的深度与截断选项',
             component: 'SubForm',
             fields: {
               depth: {
                 type: 'number',
                 label: '检查深度',
+                description: '对象嵌套展开的最大层级',
                 min: 1,
                 default: 10,
                 component: 'InputNumber'
@@ -68,30 +69,35 @@ export const agtConfig = {
               colors: {
                 type: 'boolean',
                 label: '彩色输出',
+                description: '终端中对象键值是否使用 ANSI 颜色',
                 default: true,
                 component: 'Switch'
               },
               showHidden: {
                 type: 'boolean',
                 label: '显示隐藏属性',
+                description: '是否打印对象的不可枚举属性',
                 default: true,
                 component: 'Switch'
               },
               showProxy: {
                 type: 'boolean',
                 label: '显示代理对象',
+                description: 'Proxy 对象是否展开 target 内容',
                 default: true,
                 component: 'Switch'
               },
               getters: {
                 type: 'boolean',
                 label: '显示getters',
+                description: '是否调用并打印 accessor getter 的值',
                 default: true,
                 component: 'Switch'
               },
               breakLength: {
                 type: 'number',
                 label: '换行长度',
+                description: '单行超过此宽度时自动换行',
                 min: 1,
                 default: 100,
                 component: 'InputNumber'
@@ -99,6 +105,7 @@ export const agtConfig = {
               maxArrayLength: {
                 type: 'number',
                 label: '最大数组长度',
+                description: '数组打印时最多显示的元素个数',
                 min: 1,
                 default: 100,
                 component: 'InputNumber'
@@ -106,6 +113,7 @@ export const agtConfig = {
               maxStringLength: {
                 type: 'number',
                 label: '最大字符串长度',
+                description: '字符串打印时的截断字符数',
                 min: 1,
                 default: 1000,
                 component: 'InputNumber'
@@ -138,11 +146,13 @@ export const agtConfig = {
               send: {
                 type: 'object',
                 label: '日志发送插件配置',
+                description: '通过聊天插件转发日志时的行数与长度限制',
                 component: 'SubForm',
                 fields: {
                   defaultLines: {
             type: 'number',
                     label: '默认发送行数',
+                    description: '未指定时每次转发的日志行数',
                     min: 1,
                     default: 120,
             component: 'InputNumber'
@@ -150,6 +160,7 @@ export const agtConfig = {
                   maxLines: {
             type: 'number',
                     label: '最大发送行数',
+                    description: '单次转发允许的最大行数',
             min: 1,
                     default: 1000,
             component: 'InputNumber'
@@ -157,6 +168,7 @@ export const agtConfig = {
                   maxPerForward: {
             type: 'number',
                     label: '转发最大行数',
+                    description: '合并转发时每段的行数上限',
             min: 1,
                     default: 30,
             component: 'InputNumber'
@@ -164,6 +176,7 @@ export const agtConfig = {
                   maxLineLength: {
                     type: 'number',
                     label: '单行最大长度',
+                    description: '超长行截断前的字符数上限',
                     min: 1,
                     default: 300,
                     component: 'InputNumber'
@@ -175,6 +188,7 @@ export const agtConfig = {
           browser: {
             type: 'object',
             label: '渲染器',
+            description: '截图与浏览器自动化使用的渲染后端',
             component: 'SubForm',
             fields: {
               renderer: {
@@ -190,6 +204,7 @@ export const agtConfig = {
           files: {
             type: 'object',
             label: '文件系统配置',
+            description: '文件监听、临时 URL 与违禁资源路径',
             component: 'SubForm',
             fields: {
               watch: {
@@ -248,6 +263,7 @@ export const agtConfig = {
           system: {
             type: 'object',
             label: '系统行为配置',
+            description: '消息预处理与群聊过滤规则',
             component: 'SubForm',
             fields: {
               '/→#': {
@@ -269,6 +285,7 @@ export const agtConfig = {
           status: {
             type: 'object',
             label: '状态插件配置',
+            description: '状态查询插件展示的系统信息项',
             component: 'SubForm',
             fields: {
               showNetwork: {
@@ -303,6 +320,7 @@ export const agtConfig = {
               enabled: {
                 type: 'boolean',
                 label: '启用定时更新',
+                description: '按 cron 表达式自动 git pull 检查更新',
                 default: true,
                 component: 'Switch'
               },

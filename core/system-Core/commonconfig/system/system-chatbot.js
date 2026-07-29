@@ -115,6 +115,7 @@ const groupEntryFields = {
       enabled: {
         type: 'boolean',
         label: '启用检测',
+        description: '命中词库后按禁言/仅警告执行',
         default: true,
         component: 'Switch',
       },
@@ -129,6 +130,7 @@ const groupEntryFields = {
       warnOnly: {
         type: 'boolean',
         label: '仅警告',
+        description: '开启则只提示、不禁言',
         default: false,
         component: 'Switch',
       },
@@ -172,6 +174,7 @@ export const chatbotConfig = {
       master: {
         type: 'object',
         label: '主人',
+        description: '超级用户 QQ，权限与名单放行以此为准',
         component: 'SubForm',
         fields: {
           qq: {
@@ -187,6 +190,7 @@ export const chatbotConfig = {
       auto: {
         type: 'object',
         label: '自动处理',
+        description: '加好友与被拉进群时的自动策略',
         component: 'SubForm',
         fields: {
           friend: {
@@ -248,6 +252,7 @@ export const chatbotConfig = {
           groups: {
             type: 'array',
             label: '白名单群',
+            description: '非空时仅处理这些群的消息',
             itemType: 'string',
             default: [],
             component: 'Tags',
@@ -255,6 +260,7 @@ export const chatbotConfig = {
           qq: {
             type: 'array',
             label: '白名单 QQ',
+            description: '非空时仅处理这些用户（含私聊）',
             itemType: 'string',
             default: [],
             component: 'Tags',
@@ -270,6 +276,7 @@ export const chatbotConfig = {
           groups: {
             type: 'array',
             label: '黑名单群',
+            description: '这些群的消息一律丢弃',
             itemType: 'string',
             default: [],
             component: 'Tags',
@@ -277,6 +284,7 @@ export const chatbotConfig = {
           qq: {
             type: 'array',
             label: '黑名单 QQ',
+            description: '这些用户的消息一律丢弃',
             itemType: 'string',
             default: [],
             component: 'Tags',
@@ -286,6 +294,7 @@ export const chatbotConfig = {
       guild: {
         type: 'object',
         label: '频道',
+        description: 'QQ 频道（群号含 -）相关开关',
         component: 'SubForm',
         fields: {
           disableMsg: {

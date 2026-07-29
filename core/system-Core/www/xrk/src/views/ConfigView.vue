@@ -665,6 +665,11 @@ onMounted(loadList);
             </NButton>
           </div>
 
+          <NButton size="small" type="primary" class="tb-btn tb-save" :loading="saving" @click="save">
+            <XrkIcon name="save" :size="14" />
+            <span>保存</span>
+          </NButton>
+
           <span class="tb-sep" aria-hidden="true" />
 
           <div class="tb-group" role="group" aria-label="文件操作">
@@ -681,13 +686,6 @@ onMounted(loadList);
               <span>重置</span>
             </NButton>
           </div>
-
-          <span class="tb-sep" aria-hidden="true" />
-
-          <NButton size="small" type="primary" class="tb-btn tb-save" :loading="saving" @click="save">
-            <XrkIcon name="save" :size="14" />
-            <span>保存</span>
-          </NButton>
         </div>
       </header>
 
