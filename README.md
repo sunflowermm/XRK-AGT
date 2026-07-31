@@ -90,14 +90,6 @@ Runtime（`src/agent-runtime.js`）+ 基础设施（加载器、基类、工厂�
 
 ---
 
-## ⭐ Star 趋势
-
-<div align="center">
-
-[![Star History Chart](https://api.star-history.com/svg?repos=sunflowermm/XRK-AGT&type=Date)](https://star-history.com/#sunflowermm/XRK-AGT&Date)
-
-</div>
-
 ## 🚀 快速开始
 
 ### 📥 1. 克隆项目
