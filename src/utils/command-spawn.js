@@ -9,11 +9,22 @@ function exists(filePath) {
 }
 
 function findOnPath(name) {
-  const lookup = IS_WINDOWS ? 'where' : 'which';
+  const lookup = IS_WINDOWS ? 'where.exe' : 'which';
   const result = spawnSync(lookup, [name], { encoding: 'utf8', windowsHide: true });
   if (result.status !== 0 || !result.stdout?.trim()) return null;
   const lines = result.stdout.trim().split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
-  return lines[0] || null;
+  if (!lines.length) return null;
+  if (!IS_WINDOWS) return lines[0];
+
+  // where 常先给出无扩展名 shim（如 ...\npx），裸 spawn 会 ENOENT；优先 .cmd/.bat/.exe
+  const withExt = lines.find((line) => /\.(cmd|bat|exe)$/i.test(line));
+  if (withExt) return withExt;
+  for (const line of lines) {
+    if (exists(`${line}.cmd`)) return `${line}.cmd`;
+    if (exists(`${line}.exe`)) return `${line}.exe`;
+    if (exists(`${line}.bat`)) return `${line}.bat`;
+  }
+  return lines[0];
 }
 
 function spawnViaNode(scriptPath, args) {
@@ -114,17 +125,39 @@ export function resolvePnpmSpawn(args, cwd = process.cwd()) {
   throw new Error(`pnpm 未安装或不在 PATH 中，请执行: ${getPnpmInstallHint()}`);
 }
 
+/**
+ * Windows：把 PATH/绝对路径上的 npm/npx 等解析成可 spawn 的规格。
+ * @returns {{ command: string, args: string[], shell: boolean } | null}
+ */
+function resolveWindowsExecutable(executable, args) {
+  if (!executable) return null;
+  if (/\.(cmd|bat)$/i.test(executable)) return spawnWindowsCmd(executable, args);
+  if (/\.exe$/i.test(executable)) return { command: executable, args, shell: false };
+  if (exists(`${executable}.cmd`)) return spawnWindowsCmd(`${executable}.cmd`, args);
+  if (exists(`${executable}.bat`)) return spawnWindowsCmd(`${executable}.bat`, args);
+  if (exists(`${executable}.exe`)) return { command: `${executable}.exe`, args, shell: false };
+  return null;
+}
+
 /** @returns {{ command: string, args: string[], shell: boolean }} */
 export function resolveCommandSpawn(command, args, cwd = process.cwd()) {
   if (command === 'pnpm') {
     return resolvePnpmSpawn(args, cwd);
   }
-  if (IS_WINDOWS && !/[\\/]/.test(command)) {
+  if (IS_WINDOWS) {
+    // 绝对/相对路径，或 PATH 上的 npx/npm 等
+    if (/[\\/]/.test(command)) {
+      return resolveWindowsExecutable(command, args)
+        || { command, args, shell: false };
+    }
     const onPath = findOnPath(command);
     if (onPath) {
-      if (/\.(cmd|bat)$/i.test(onPath)) return spawnWindowsCmd(onPath, args);
-      return { command: onPath, args, shell: false };
+      return resolveWindowsExecutable(onPath, args)
+        || { command: onPath, args, shell: false };
     }
+    // 与 node 同目录的 npm/npx.cmd（葵子/精简 PATH）
+    const besideNode = path.join(path.dirname(process.execPath), `${command}.cmd`);
+    if (exists(besideNode)) return spawnWindowsCmd(besideNode, args);
     return { command, args, shell: true };
   }
   return { command, args, shell: false };
