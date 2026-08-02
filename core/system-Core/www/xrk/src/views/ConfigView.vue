@@ -709,8 +709,8 @@ useAuthReload(loadList);
                 class="sys-card"
                 @click="selectedChild = opt.value"
               >
-                <strong>{{ opt.label }}</strong>
-                <span class="mono">{{ selected }}/{{ opt.value }}</span>
+                <strong class="sys-card-title">{{ opt.label }}</strong>
+                <span class="sys-card-path mono">{{ selected }}/{{ opt.value }}</span>
               </button>
             </div>
             <NEmpty v-if="!childOptions.length" description="未定义子配置" size="small" />
@@ -900,14 +900,17 @@ useAuthReload(loadList);
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 6px;
+  gap: 8px;
   padding: 8px 9px;
   border: 1.5px solid var(--config-border);
   border-radius: 7px;
   background: var(--card);
   cursor: pointer;
   flex-shrink: 0;
-  overflow: visible;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+  overflow: hidden;
 }
 .cfg-item:hover {
   border-color: var(--ink);
@@ -934,6 +937,9 @@ useAuthReload(loadList);
   font-size: var(--font-xs);
   color: var(--muted);
   font-weight: 600;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 .back-btn {
   display: inline-flex;
@@ -963,24 +969,31 @@ useAuthReload(loadList);
   flex-direction: column;
   gap: 3px;
   min-width: 0;
-  flex: 1;
+  flex: 1 1 auto;
+  overflow: hidden;
+}
+.cfg-item .name,
+.cfg-item .desc {
+  display: block;
+  min-width: 0;
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 .cfg-item .name {
-  display: block;
   font-size: var(--font-ui);
   font-weight: 700;
   line-height: 1.3;
+  padding-right: 2px;
 }
 .cfg-item .desc {
-  display: block;
   font-size: var(--font-sm);
   color: var(--muted);
   line-height: 1.45;
-  white-space: normal;
-  word-break: break-word;
 }
 .cfg-tag {
-  flex-shrink: 0;
+  flex: 0 0 auto;
   align-self: flex-start;
   font-size: var(--font-xs);
   font-weight: 800;
@@ -989,6 +1002,7 @@ useAuthReload(loadList);
   border: 1.5px solid var(--ink);
   border-radius: 999px;
   background: var(--cyan);
+  white-space: nowrap;
 }
 .editor {
   display: flex;
@@ -1031,7 +1045,9 @@ header h2 {
   font-size: var(--font-sm);
   color: var(--muted);
   line-height: 1.4;
-  max-width: 52ch;
+  max-width: min(52ch, 100%);
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 .editor-toolbar {
   flex: 0 1 auto;
@@ -1240,12 +1256,13 @@ header h2 {
 }
 .hint { margin: 4px 0 0; font-size: var(--font-xs); color: var(--muted); }
 .placeholder { padding: 20px 0; }
-.sys-chooser { padding: 4px 0; }
+.sys-chooser { padding: 4px 0; min-width: 0; }
 .sys-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 168px), 1fr));
   gap: 10px;
   margin-top: 10px;
+  min-width: 0;
 }
 .sys-card {
   display: flex;
@@ -1254,6 +1271,10 @@ header h2 {
   text-align: left;
   padding: 16px 14px;
   min-height: 88px;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+  overflow: hidden;
   border: 2px solid var(--ink);
   border-radius: 10px;
   background: color-mix(in srgb, var(--cyan) 14%, var(--card));
@@ -1266,8 +1287,24 @@ header h2 {
   box-shadow: 3px 3px 0 var(--ink);
   background: color-mix(in srgb, var(--yellow) 28%, var(--card));
 }
-.sys-card strong { font-size: 14px; line-height: 1.3; }
-.sys-card span { font-size: var(--font-sm); color: var(--muted); }
+.sys-card-title,
+.sys-card-path {
+  min-width: 0;
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+.sys-card-title {
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.3;
+}
+.sys-card-path {
+  font-size: var(--font-sm);
+  color: var(--muted);
+  line-height: 1.4;
+}
 @media (max-width: 900px) {
   .config {
     display: flex;
