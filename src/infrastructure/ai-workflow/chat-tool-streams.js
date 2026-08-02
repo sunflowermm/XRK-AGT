@@ -1,28 +1,43 @@
 /**
- * chat 对话 MCP 工具流白名单：mergeWorkflows 副流 + frameworkToolSurface 流 + 远程 MCP
+ * chat 工具流白名单解析。
+ *
+ * 优先级：
+ * 1. 请求 ALS 的 toolStreamNames（process 写入，并发隔离）
+ * 2. 合成流 _mergedStreams
+ * 3. 裸 chat → 扩展 frameworkToolSurface + remote-mcp.*
  */
 import RuntimeUtil from '#utils/runtime-util.js';
 import AiWorkflowLoader from '#infrastructure/ai-workflow/loader.js';
+import { getWorkflowRequestContext } from '#infrastructure/ai-workflow/workflow-request-context.js';
+import { normalizeStringArray } from '#utils/string-array-utils.js';
 
-/** 未声明 frameworkToolSurface 时的兼容回退（web/browser） */
 export const CHAT_FRAMEWORK_TOOL_WORKFLOWS = ['web', 'browser'];
 
-/** 是否对话 Agent 工具表面（chat 或以其为主流的合成实例） */
 export function isChatToolSurface(stream) {
   if (!stream) return false;
-  if (stream.name === 'chat') return true;
-  if (stream.primaryStream === 'chat') return true;
+  if (stream.name === 'chat' || stream.primaryStream === 'chat') return true;
   if (Array.isArray(stream._mergedStreams) && stream._mergedStreams.some((s) => s?.name === 'chat')) {
     return true;
   }
-  // 兼容历史命名 chat-* / chat-merged
-  if (typeof stream.name === 'string' && (stream.name === 'chat-merged' || stream.name.startsWith('chat-'))) {
-    return true;
-  }
-  return false;
+  return typeof stream.name === 'string'
+    && (stream.name === 'chat-merged' || stream.name.startsWith('chat-'));
 }
 
-/** 扫描已加载流上的 frameworkToolSurface；若无则回退硬编码名单 */
+export function isRemoteMcpStreamName(name) {
+  return String(name ?? '').startsWith('remote-mcp.');
+}
+
+/** 可 merge 的实体流 vs 仅工具面名字（remote-mcp.*） */
+export function partitionToolStreamNames(names) {
+  const mergeable = [];
+  const toolOnly = [];
+  for (const n of normalizeStringArray(names)) {
+    if (isRemoteMcpStreamName(n)) toolOnly.push(n);
+    else mergeable.push(n);
+  }
+  return { mergeable, toolOnly };
+}
+
 export function getFrameworkToolWorkflowNames() {
   const fromMeta = [];
   try {
@@ -34,54 +49,50 @@ export function getFrameworkToolWorkflowNames() {
   } catch (err) {
     RuntimeUtil.makeLog('debug', `扫描 frameworkToolSurface 失败: ${err?.message || err}`, 'ChatToolStreams');
   }
-  if (fromMeta.length) return fromMeta;
-  return [...CHAT_FRAMEWORK_TOOL_WORKFLOWS];
+  return fromMeta.length ? fromMeta : [...CHAT_FRAMEWORK_TOOL_WORKFLOWS];
 }
 
 export function appendRemoteMcpStreamNames(names) {
+  const out = Array.isArray(names) ? names : [];
   try {
     for (const k of AiWorkflowLoader.remoteMCPServers.keys()) {
       const n = `remote-mcp.${k}`;
-      if (!names.includes(n)) names.push(n);
+      if (!out.includes(n)) out.push(n);
     }
   } catch (err) {
     RuntimeUtil.makeLog('debug', `读取远程 MCP 流名失败: ${err?.message || err}`, 'ChatToolStreams');
   }
+  return out;
 }
 
-/** 在已有流名基础上追加框架自研流与 remote-mcp.* */
 export function expandChatToolWorkflowWhitelist(baseNames) {
-  const names = [];
-  const add = (n) => {
-    const s = String(n ?? '').trim();
-    if (s && !names.includes(s)) names.push(s);
-  };
-  if (Array.isArray(baseNames)) {
-    for (const n of baseNames) add(n);
+  const names = normalizeStringArray(baseNames);
+  for (const n of getFrameworkToolWorkflowNames()) {
+    if (!names.includes(n)) names.push(n);
   }
-  for (const n of getFrameworkToolWorkflowNames()) add(n);
-  appendRemoteMcpStreamNames(names);
-  return names;
+  return appendRemoteMcpStreamNames(names);
 }
 
-/** 供 AiWorkflow / HTTP 解析 LLM 工具白名单 */
+function streamOwnNames(stream) {
+  if (Array.isArray(stream?._mergedStreams) && stream._mergedStreams.length > 0) {
+    return stream._mergedStreams.map((s) => s.name).filter(Boolean);
+  }
+  return [stream?.name].filter(Boolean);
+}
+
+/** 供 AiWorkflow / 副提示解析工具流名单（先读 ALS，避免单例缓存串请求） */
 export function resolveToolStreamNames(stream) {
-  const base =
-    stream?._mergedStreams && Array.isArray(stream._mergedStreams) && stream._mergedStreams.length > 0
-      ? stream._mergedStreams.map((s) => s.name)
-      : [stream?.name].filter(Boolean);
-
-  if (!isChatToolSurface(stream)) {
-    return base;
+  const ctx = getWorkflowRequestContext();
+  if (Array.isArray(ctx?.toolStreamNames)) {
+    return normalizeStringArray(ctx.toolStreamNames);
   }
-  return expandChatToolWorkflowWhitelist(base);
+
+  const own = streamOwnNames(stream);
+  if (!isChatToolSurface(stream)) return own;
+  if (Array.isArray(stream._mergedStreams) && stream._mergedStreams.length > 0) return own;
+  return expandChatToolWorkflowWhitelist(own);
 }
 
-/**
- * 收集 mergeWorkflows / 框架副流上的 buildSystemPrompt，拼入主 chat system。
- * @param {import('./ai-workflow.js').default} stream
- * @param {object} [context]
- */
 export function collectAuxiliaryStreamPrompts(stream, context = {}) {
   if (!stream || !isChatToolSurface(stream)) return '';
   const names = resolveToolStreamNames(stream);
@@ -89,7 +100,7 @@ export function collectAuxiliaryStreamPrompts(stream, context = {}) {
   const parts = [];
 
   for (const name of names) {
-    if (skip.has(name) || name.startsWith('remote-mcp.') || name.startsWith('chat-')) continue;
+    if (skip.has(name) || isRemoteMcpStreamName(name) || name.startsWith('chat-')) continue;
     const aux = AiWorkflowLoader.getWorkflow(name);
     if (!aux || typeof aux.buildSystemPrompt !== 'function') continue;
     try {
@@ -97,7 +108,7 @@ export function collectAuxiliaryStreamPrompts(stream, context = {}) {
       const text = typeof out === 'string' ? out : (out != null ? String(out) : '');
       if (text.trim()) parts.push(`### ${name}\n${text.trim()}`);
     } catch {
-      /* 非 chat 副流可能仍为抽象基类默认实现 */
+      /* ignore */
     }
   }
 

@@ -8,9 +8,11 @@ import {
   handleClearConversation,
   loadAiAssistantConfig,
   logAiInit,
+  messageMatchesAiPrefix,
   processMessageContent,
   rawMessageTextForAiTrigger,
   resolveChatStream,
+  resolveEffectiveAiConfig,
   runChatAgent,
   shouldTriggerAI,
   isInAiWhitelist,
@@ -48,7 +50,11 @@ export class XRKAIAssistant extends PluginBase {
         return handleClearConversation(e);
       }
 
+      // 总开关：全局关闭则整插件不响应（群覆盖不能打开）
       if (this.config.enabled === false) return false;
+
+      const effective = resolveEffectiveAiConfig(e, this.config);
+      if (effective.enabled === false) return false;
 
       const rawForDump = rawMessageTextForAiTrigger(e);
       const debugDumpFullPrompt = AI_FULL_PROMPT_DUMP_REGEX.test(rawForDump);
@@ -56,20 +62,18 @@ export class XRKAIAssistant extends PluginBase {
         return false;
       }
 
-      let trigger = true;
-      if (!debugDumpFullPrompt) {
-        trigger = await shouldTriggerAI(e, this.config);
+      if (!debugDumpFullPrompt && !(await shouldTriggerAI(e, this.config))) {
+        return false;
       }
-      if (!trigger) return false;
 
-      const stream = resolveChatStream(this, this.config);
+      const stream = resolveChatStream(this);
       if (!stream) {
         logger.error('[XRK-AI] chat 工作流未加载');
         return false;
       }
 
-      const isRandom = !e.atBot && !(this.config.prefix && e.msg?.startsWith(this.config.prefix));
-      const text = await processMessageContent(e, this.config);
+      const isRandom = !e.atBot && !messageMatchesAiPrefix(e.msg, effective.prefixes);
+      const text = await processMessageContent(e);
       const isGlobalTrigger = isRandom && !debugDumpFullPrompt;
 
       if (!debugDumpFullPrompt && !isGlobalTrigger && !text) {
@@ -82,7 +86,7 @@ export class XRKAIAssistant extends PluginBase {
 
       await runChatAgent(this, e, {
         text,
-        persona: this.config.persona ?? '',
+        persona: effective.persona ?? '',
         config: this.config,
         isGlobalTrigger,
         debugDumpFullPrompt,

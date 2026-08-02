@@ -359,8 +359,6 @@ class AiWorkflowLoader {
     merged.secondaryStreams = secondaryStreams.map(s => s.name);
     merged._mergedStreams = [mainStream, ...secondaryStreams];
     merged.mcpTools = new Map();
-    // 禁止沿用主流失效的工具白名单缓存
-    merged._cachedToolStreamNames = null;
 
     const adoptMCPTools = (source, isPrimary) => {
       if (!source.mcpTools) return;

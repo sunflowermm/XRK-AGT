@@ -138,16 +138,17 @@ sequenceDiagram
 | `process(e, question, options)` | 工作流处理入口（单次对话 + MCP 工具调用） |
 
 **process 方法参数**：
-- `mergeWorkflows` - **唯一推荐**组合路径：副工作流名称列表（如 `memory`、`database`、`tools`、`desktop`）
-- `enableMemory` / `enableDatabase` / `enableTools` - 无 `mergeWorkflows` 时的兼容别名，映射为副流后仍走 `AiWorkflowLoader.mergeWorkflows`（**不再**原地 mutate 主单例）
+- `mergeWorkflows` - 副工作流 / 工具面名单（**唯一**组合入口）
+  - **未传**：开放模式 — 主流 + `frameworkToolSurface` + 已加载 `remote-mcp.*`
+  - **传了数组（可空）**：严格模式 — 名单即工具面；`remote-mcp.*` 只进白名单不参与 merge；未加载的副流名忽略并 warn
 - 其余字段 - 作为 LLM `apiConfig` 覆盖（与 `this.config` 合并）
 
 **工作流分类**：
 - **对话主表面**：`chat`（及 `mergeWorkflows` 合成实例）
-- **能力副流**：`memory`、`database`、`tools`、`desktop` 等，按名列入 `mergeWorkflows`
-- **框架自研工具面**：声明 `frameworkToolSurface: true` 的流（如 `web`、`browser`）自动并入 chat 工具白名单，无需写入 `mergeWorkflows`
+- **能力副流**：`memory`、`database`、`tools`、`desktop`、`web`、`browser` 等实体流
+- **远程 MCP 工具面**：`remote-mcp.<name>` — 仅工具白名单，不可 merge 成子流
 
-**请求上下文**：`runWithWorkflowRequestContext`（ALS）；MCP handler 的 `context.e` / `turnState` 只读 ALS。
+**请求上下文**：`runWithWorkflowRequestContext`（ALS）写入 `toolStreamNames`；副提示 / LLM tools / MCP handler 共用，避免单例缓存串请求。
 
 **调用流程**：
 1. `buildChatContext` / chat 自定义上下文 - 构建消息
@@ -168,28 +169,23 @@ sequenceDiagram
 - `e` - 事件对象（QQ/IM/Chatbot 等消息事件）
 - `question` - 用户问题（字符串或对象）
 - `options` - 选项对象
-  - `mergeWorkflows` - 副工作流名称数组（推荐唯一组合入口）
-  - `enableMemory` / `enableDatabase` / `enableTools` - 兼容别名 → 并入副流列表
+  - `mergeWorkflows` - 副工作流 / 工具面名称数组（唯一组合入口；未传=开放，传了=严格）
   - 其它键 - LLM 配置覆盖（provider, model, temperature 等）
 
 **返回**：`Promise<string|null>` - AI回复文本
 
 **示例**：
 ```javascript
-// 基础调用（仅使用当前工作流）
+// 开放模式：chat + framework + remote-mcp
 await stream.process(e, e.msg);
 
-// 推荐：显式 mergeWorkflows
+// 严格模式：名单即工具面
 await stream.process(e, e.msg, {
   mergeWorkflows: ['memory', 'database', 'tools', 'desktop']
 });
 
-// 兼容别名（无 mergeWorkflows 时映射为同上副流，不 mutate 单例）
-await stream.process(e, e.msg, {
-  enableMemory: true,
-  enableDatabase: true,
-  enableTools: true
-});
+// 仅 chat（不并入任何副流 / framework）
+await stream.process(e, e.msg, { mergeWorkflows: [] });
 
 // 自定义 LLM 字段与 merge 并列
 await stream.process(e, e.msg, {
@@ -282,12 +278,9 @@ await stream.callAiWorkflow(messages, {}, (delta) => {
 - `process({ mergeWorkflows: ['tools', 'memory'] })`
 - 或 `AiWorkflowLoader.mergeWorkflows({ main, secondary, ... })`
 
-无 `mergeWorkflows` 时，`enableTools` / `enableMemory` / `enableDatabase` 会映射为副工作流名（兼容别名）：
-
 ```javascript
 await workflow.process(e, question, {
   mergeWorkflows: ['tools', 'memory', 'database']
-  // 或：enableTools: true, enableMemory: true, enableDatabase: true
 });
 ```
 
@@ -355,31 +348,14 @@ export default class MyStream extends AiWorkflow {
 ### 插件中调用工作流
 
 ```javascript
-// 基础调用
 const stream = this.getWorkflow('chat');
+
+// 开放模式
 await stream.process(e, e.msg);
 
-// 启用记忆和知识库
+// 严格模式：只开指定副流
 await stream.process(e, e.msg, {
-  enableMemory: true,
-  enableDatabase: true
-});
-
-// 合并主工作流 + 整合工具工作流
-await stream.process(e, e.msg, {
-  mergeWorkflows: ['desktop'],  // 合并主工作流
-  enableMemory: true,         // 整合工具工作流
-  enableDatabase: true,       // 整合工具工作流
-  enableTools: true          // 整合工具工作流
-});
-
-// 自定义LLM配置
-await stream.process(e, e.msg, {
-  apiConfig: {
-    provider: 'volcengine',
-    model: 'gpt-4',
-    temperature: 0.7
-  }
+  mergeWorkflows: ['memory', 'database', 'desktop'],
 });
 
 // 流式调用（需要手动发送回复）
@@ -387,18 +363,6 @@ let fullText = '';
 await stream.callAiWorkflow(messages, {}, (delta) => {
   fullText += delta;
   e.reply(delta);
-});
-```
-
-### 工作流合并示例
-
-```javascript
-// 工作流合并应通过调用参数控制，不需要在 init() 中主动合并
-// 调用时通过参数指定：
-await stream.process(e, question, {
-  enableTools: true,      // 自动整合 tools 工作流
-  enableMemory: true,    // 自动整合 memory 工作流
-  enableDatabase: true   // 自动整合 database 工作流
 });
 ```
 

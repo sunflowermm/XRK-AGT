@@ -17,10 +17,13 @@ const LINUX_PATHS = [
   '/usr/bin/microsoft-edge', '/opt/microsoft/msedge/msedge'
 ];
 
+const WIN_BINS = ['chrome', 'msedge', 'chrome.exe', 'msedge.exe'];
+
 const WIN_PATHS = [
   path.join(process.env.ProgramFiles || 'C:/Program Files', 'Google/Chrome/Application/chrome.exe'),
   path.join(process.env['ProgramFiles(x86)'] || 'C:/Program Files (x86)', 'Google/Chrome/Application/chrome.exe'),
   path.join(process.env.ProgramFiles || 'C:/Program Files', 'Microsoft/Edge/Application/msedge.exe'),
+  path.join(process.env['ProgramFiles(x86)'] || 'C:/Program Files (x86)', 'Microsoft/Edge/Application/msedge.exe'),
   path.join(process.env.LOCALAPPDATA || '', 'Google/Chrome/Application/chrome.exe'),
   path.join(process.env.LOCALAPPDATA || '', 'Microsoft/Edge/Application/msedge.exe')
 ];
@@ -43,13 +46,15 @@ function isExecutable(filePath) {
   }
 }
 
-function tryWhich(bin) {
+function tryLookup(bin) {
+  const cmd = currentPlatform === 'win32' ? 'where.exe' : 'which';
   try {
-    const found = execFileSync('which', [bin], {
+    const found = execFileSync(cmd, [bin], {
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'ignore'],
-      timeout: 5000
-    }).trim();
+      timeout: 5000,
+      windowsHide: true
+    }).trim().split(/\r?\n/).map((l) => l.trim()).filter(Boolean)[0];
     return isExecutable(found) ? found : null;
   } catch {
     return null;
@@ -60,7 +65,7 @@ function tryWhich(bin) {
 function findSystemBrowser() {
   if (['linux', 'android'].includes(currentPlatform)) {
     for (const bin of LINUX_BINS) {
-      const found = tryWhich(bin);
+      const found = tryLookup(bin);
       if (found) return found;
     }
     for (const browserPath of LINUX_PATHS) {
@@ -69,14 +74,21 @@ function findSystemBrowser() {
     return null;
   }
 
-  const paths = currentPlatform === 'win32'
-    ? WIN_PATHS
-    : currentPlatform === 'darwin'
-      ? DARWIN_PATHS
-      : [];
+  if (currentPlatform === 'win32') {
+    for (const bin of WIN_BINS) {
+      const found = tryLookup(bin);
+      if (found) return found;
+    }
+    for (const browserPath of WIN_PATHS) {
+      if (isExecutable(browserPath)) return browserPath;
+    }
+    return null;
+  }
 
-  for (const browserPath of paths) {
-    if (isExecutable(browserPath)) return browserPath;
+  if (currentPlatform === 'darwin') {
+    for (const browserPath of DARWIN_PATHS) {
+      if (isExecutable(browserPath)) return browserPath;
+    }
   }
   return null;
 }

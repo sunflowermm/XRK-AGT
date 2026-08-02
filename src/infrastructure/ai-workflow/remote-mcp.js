@@ -1,5 +1,6 @@
-import { spawn } from 'child_process';
+import { spawn } from 'node:child_process';
 import RuntimeUtil from '#utils/runtime-util.js';
+import { resolveCommandSpawn } from '#utils/command-spawn.js';
 import { getAiWorkflowConfigOptional } from '#utils/ai-workflow-config.js';
 
 /**
@@ -277,18 +278,23 @@ export class RemoteMcpController {
 
     if (runtimeConfig.command) {
       // stdio 协议：通过子进程启动 MCP 服务器
-      // 默认禁 shell（防命令注入）；需管道/特殊 shell 语法时在 mcp 配置显式 shell: true
-      const spawnShell = typeof runtimeConfig.shell === 'boolean' ? runtimeConfig.shell : false;
-      const child = spawn(
-        String(runtimeConfig.command),
-        Array.isArray(runtimeConfig.args) ? runtimeConfig.args : [],
-        {
-          stdio: ['pipe', 'pipe', 'pipe'],
-          shell: spawnShell,
-          env: { ...process.env, ...(runtimeConfig.env && typeof runtimeConfig.env === 'object' ? runtimeConfig.env : {}) },
-          cwd: typeof runtimeConfig.cwd === 'string' && runtimeConfig.cwd.trim() ? runtimeConfig.cwd.trim() : undefined
-        }
-      );
+      // Windows 下 npx/npm 等常为 .cmd，裸 spawn 会 ENOENT；统一走 command-spawn
+      // 显式 shell: true 仅用于管道等特殊语法；已解析为 cmd.exe 时保持 shell:false
+      const cwd = typeof runtimeConfig.cwd === 'string' && runtimeConfig.cwd.trim()
+        ? runtimeConfig.cwd.trim()
+        : process.cwd();
+      const args = (Array.isArray(runtimeConfig.args) ? runtimeConfig.args : []).map((a) => String(a));
+      const spawnSpec = resolveCommandSpawn(String(runtimeConfig.command), args, cwd);
+      const shell = typeof runtimeConfig.shell === 'boolean'
+        ? runtimeConfig.shell
+        : spawnSpec.shell;
+      const child = spawn(spawnSpec.command, spawnSpec.args, {
+        stdio: ['pipe', 'pipe', 'pipe'],
+        shell,
+        windowsHide: true,
+        env: { ...process.env, ...(runtimeConfig.env && typeof runtimeConfig.env === 'object' ? runtimeConfig.env : {}) },
+        cwd,
+      });
       const entry = { type: 'stdio', process: child, config: runtimeConfig };
       this.remoteMCPServers.set(serverName, entry);
 

@@ -13,7 +13,13 @@ import {
   getWorkflowRequestContext,
   runWithWorkflowRequestContext
 } from '#infrastructure/ai-workflow/workflow-request-context.js';
-import { collectAuxiliaryStreamPrompts, resolveToolStreamNames } from '#infrastructure/ai-workflow/chat-tool-streams.js';
+import {
+  collectAuxiliaryStreamPrompts,
+  expandChatToolWorkflowWhitelist,
+  partitionToolStreamNames,
+  resolveToolStreamNames,
+} from '#infrastructure/ai-workflow/chat-tool-streams.js';
+import { normalizeStringArray } from '#utils/string-array-utils.js';
 import { unpackFactoryChatRaw } from '#utils/llm/llm-nonstream-reply.js';
 import { assembleChatLlmMessages, logLlmMessagePreview } from '#infrastructure/ai-workflow/chat-pipeline.js';
 
@@ -23,7 +29,6 @@ export default class AiWorkflow {
   /** @type {AiWorkflow[]} mergeWorkflows 合成实例挂载的子工作流 */
   _mergedStreams = [];
   _initialized = false;
-  _cachedToolStreamNames = null;
 
   /**
    * 构造函数
@@ -353,14 +358,11 @@ export default class AiWorkflow {
     return [{ role: 'system', content }];
   }
 
-  /** chat 白名单：合并副流 + frameworkToolSurface 流 + remote-mcp.* */
+  /** 工具流名单：优先请求 ALS（process 写入），无则按流自身解析 */
   _getToolWorkflowNames() {
-    if (this._cachedToolStreamNames) {
-      return this._cachedToolStreamNames;
-    }
-    this._cachedToolStreamNames = resolveToolStreamNames(this);
-    RuntimeUtil.makeLog('debug', `[AiWorkflow] 工具白名单 ${this.name}: [${this._cachedToolStreamNames.join(', ')}]`, 'AiWorkflow');
-    return this._cachedToolStreamNames;
+    const names = resolveToolStreamNames(this);
+    RuntimeUtil.makeLog('debug', `[AiWorkflow] 工具白名单 ${this.name}: [${names.join(', ')}]`, 'AiWorkflow');
+    return names;
   }
 
   /**
@@ -551,55 +553,67 @@ export default class AiWorkflow {
   }
 
   /**
-   * 将 enable* 兼容别名归一为副流名列表（去重）。
-   * @param {{ mergeWorkflows?: string[], enableMemory?: boolean, enableDatabase?: boolean, enableTools?: boolean }} options
-   * @returns {string[]}
-   */
-  static resolveSecondaryStreamNames(options = {}) {
-    let secondary = Array.isArray(options.mergeWorkflows) ? [...options.mergeWorkflows] : [];
-    if (secondary.length === 0) {
-      if (options.enableMemory) secondary.push('memory');
-      if (options.enableDatabase) secondary.push('database');
-      if (options.enableTools) secondary.push('tools');
-    }
-    return [...new Set(secondary.map((n) => String(n ?? '').trim()).filter(Boolean))];
-  }
-
-  /**
-   * 处理请求（支持工作流合并）
-   * 唯一组合路径：mergeWorkflows → AiWorkflowLoader.mergeWorkflows。
-   * enableMemory/Database/Tools 仅作无 mergeWorkflows 时的兼容别名，映射为副流列表，不再原地 mutate 单例。
+   * 处理请求。
+   *
+   * - 未传 `mergeWorkflows`：开放模式 — 裸主流 + frameworkToolSurface + remote-mcp.*
+   * - 传了 `mergeWorkflows`（数组，可空）：严格模式 — 名单即工具面；`remote-mcp.*` 只进白名单不 merge；
+   *   未加载的副流名忽略并打 warn，不拖垮整次调用
    */
   async process(e, question, options = {}) {
     try {
       const {
-        mergeWorkflows: _ms,
-        enableMemory: _em,
-        enableDatabase: _ed,
-        enableTools: _et,
+        mergeWorkflows,
+        workflows: workflowsOpt,
         ...apiConfig
       } = options;
 
-      const secondary = AiWorkflow.resolveSecondaryStreamNames(options);
+      const host = getAiWorkflowHost();
+      const strict = Array.isArray(mergeWorkflows);
+      const { mergeable, toolOnly } = partitionToolStreamNames(
+        strict ? mergeWorkflows : [],
+      );
+
+      const missing = [];
+      const secondary = [];
+      for (const name of mergeable) {
+        if (host?.getWorkflow?.(name)) secondary.push(name);
+        else missing.push(name);
+      }
+      if (missing.length) {
+        RuntimeUtil.makeLog(
+          'warn',
+          `副工作流未加载已忽略: ${missing.join(', ')}`,
+          'AiWorkflow',
+        );
+      }
 
       let stream = this;
       if (secondary.length > 0) {
         const mergedName = `${this.name}-${secondary.join('-')}`;
-        const host = getAiWorkflowHost();
         stream = host?.getWorkflow?.(mergedName) ||
           host?.mergeWorkflows?.({
             name: mergedName,
             main: this.name,
             secondary,
-            prefixSecondary: true
-          });
+            prefixSecondary: true,
+          }) ||
+          this;
       }
 
-      if (!apiConfig.workflows) {
-        apiConfig.workflows = [this.name, ...secondary];
+      let toolStreamNames;
+      if (Array.isArray(workflowsOpt)) {
+        toolStreamNames = normalizeStringArray(workflowsOpt);
+      } else if (strict) {
+        toolStreamNames = [this.name, ...secondary, ...toolOnly];
+      } else {
+        toolStreamNames = expandChatToolWorkflowWhitelist([this.name]);
       }
+      apiConfig.workflows = toolStreamNames;
 
-      return await stream.execute(e, question, apiConfig);
+      return await runWithWorkflowRequestContext(
+        { e, turnState: null, toolStreamNames },
+        () => stream.execute(e, question, apiConfig),
+      );
     } catch (error) {
       RuntimeUtil.makeLog('error', `工作流处理失败[${this.name}]: ${error.message}`, 'AiWorkflow');
       return null;

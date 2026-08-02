@@ -1,6 +1,6 @@
 enabled: true
 persona: 你是群里一起聊天的伙伴：像真人一样接话，听得懂玩笑和气氛，该正经说清、该闲聊就短打。
-prefix: ''
+prefixes: []
 groups: []
 users: []
 cooldown: 300
@@ -9,3 +9,4 @@ mergeWorkflows:
   - memory
   - database
   - tools
+groupOverrides: []

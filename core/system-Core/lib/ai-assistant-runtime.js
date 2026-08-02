@@ -1,8 +1,9 @@
 /**
- * AI 助手运行时 — 底层走 AGT workflow.process / AiWorkflowLoader.mergeWorkflows
+ * AI 助手运行时 — 走 AGT workflow.process（严格 mergeWorkflows）
  */
 import AiWorkflowLoader from '#infrastructure/ai-workflow/loader.js';
 import { flattenMessageSegs, segQq, segReplyId, segText } from '#utils/onebot-message-seg.js';
+import { normalizeStringArray } from '#utils/string-array-utils.js';
 import ChatStream from '../workflow/chat.js';
 
 export const AI_FULL_PROMPT_DUMP_REGEX = /#?XRK完整AI上下文/;
@@ -24,15 +25,58 @@ function resolveAiConfigInstance() {
   return null;
 }
 
-/** 始终走 CommonConfigRegistry（若已就绪）或模板实例；勿缓存过期快照 */
+function findGroupOverride(config, groupId) {
+  const gid = String(groupId ?? '');
+  if (!gid || !Array.isArray(config?.groupOverrides)) return null;
+  return config.groupOverrides.find((row) => String(row?.groupId ?? '') === gid) || null;
+}
+
+/**
+ * 全局默认 + 群覆盖。
+ * 有群覆盖行时 mergeWorkflows 整表替换；prefixes/chance/cooldown/enabled 有值才盖。
+ */
+export function resolveEffectiveAiConfig(e, config) {
+  const base = config && typeof config === 'object' ? config : {};
+  const effective = {
+    ...base,
+    prefixes: normalizeStringArray(base.prefixes),
+    mergeWorkflows: normalizeStringArray(base.mergeWorkflows),
+    cooldown: base.cooldown ?? 300,
+    chance: base.chance ?? 0.1,
+    enabled: base.enabled !== false,
+  };
+
+  if (!e?.isGroup) return effective;
+  const ov = findGroupOverride(base, e.group_id);
+  if (!ov) return effective;
+
+  if (typeof ov.enabled === 'boolean') effective.enabled = ov.enabled;
+  if (Array.isArray(ov.prefixes) && ov.prefixes.length) {
+    effective.prefixes = normalizeStringArray(ov.prefixes);
+  }
+  if (typeof ov.chance === 'number' && Number.isFinite(ov.chance)) {
+    effective.chance = ov.chance;
+  }
+  if (typeof ov.cooldown === 'number' && Number.isFinite(ov.cooldown)) {
+    effective.cooldown = ov.cooldown;
+  }
+  effective.mergeWorkflows = normalizeStringArray(ov.mergeWorkflows);
+  return effective;
+}
+
+export function messageMatchesAiPrefix(msg, prefixes) {
+  const text = String(msg ?? '');
+  if (!text) return false;
+  for (const p of normalizeStringArray(prefixes)) {
+    if (p && text.startsWith(p)) return true;
+  }
+  return false;
+}
+
 export async function loadAiAssistantConfig() {
   const inst = resolveAiConfigInstance();
-  if (inst && typeof inst.read === 'function') {
-    return inst.read(true);
-  }
-  if (inst && typeof inst === 'object' && !inst.read) {
-    return inst;
-  }
+  if (inst && typeof inst.read === 'function') return inst.read(true);
+  if (inst && typeof inst === 'object' && !inst.read) return inst;
   const { default: AIConfig } = await import('../commonconfig/ai_config.js');
   return new AIConfig().read(true);
 }
@@ -51,44 +95,44 @@ export function rawMessageTextForAiTrigger(e) {
   return flattenMessageSegs(e.message).map((seg) => (seg?.type === 'text' ? segText(seg) : '')).join('');
 }
 
-/**
- * 解析 chat 主流。组合副流由 runChatAgent → process({ mergeWorkflows }) 唯一完成。
- */
-export function resolveChatStream(plugin, _config) {
+export function resolveChatStream(plugin) {
   return plugin.getWorkflow?.('chat') || AiWorkflowLoader.getWorkflow?.('chat') || null;
 }
 
 export function isInAiWhitelist(e, config) {
   if (!config) return false;
   if (e.isGroup) {
-    return config.groups?.some((g) => String(g) === String(e.group_id)) ?? false;
+    const groups = config.groups;
+    if (!Array.isArray(groups) || groups.length === 0) return true;
+    return groups.some((g) => String(g) === String(e.group_id));
   }
-  return config.users?.some((u) => String(u) === String(e.user_id)) ?? false;
+  const users = config.users;
+  if (!Array.isArray(users) || users.length === 0) return false;
+  return users.some((u) => String(u) === String(e.user_id));
 }
 
 export async function shouldTriggerAI(e, config) {
   if (!config) return false;
+  const effective = resolveEffectiveAiConfig(e, config);
+  if (effective.enabled === false) return false;
+
   if (e.atBot) return isInAiWhitelist(e, config);
-  if (config.prefix && e.msg?.startsWith(config.prefix)) {
+  if (messageMatchesAiPrefix(e.msg, effective.prefixes)) {
     return isInAiWhitelist(e, config);
   }
-  if (!e.isGroup) return false;
-  if (!isInAiWhitelist(e, config)) return false;
+  if (!e.isGroup || !isInAiWhitelist(e, config)) return false;
 
   const groupId = String(e.group_id);
   const now = Date.now();
-  const cooldown = (config.cooldown ?? 300) * 1000;
-  const chance = config.chance ?? 0.1;
   const last = cooldownState.get(groupId) || 0;
-  if (now - last < cooldown) return false;
-  if (Math.random() < chance) {
+  if (now - last < (effective.cooldown ?? 300) * 1000) return false;
+  if (Math.random() < (effective.chance ?? 0.1)) {
     cooldownState.set(groupId, now);
     return true;
   }
   return false;
 }
 
-/** 从段里取 reply 目标消息 ID（事件扁平段；勿用 real_seq） */
 function replyTargetIdFromEvent(e) {
   const seg = Array.isArray(e?.message)
     ? e.message.find((s) => s && s.type === 'reply')
@@ -117,7 +161,7 @@ function summarizeReplyRaw(reply) {
     .trim();
 }
 
-export async function processMessageContent(e, _config) {
+export async function processMessageContent(e) {
   const fallback = e.msg || '';
   const message = e.message;
   if (!Array.isArray(message)) return stripAiFullPromptDumpMark(String(fallback));
@@ -143,11 +187,9 @@ export async function processMessageContent(e, _config) {
       else if (seg.type === 'at') {
         const qqStr = segQq(seg);
         if (!qqStr) continue;
-        if (qqStr === String(e.self_id) || qqStr === 'all') {
-          content += `@机器人(${e.self_id}) `;
-        } else {
-          content += `@${qqStr} `;
-        }
+        content += qqStr === String(e.self_id) || qqStr === 'all'
+          ? `@机器人(${e.self_id}) `
+          : `@${qqStr} `;
       } else if (seg.type === 'image' || seg.type === 'mface') content += '[图片] ';
       else if (seg.type === 'file') content += `[文件:${seg.name || '未知'}] `;
       else if (seg.type === 'face') content += '[表情] ';
@@ -159,33 +201,24 @@ export async function processMessageContent(e, _config) {
   }
 }
 
-/** 走 AGT AiWorkflow.process：唯一热路径 mergeWorkflows */
-export async function runChatAgent(_plugin, e, {
+export async function runChatAgent(plugin, e, {
   text,
   persona = '',
   config,
   isGlobalTrigger = false,
   debugDumpFullPrompt = false,
 } = {}) {
-  const stream = resolveChatStream(_plugin, config);
+  const stream = resolveChatStream(plugin);
   if (!stream) {
     logger.error('[XRK-AI] chat 工作流未加载');
     return false;
   }
 
-  const ms = Array.isArray(config?.mergeWorkflows) ? config.mergeWorkflows : [];
+  const effective = resolveEffectiveAiConfig(e, config);
   await stream.process(
     e,
-    {
-      content: text,
-      text,
-      persona,
-      isGlobalTrigger,
-      debugDumpFullPrompt: !!debugDumpFullPrompt,
-    },
-    {
-      mergeWorkflows: ms,
-    },
+    { content: text, text, persona, isGlobalTrigger, debugDumpFullPrompt: !!debugDumpFullPrompt },
+    { mergeWorkflows: normalizeStringArray(effective.mergeWorkflows) },
   );
   return true;
 }
@@ -204,5 +237,11 @@ export async function handleClearConversation(e) {
 }
 
 export function logAiInit(config) {
-  logger.mark(`[XRK-AI] 就绪 · 群白名单 ${config.groups?.length || 0} · 用户 ${config.users?.length || 0} · merge=[${(config.mergeWorkflows || []).join(',')}]`);
+  const prefixes = normalizeStringArray(config?.prefixes);
+  const overrides = Array.isArray(config?.groupOverrides) ? config.groupOverrides.length : 0;
+  logger.mark(
+    `[XRK-AI] 就绪 · 群 ${config.groups?.length || 0} · 用户 ${config.users?.length || 0}`
+    + ` · 前缀[${prefixes.join(',') || '无'}] · 群覆盖 ${overrides}`
+    + ` · merge=[${normalizeStringArray(config?.mergeWorkflows).join(',')}]`,
+  );
 }

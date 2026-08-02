@@ -2991,7 +2991,13 @@ export default class ChatStream extends AiWorkflow {
   }
 
   async execute(e, question, config) {
-    return runWithWorkflowRequestContext({ e, turnState: createUserVisibleTurnState() }, async () => {
+    // 保留 process() 写入的 strictToolStreams / toolStreamNames，只刷新 turnState
+    const parent = getWorkflowRequestContext() || {};
+    return runWithWorkflowRequestContext({
+      ...parent,
+      e: e ?? parent.e,
+      turnState: createUserVisibleTurnState(),
+    }, async () => {
       try {
         if (e) this.recordMessage(e);
 
