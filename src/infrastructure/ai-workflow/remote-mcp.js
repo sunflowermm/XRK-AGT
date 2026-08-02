@@ -96,6 +96,7 @@ export class RemoteMcpController {
     const child = entry.process;
     const client = {
       buffer: '',
+      stderr: '',
       pending: new Map(),
       onData: null,
       closed: false
@@ -134,10 +135,21 @@ export class RemoteMcpController {
     };
 
     child.stdout?.on('data', client.onData);
-    child.on('exit', () => {
+    child.stderr?.on('data', (chunk) => {
+      const text = chunk?.toString?.() || '';
+      client.stderr = (client.stderr + text).slice(-2000);
+    });
+    child.on('exit', (code, signal) => {
       client.closed = true;
       try { child.stdout?.removeListener('data', client.onData); } catch {}
-      flushPending('远程MCP进程已退出');
+      const detail = client.stderr.trim().replace(/\s+/g, ' ').slice(0, 400);
+      const why = [
+        '远程MCP进程已退出',
+        code != null ? `code=${code}` : null,
+        signal ? `signal=${signal}` : null,
+        detail || null,
+      ].filter(Boolean).join(' | ');
+      flushPending(why);
     });
     child.on('error', (err) => {
       client.closed = true;
@@ -307,8 +319,13 @@ export class RemoteMcpController {
           capabilities: {},
           clientInfo: { name: 'xrk-agt', version: '1.0.0' }
         };
-        await this._stdioRequest(serverName, entry, 'initialize', initParams, { timeoutMs: 15000 });
-        const listResult = await this._stdioRequest(serverName, entry, 'tools/list', {}, { timeoutMs: 15000 });
+        // npx -y 首次拉包可能较慢
+        const cmd = String(runtimeConfig.command || '').toLowerCase();
+        const initTimeoutMs = (cmd === 'npx' || cmd.endsWith('\\npx') || cmd.endsWith('/npx') || cmd.endsWith('npx.cmd'))
+          ? 90000
+          : 15000;
+        await this._stdioRequest(serverName, entry, 'initialize', initParams, { timeoutMs: initTimeoutMs });
+        const listResult = await this._stdioRequest(serverName, entry, 'tools/list', {}, { timeoutMs: 30000 });
         if (listResult?.tools) {
           this._registerRemoteTools(serverName, listResult.tools);
         }

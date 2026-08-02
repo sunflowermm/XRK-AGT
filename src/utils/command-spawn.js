@@ -27,12 +27,49 @@ function findOnPath(name) {
   return lines[0];
 }
 
-function spawnViaNode(scriptPath, args) {
-  return { command: process.execPath, args: [scriptPath, ...args], shell: false };
+function spawnViaNode(scriptPath, args, nodeExe = process.execPath) {
+  return { command: nodeExe, args: [scriptPath, ...args], shell: false };
 }
 
+/**
+ * 跑 Windows .cmd/.bat。
+ * `C:\Program Files\...` 必须给 command 本身加引号，否则 shell 会拆成 `C:\Program`。
+ */
 function spawnWindowsCmd(cmdPath, args) {
-  return { command: 'cmd.exe', args: ['/d', '/s', '/c', cmdPath, ...args], shell: false };
+  const command = /[\s]/.test(cmdPath) ? `"${cmdPath.replace(/"/g, '')}"` : cmdPath;
+  return { command, args: args.map((a) => String(a)), shell: true };
+}
+
+/**
+ * npm / npx：优先 `node.exe` + `*-cli.js`（避免 .cmd + Program Files 空格问题）。
+ * @param {'npm'|'npx'} kind
+ * @returns {{ command: string, args: string[], shell: boolean } | null}
+ */
+function resolveNpmFamilySpawn(kind, args) {
+  const cliName = kind === 'npm' ? 'npm-cli.js' : 'npx-cli.js';
+  const roots = new Set();
+
+  const addRoot = (dir) => {
+    if (dir && exists(dir)) roots.add(dir);
+  };
+
+  addRoot(path.dirname(process.execPath));
+  const onPath = findOnPath(kind);
+  if (onPath) addRoot(path.dirname(onPath));
+  if (IS_WINDOWS) {
+    addRoot(path.join(process.env.ProgramFiles || 'C:\\Program Files', 'nodejs'));
+    const pf86 = process.env['ProgramFiles(x86)'];
+    if (pf86) addRoot(path.join(pf86, 'nodejs'));
+  }
+
+  for (const root of roots) {
+    const cli = path.join(root, 'node_modules', 'npm', 'bin', cliName);
+    if (!exists(cli)) continue;
+    const nodeExe = path.join(root, IS_WINDOWS ? 'node.exe' : 'node');
+    if (exists(nodeExe)) return spawnViaNode(cli, args, nodeExe);
+    return spawnViaNode(cli, args);
+  }
+  return null;
 }
 
 /** @returns {string[]} */
@@ -79,13 +116,16 @@ function nodeCorepackPath() {
 }
 
 function resolveNpmExecPnpm(args) {
+  const viaCli = resolveNpmFamilySpawn('npm', ['exec', '--yes', 'pnpm', ...args]);
+  if (viaCli) return viaCli;
   if (IS_WINDOWS) {
     const npmCmd = path.join(path.dirname(process.execPath), 'npm.cmd');
     if (exists(npmCmd)) return spawnWindowsCmd(npmCmd, ['exec', '--yes', 'pnpm', ...args]);
   }
   const npm = findOnPath('npm');
   if (npm) {
-    return { command: npm, args: ['exec', '--yes', 'pnpm', ...args], shell: false };
+    return resolveWindowsExecutable(npm, ['exec', '--yes', 'pnpm', ...args])
+      || { command: npm, args: ['exec', '--yes', 'pnpm', ...args], shell: false };
   }
   return null;
 }
@@ -144,8 +184,14 @@ export function resolveCommandSpawn(command, args, cwd = process.cwd()) {
   if (command === 'pnpm') {
     return resolvePnpmSpawn(args, cwd);
   }
+
+  const bare = String(command || '').trim().toLowerCase();
+  if (bare === 'npx' || bare === 'npm') {
+    const viaCli = resolveNpmFamilySpawn(bare, args);
+    if (viaCli) return viaCli;
+  }
+
   if (IS_WINDOWS) {
-    // 绝对/相对路径，或 PATH 上的 npx/npm 等
     if (/[\\/]/.test(command)) {
       return resolveWindowsExecutable(command, args)
         || { command, args, shell: false };
@@ -155,7 +201,6 @@ export function resolveCommandSpawn(command, args, cwd = process.cwd()) {
       return resolveWindowsExecutable(onPath, args)
         || { command: onPath, args, shell: false };
     }
-    // 与 node 同目录的 npm/npx.cmd（葵子/精简 PATH）
     const besideNode = path.join(path.dirname(process.execPath), `${command}.cmd`);
     if (exists(besideNode)) return spawnWindowsCmd(besideNode, args);
     return { command, args, shell: true };
