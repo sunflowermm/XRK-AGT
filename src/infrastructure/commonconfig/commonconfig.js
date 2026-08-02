@@ -96,7 +96,7 @@ export default class ConfigBase {
   /**
    * 严格校验 schema：
    * - 确保每个字段的 default 类型与 type 一致（若提供）
-   * - enum 必须包含 default（若提供）
+   * - enum 与 default 规则同 `_enumValueAllowed`（非必填允许 `''`）
    * - array 的 itemType 与 default 数组元素类型一致（若提供）
    * - object 的 fields 递归校验
    */
@@ -124,17 +124,16 @@ export default class ConfigBase {
             throw new Error(`配置(${this.name}).schema 字段 ${key} 的 default 必须为 object`);
           }
         }
-        // 校验 enum 与 default
+        // 校验 enum 与 default（与运行时 validate 同一规则）
         if (fs.enum && fs.default !== undefined) {
           const def = fs.default;
-          // 对于数组类型，要求每个默认值都在 enum 中
           if (fs.type === 'array' && Array.isArray(def)) {
             for (const v of def) {
-              if (!fs.enum.includes(v)) {
+              if (!this._enumValueAllowed(v, fs)) {
                 throw new Error(`配置(${this.name}).schema 字段 ${key} 的 default 中的值 "${v}" 必须属于 enum: ${fs.enum.join(', ')}`);
               }
             }
-          } else if (!fs.enum.includes(def)) {
+          } else if (!this._enumValueAllowed(def, fs)) {
             throw new Error(`配置(${this.name}).schema 字段 ${key} 的 default 必须属于 enum: ${fs.enum.join(', ')}`);
           }
         }
