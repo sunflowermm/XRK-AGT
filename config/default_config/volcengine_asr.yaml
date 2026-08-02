@@ -7,13 +7,14 @@
 # ----------------------------------------
 # WebSocket 连接配置
 # ----------------------------------------
-# WebSocket连接地址
+# WebSocket连接地址（推荐 bigmodel_async；另有 bigmodel / bigmodel_nostream）
 wsUrl: "wss://openspeech.bytedance.com/api/v3/sauc/bigmodel_async"
-# APP ID（火山引擎控制台获取的APP ID）
+# 新控制台 API Key（优先；填了则走 X-Api-Key）
+apiKey: ""
+# 旧控制台 APP ID + Access Token
 appKey: ""
-# Access Token（火山引擎控制台获取的Access Token，不是Secret Key）
 accessKey: ""
-# 资源ID（volc.bigasr.sauc.duration 或 volc.seedasr.sauc.duration）
+# 资源ID：1.0=volc.bigasr.sauc.duration；2.0 新建应用用 volc.seedasr.sauc.duration
 resourceId: "volc.bigasr.sauc.duration"
 
 # ----------------------------------------

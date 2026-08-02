@@ -591,11 +591,50 @@ export const LLM_PROVIDER_PRESETS = {
   volcengine: {
     itemLabel: '火山引擎端点',
     fixedProtocol: 'volcengine',
+    extraFields: {
+      baseUrl: {
+        type: 'string',
+        label: 'API 基础地址',
+        description: '方舟 Responses：https://ark.cn-beijing.volces.com/api/v3（不含 path）',
+        default: 'https://ark.cn-beijing.volces.com/api/v3',
+        component: 'Input',
+        layout: 'full'
+      },
+      path: {
+        type: 'string',
+        label: '接口路径',
+        description: 'Responses API 默认 /responses（POST …/api/v3/responses）',
+        default: '/responses',
+        component: 'Input',
+        layout: 'half'
+      },
+      model: {
+        type: 'string',
+        label: '模型 / 推理接入点',
+        description: '方舟模型名（如 doubao-seed-2-0-lite-260428）或接入点 ID（ep-…）',
+        default: 'doubao-seed-2-0-lite-260428',
+        component: 'Input'
+      },
+      thinkingType: {
+        type: 'string',
+        label: 'thinking.type',
+        description: '深度思考：enabled / disabled / auto（留空=不传，由模型默认）',
+        enum: ['disabled', 'enabled', 'auto'],
+        component: 'Select'
+      },
+      reasoningEffort: {
+        type: 'string',
+        label: 'reasoning_effort',
+        description: '思考强度（部分思考模型支持；thinking=disabled 时不发送）',
+        enum: ['none', 'minimal', 'low', 'medium', 'high', 'xhigh'],
+        component: 'Select'
+      }
+    },
     include: [
       ...IDENTITY_FIELDS,
       ...ENDPOINT_FIELDS,
       'region',
-      ...MODEL_FIELD,
+      'model',
       ...OPENAI_SAMPLING,
       'tokenField',
       'thinkingType',

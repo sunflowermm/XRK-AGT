@@ -69,7 +69,7 @@ export class Bootstrap {
       });
       if (r.failed?.length) {
         await this.logger.warning(
-          `启动前前端构建失败: ${r.failed.join(', ')}（将尝试挂已有 dist；可手动 pnpm run build:www）`,
+          `启动过程前端构建失败: ${r.failed.join(', ')}（将尝试挂已有 dist；可手动 pnpm run build:www）`,
         );
       }
     }

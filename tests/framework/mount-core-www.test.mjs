@@ -233,19 +233,12 @@ describe('www-app-resolve', () => {
     fs.rmSync(dir, { recursive: true, force: true });
   });
 
-  it('静态默认 if-stale；always / never；无产物则需 build', async () => {
+  it('启动过程 stale：无产物需 build；产物新于源码则跳过', async () => {
     const {
-      shouldRunSignedStaticBuild,
       resolveSignedStaticBuildSpec,
       isSignedStaticBuildStale,
-      normalizeWwwBuildOnStart,
     } = await import('../../src/infrastructure/http/www-static-build.js');
     const sign = { enabled: false, build: { command: 'pnpm', args: ['build'] }, staticRoot: 'dist' };
-    assert.equal(normalizeWwwBuildOnStart(sign), 'if-stale');
-    assert.equal(normalizeWwwBuildOnStart({ ...sign, buildOnStart: true }), 'always');
-    assert.equal(normalizeWwwBuildOnStart({ ...sign, buildOnStart: false }), 'never');
-    assert.equal(shouldRunSignedStaticBuild({ ...sign, buildOnStart: false }, { via: 'dist' }, process.cwd()), false);
-    assert.equal(shouldRunSignedStaticBuild({ ...sign, buildOnStart: true }, { via: 'dist' }, process.cwd()), true);
     assert.equal(resolveSignedStaticBuildSpec(sign, process.cwd())?.command, 'pnpm');
 
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'xrk-www-stale-'));
@@ -254,23 +247,18 @@ describe('www-app-resolve', () => {
       fs.writeFileSync(path.join(dir, 'sign.json'), '{}');
       const noDist = { via: '.', root: dir, warn: 'missing' };
       assert.equal(isSignedStaticBuildStale(dir, sign, noDist), true);
-      assert.equal(shouldRunSignedStaticBuild(sign, noDist, dir), true);
 
       const dist = path.join(dir, 'dist');
       fs.mkdirSync(dist);
       fs.writeFileSync(path.join(dist, 'index.html'), '<!doctype html>');
-      // dist 新于源码
       const future = Date.now() + 60_000;
       fs.utimesSync(path.join(dist, 'index.html'), future / 1000, future / 1000);
       const withDist = { via: 'dist', root: dist };
       assert.equal(isSignedStaticBuildStale(dir, sign, withDist), false);
-      assert.equal(shouldRunSignedStaticBuild(sign, withDist, dir), false);
 
-      // 源码更新后应变 stale
       const later = future + 120_000;
       fs.utimesSync(path.join(dir, 'package.json'), later / 1000, later / 1000);
       assert.equal(isSignedStaticBuildStale(dir, sign, withDist), true);
-      assert.equal(shouldRunSignedStaticBuild(sign, withDist, dir), true);
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }

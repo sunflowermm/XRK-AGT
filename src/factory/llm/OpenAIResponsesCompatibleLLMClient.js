@@ -299,16 +299,17 @@ export default class OpenAIResponsesCompatibleLLMClient {
     return executedToolNames.length ? { content: '', executedToolNames } : '';
   }
 
-  async chatStream(messages, onDelta, overrides = {}) {
-    const transformed = await this.transformMessages(messages);
-    await ensureMessagesImagesDataUrl(transformed, { timeoutMs: this.timeout });
-
-    const input = toResponsesInput(transformed);
-    const resp = await this.requestResponses(input, overrides, { stream: true });
-
+  /**
+   * 消费一轮 Responses SSE：文本/推理 delta + 完成后的 response 对象。
+   * @returns {Promise<object|null>} response.completed 上的 response，或 null
+   */
+  async consumeResponsesStream(resp, onDelta, overrides = {}) {
     if (!resp.body) {
       throw new Error('openai_responses_compat 流式请求失败: 响应体为空');
     }
+
+    let completed = null;
+    const mode = overrides?.mcpToolMode || 'execute';
 
     for await (const { data } of iterateSSE(resp)) {
       try {
@@ -318,9 +319,72 @@ export default class OpenAIResponsesCompatibleLLMClient {
         if (type === 'response.output_text.delta' && typeof evt.delta === 'string' && evt.delta) {
           if (typeof onDelta === 'function') onDelta(evt.delta);
         }
+
+        if (
+          (type === 'response.reasoning_summary_text.delta' || type === 'response.reasoning_text.delta')
+          && typeof evt.delta === 'string'
+          && evt.delta
+        ) {
+          if (typeof onDelta === 'function') onDelta('', { reasoning_content: evt.delta });
+        }
+
+        if (type === 'response.output_item.done' && evt.item?.type === 'function_call') {
+          if ((mode === 'passthrough' || mode === 'hybrid') && typeof onDelta === 'function') {
+            onDelta('', {
+              tool_calls: [{
+                id: evt.item.call_id || evt.item.id,
+                type: 'function',
+                function: {
+                  name: evt.item.name || '',
+                  arguments: typeof evt.item.arguments === 'string'
+                    ? evt.item.arguments
+                    : JSON.stringify(evt.item.arguments || {}),
+                },
+              }],
+            });
+          }
+        }
+
+        if (type === 'response.completed' && evt.response) {
+          completed = evt.response;
+        }
       } catch (e) {
         RuntimeUtil.makeLog('warn', `[OpenAIResponsesCompatibleLLMClient] SSE JSON解析失败: ${e.message}`, 'LLMFactory');
       }
     }
+
+    return completed;
+  }
+
+  async chatStream(messages, onDelta, overrides = {}) {
+    const transformed = await this.transformMessages(messages);
+    await ensureMessagesImagesDataUrl(transformed, { timeoutMs: this.timeout });
+
+    let input = toResponsesInput(transformed);
+    let previousResponseId = undefined;
+    const enableMcpTools = overrides?.mcpToolMode !== 'passthrough';
+    const maxToolRounds = this.config.maxToolRounds || 7;
+
+    for (let round = 0; round < maxToolRounds; round++) {
+      const resp = await this.requestResponses(input, overrides, { stream: true, previousResponseId });
+      const completed = await this.consumeResponsesStream(resp, onDelta, overrides);
+      previousResponseId = completed?.id || previousResponseId;
+
+      const functionCalls = extractFunctionCalls(completed || {});
+      if (!functionCalls.length) return;
+      if (!enableMcpTools) return;
+
+      RuntimeUtil.makeLog(
+        'info',
+        `[OpenAIResponsesCompatibleLLMClient] 检测到工具调用，执行工具: ${functionCalls.length}个`,
+        'LLMFactory',
+      );
+
+      const execResult = await this.executeResponsesFunctionCalls(functionCalls, overrides, onDelta);
+      if (execResult === null) return;
+      input = execResult;
+    }
+
+    RuntimeUtil.makeLog('warn', `[OpenAIResponsesCompatibleLLMClient] 达到最大工具调用轮数: ${maxToolRounds}`, 'LLMFactory');
   }
 }

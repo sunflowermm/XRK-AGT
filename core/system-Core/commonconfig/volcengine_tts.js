@@ -30,18 +30,26 @@ export default class VolcengineTTSConfig extends ConfigBase {
             component: 'Input',
             layout: 'full'
           },
+          apiKey: {
+            type: 'string',
+            label: 'API Key（新控制台）',
+            description: '新版控制台鉴权：仅填此项（X-Api-Key）。填了则忽略 App ID / Access Token',
+            default: '',
+            component: 'InputPassword',
+            layout: 'full'
+          },
           appKey: {
             type: 'string',
-            label: 'App ID',
-            description: '火山引擎应用 ID (对应控制台的 APP ID)',
+            label: 'App ID（旧控制台）',
+            description: '旧控制台 APP ID（X-Api-App-Key）',
             default: '',
             component: 'Input',
             layout: 'half'
           },
           accessKey: {
             type: 'string',
-            label: 'Access Token',
-            description: '火山引擎访问令牌 (对应控制台的 Access Token)',
+            label: 'Access Token（旧控制台）',
+            description: '旧控制台 Access Token（X-Api-Access-Key）',
             default: '',
             component: 'InputPassword',
             layout: 'half'

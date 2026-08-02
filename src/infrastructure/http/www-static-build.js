@@ -2,12 +2,12 @@
  * 前端工程静态模式：只 build、不启进程。
  *
  * 前端工程一共两种（见 docs/www-mount.md）：
- * 1. enabled=false / serve=static → 本模块：默认产物过期才 build，然后挂 dist；Launcher 不启动
+ * 1. enabled=false / serve=static → 本模块仅在 Bootstrap / `pnpm run build:www` 按 stale build；挂载不编
  * 2. enabled=true  / serve=proxy  → FrontendLauncher：启进程 + 反代（不走这里）
  *
  * Windows 下不能 `execFile('pnpm')`（ENOENT）；统一走 `#utils/command-spawn.js` 解析。
  *
- * 2c2g：勿在 AGT 已加载后同机 Vite（易 OOM）。启动前用
+ * 2c2g：勿在 AGT 已加载后同机 Vite（易 OOM）。构建只在启动过程
  * `buildSignedStaticWwwBeforeRuntime`（Bootstrap）或 `pnpm run build:www`。
  */
 import path from 'node:path';
@@ -22,7 +22,6 @@ import {
 import {
   resolveWwwAppMount,
   resolveWwwStaticRoot,
-  isWwwSignedStaticRootOk,
 } from '#infrastructure/http/www-app-resolve.js';
 
 const BUILD_WALK_SKIP = new Set([
@@ -38,7 +37,9 @@ const BUILD_WALK_SKIP = new Set([
 
 function wwwBuildLog(level, message) {
   RuntimeUtil.makeLog(level, message, 'AgentRuntime');
-}/**
+}
+
+/**
  * @param {unknown} raw
  * @param {string} appDir
  * @returns {{ command: string, args: string[], cwd: string, env: Record<string, string> } | null}
@@ -71,17 +72,6 @@ export function resolveSignedStaticBuildSpec(sign, appDir) {
     return { command: 'pnpm', args: ['build'], cwd: appDir, env: {} };
   }
   return null;
-}
-
-/**
- * @param {object} sign
- * @returns {'always'|'never'|'if-stale'}
- */
-export function normalizeWwwBuildOnStart(sign) {
-  const v = sign?.buildOnStart;
-  if (v === false || v === 'never') return 'never';
-  if (v === true || v === 'always') return 'always';
-  return 'if-stale';
 }
 
 /**
@@ -217,26 +207,6 @@ export function isSignedStaticBuildStale(appDir, sign, resolved) {
 }
 
 /**
- * 静态模式是否要在挂载前 build。
- * 默认 **if-stale**（有最新 dist 则跳过，避免每次重启卡启动）。
- * - `buildOnStart: true` / `"always"` → 每次都编
- * - `buildOnStart: false` / `"never"` → 永不自动编
- *
- * @param {object} sign
- * @param {{ root?: string, via?: string } | null | undefined} [resolved]
- * @param {string} [appDir]
- */
-export function shouldRunSignedStaticBuild(sign, resolved, appDir) {
-  if (!sign || typeof sign !== 'object') return false;
-  const policy = normalizeWwwBuildOnStart(sign);
-  if (policy === 'never') return false;
-  if (appDir && !resolveSignedStaticBuildSpec(sign, appDir)) return false;
-  if (policy === 'always') return true;
-  if (!appDir) return true;
-  return isSignedStaticBuildStale(appDir, sign, resolved);
-}
-
-/**
  * @param {string} command
  * @param {string[]} args
  * @param {{ cwd: string, env?: Record<string, string> }} opts
@@ -335,48 +305,7 @@ export async function runSignedStaticBuild(appDir, sign, label = appDir) {
 }
 
 /**
- * 静态模式：按需 build，再解析静态根。不启动任何前端进程。
- *
- * @param {string} appDir
- * @param {object} sign
- * @param {string} [mountPath]
- * @returns {Promise<{ root: string, via: string, warn?: string, buildFailed?: boolean, ok: boolean }>}
- */
-export async function ensureSignedStaticArtifacts(appDir, sign, mountPath) {
-  const label = mountPath || path.basename(appDir);
-  let resolved = resolveWwwStaticRoot(appDir, sign);
-  if (!shouldRunSignedStaticBuild(sign, resolved, appDir)) {
-    const policy = normalizeWwwBuildOnStart(sign);
-    if (policy === 'if-stale' && resolveSignedStaticBuildSpec(sign, appDir)) {
-      wwwBuildLog('info', `前端工程产物已是最新，跳过构建: ${label}`);
-    }
-    return {
-      ...resolved,
-      ok: isWwwSignedStaticRootOk(appDir, sign, resolved),
-      buildFailed: false,
-    };
-  }
-
-  const okBuild = await runSignedStaticBuild(appDir, sign, label);
-  if (!okBuild) {
-    resolved = resolveWwwStaticRoot(appDir, sign);
-    return {
-      ...resolved,
-      ok: isWwwSignedStaticRootOk(appDir, sign, resolved),
-      buildFailed: true,
-    };
-  }
-  resolved = resolveWwwStaticRoot(appDir, sign);
-  return {
-    ...resolved,
-    ok: isWwwSignedStaticRootOk(appDir, sign, resolved),
-    buildFailed: false,
-  };
-}
-
-/**
- * AGT 加载前按需构建各 Core 有 sign 的静态前端（与挂载阶段解耦，避免同机 OOM）。
- * 忽略 sign.buildOnStart=never（挂载侧用 never；启动前仍按 stale 编）。
+ * 启动过程：按 stale 构建各 Core 有 sign 的静态前端（挂载阶段不 build）。
  * `XRK_SKIP_WWW_BUILD=1` 跳过。
  *
  * @param {{ log?: (level: string, msg: string) => void }} [opts]
@@ -415,11 +344,11 @@ export async function buildSignedStaticWwwBeforeRuntime(opts = {}) {
       const label = decision.mountPath || `/${ent.name}`;
       const resolved = resolveWwwStaticRoot(appDir, decision.sign);
       if (!isSignedStaticBuildStale(appDir, decision.sign, resolved)) {
-        log('info', `启动前：前端产物已是最新，跳过 ${label}`);
+        log('info', `启动过程：前端产物已是最新，跳过 ${label}`);
         continue;
       }
 
-      log('info', `启动前：构建前端 ${label}（AGT 尚未加载）`);
+      log('info', `启动过程：构建前端 ${label}（AGT 尚未加载）`);
       const ok = await runSignedStaticBuild(appDir, decision.sign, label);
       if (ok) built.push(label);
       else failed.push(label);

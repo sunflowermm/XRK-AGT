@@ -8,6 +8,7 @@ import WebSocket from 'ws';
 import zlib from 'zlib';
 import { v4 as uuidv4 } from 'uuid';
 import RuntimeUtil from '#utils/runtime-util.js';
+import { buildVolcengineSpeechHeaders } from '#utils/volcengine-speech-headers.js';
 
 const TTS_EVENTS = {
     START_CONNECTION: 1,
@@ -62,17 +63,12 @@ export default class VolcengineTTSClient {
     }
 
     /**
-     * 生成WebSocket连接头部
+     * 生成WebSocket连接头部（新控制台 X-Api-Key；旧控制台 App-Key + Access-Key）
      * @returns {Object} 请求头对象
      * @private
      */
     _headers() {
-        return {
-            'X-Api-App-Key': this.config.appKey,
-            'X-Api-Access-Key': this.config.accessKey,
-            'X-Api-Resource-Id': this.config.resourceId,
-            'X-Api-Connect-Id': uuidv4()
-        };
+        return buildVolcengineSpeechHeaders(this.config, { connectId: uuidv4() });
     }
 
     /**

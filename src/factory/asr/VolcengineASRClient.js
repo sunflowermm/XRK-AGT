@@ -7,6 +7,7 @@ import WebSocket from 'ws';
 import zlib from 'zlib';
 import { v4 as uuidv4 } from 'uuid';
 import RuntimeUtil from '#utils/runtime-util.js';
+import { buildVolcengineSpeechHeaders } from '#utils/volcengine-speech-headers.js';
 
 export default class VolcengineASRClient {
     _timeoutEmittedSet = new Set();
@@ -63,17 +64,12 @@ export default class VolcengineASRClient {
     }
 
     /**
-     * 生成WebSocket连接头部
+     * 生成WebSocket连接头部（新控制台 X-Api-Key；旧控制台 App-Key + Access-Key）
      * @returns {Object} 请求头对象
      * @private
      */
     _headers() {
-        return {
-            'X-Api-App-Key': this.config.appKey,
-            'X-Api-Access-Key': this.config.accessKey,
-            'X-Api-Resource-Id': this.config.resourceId,
-            'X-Api-Connect-Id': this.connectId,
-        };
+        return buildVolcengineSpeechHeaders(this.config, { connectId: this.connectId });
     }
 
     _emitAsrTimeoutOnce(sessionId, reason = '') {
@@ -412,7 +408,7 @@ export default class VolcengineASRClient {
 
                         if (err.message.includes('401')) {
                             RuntimeUtil.makeLog('error',
-                                `❌ [ASR] 认证失败(401): 请检查appKey和accessKey`,
+                                `❌ [ASR] 认证失败(401): 请检查 apiKey（新控制台）或 appKey/accessKey（旧控制台）与 resourceId`,
                                 this.deviceId
                             );
                         } else {

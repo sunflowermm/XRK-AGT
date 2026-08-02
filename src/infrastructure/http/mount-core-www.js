@@ -5,7 +5,7 @@
  *
  * 1. **零配置静态**（无 sign）：`/${文件夹名}` → 目录本体
  * 2. **有 sign**（含纯静态 / SPA 产物 / 反代）：
- *    - 纯静态或产物静态 → 按需 build（仅工程树），再挂；可覆盖 static / rateLimit
+ *    - 纯静态或产物静态 → 只挂产物（build 在 Bootstrap / `pnpm run build:www`）；可覆盖 static / rateLimit
  *    - 反代 → 跳过静态，Launcher 启进程
  *
  * 另：`/core/<Core名>` 始终挂该 Core 的整个 `www/`（调试/直链用）。
@@ -21,9 +21,9 @@ import runtimeConfig from '#infrastructure/config/config.js';
 import {
   resolveWwwAppMount,
   resolveWwwStaticRoot,
+  isWwwSignedStaticRootOk,
   wwwMountPathRootSegment,
 } from '#infrastructure/http/www-app-resolve.js';
-import { ensureSignedStaticArtifacts } from '#infrastructure/http/www-static-build.js';
 import {
   resolveWwwMountOverlays,
   applyWwwStaticOverlay,
@@ -138,24 +138,22 @@ export async function mountCoreWwwStatic(app, staticOptions = {}) {
       const sign = decision.sign;
 
       if (decision.kind === 'signed' && sign) {
-        const after = await ensureSignedStaticArtifacts(subDirPath, sign, mountPath);
-        if (!after.ok) {
+        const resolved = resolveWwwStaticRoot(subDirPath, sign);
+        if (!isWwwSignedStaticRootOk(subDirPath, sign, resolved)) {
           RuntimeUtil.makeLog(
             'error',
             `有 sign 无可用静态根，跳过挂载: ${mountPath} (dir=${subDirName}, core: ${coreName})` +
-              (after.buildFailed
-                ? ' — 构建失败，请启动前执行 pnpm run build:www 或在该目录 pnpm build'
-                : ' — 请先构建 dist，或设 staticRoot: "." 挂纯静态'),
+              ' — 请确认启动过程已 build（或 pnpm run build:www），或设 staticRoot: "." 挂纯静态',
             'AgentRuntime',
           );
           continue;
         }
-        staticRoot = after.root;
+        staticRoot = resolved.root;
         reason =
-          after.via === '.'
+          resolved.via === '.'
             ? `有 sign 纯静态 → .`
-            : `有 sign 静态 → ${after.via}`;
-        warn = after.warn;
+            : `有 sign 静态 → ${resolved.via}`;
+        warn = resolved.warn;
       }
 
       if (!staticRoot) {

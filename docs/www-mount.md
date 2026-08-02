@@ -16,7 +16,7 @@ www/<子目录>/
 ├── 无 sign.json ────────────────► 零配置静态：URL = /文件夹名，挂目录本体
 └── 有 sign.json ────────────────► 可扩展应用（含纯静态）
         ├── serve: static + staticRoot: "." ──► 纯静态：挂目录本体，不 build
-        ├── enabled: false / serve: static ───► 按需 build，不启进程，挂 dist
+        ├── enabled: false / serve: static ───► 启动过程 build，挂载只挂 dist
         └── enabled: true  / serve: proxy ───► 启进程 + 反向代理
 ```
 
@@ -43,7 +43,7 @@ www/<子目录>/
 对外 URL（静态与反代共用）优先级：`proxy.mount` → `mount` → `/${id}` → `/${文件夹名}`。  
 Vite `base` 必须与该 URL 一致。
 
-例：`system-Core/www/xrk/` → `/xrk/`（按需 build 挂 `dist`）。
+例：`system-Core/www/xrk/` → `/xrk/`（启动过程 build 后挂 `dist`）。
 
 ### ① 纯静态：`staticRoot: "."`
 
@@ -67,12 +67,12 @@ Vite `base` 必须与该 URL 一致。
 
 ### ② SPA 产物：`enabled: false`（或 `serve: "static"`）
 
-**默认按需 build**（源码比产物新、或没有 `dist/index.html` 才编），不启动前端进程；编完再挂 dist。
+**挂载阶段不 build**；只解析并挂已有产物。构建在 **Bootstrap 启动过程**（或 `pnpm run build:www`）按 stale 执行。
 
 | 步骤 | 行为 |
 |------|------|
-| 1 | 若需要：执行 `sign.build`（未写则有 `package.json` 时默认 `pnpm build`） |
-| 2 | 主服 `express.static` 挂产物；**Launcher 不拉起** `command` |
+| 1 | 启动过程：源码比产物新或没有 `dist/index.html` 时执行 `sign.build`（未写则有 `package.json` 时默认 `pnpm build`） |
+| 2 | 挂载：主服 `express.static` 挂产物；**Launcher 不拉起** `command` |
 
 ```json
 {
@@ -89,11 +89,8 @@ Vite `base` 必须与该 URL 一致。
 ```
 
 - `command` / `port` 在此模式下**不会用到**（留给切到反代时用）。
-- `buildOnStart`：
-  - 省略 / `"if-stale"`（默认）：挂载时比较 `src`/`public`/配置与 `dist` mtime，过期才 build
-  - `true` / `"always"`：每次挂载都编（**2c2g 勿用**，易与 AGT 同机 OOM）
-  - `false` / `"never"`：挂载阶段永不自动编（`/xrk` 默认）
-- **启动前构建**：`node app.js server` 时 Bootstrap 在加载 AGT 之前按 stale 编各有 sign 静态前端（`pnpm run build:www` 等同）；`XRK_SKIP_WWW_BUILD=1` 或 `XRK_SKIP_FRONTEND_BOOTSTRAP=1` 可跳过。编完子进程退出后再启 AGT，避免同机抢内存。
+- **启动过程构建**：`node app.js server` 时 Bootstrap 在加载 AGT 之前按 stale 编各有 sign 静态前端（`pnpm run build:www` 等同）；`XRK_SKIP_WWW_BUILD=1` 或 `XRK_SKIP_FRONTEND_BOOTSTRAP=1` 可跳过。编完子进程退出后再启 AGT，避免同机抢内存。
+- `buildOnStart`：仅反代模式（Launcher）使用；静态前端只看 stale。
 - `pnpm`/`npm` 经 `#utils/command-spawn.js` 解析（Windows `.cmd`、PATH、`pnpm.cjs`、corepack、`npm exec pnpm`），避免葵子/精简 PATH 下 `spawn pnpm ENOENT`。
 
 ### ③ 反代：`enabled: true`
@@ -125,7 +122,7 @@ Vite `base` 必须与该 URL 一致。
 | 写法 | 走哪条 |
 |------|--------|
 | `staticRoot: "."`（或非前端源码树的静态目录） | ① 纯静态 |
-| `enabled: false` 或 `serve: "static"`（且有/将有 dist） | ② 按需 build、不启动 |
+| `enabled: false` 或 `serve: "static"`（且有/将有 dist） | ② 启动过程 build、挂载不启动进程 |
 | `enabled: true` 且非 static（含 `serve: "proxy"` / 未写 serve） | ③ 启动 + 反代 |
 
 ---
@@ -185,7 +182,7 @@ Vite `base` 必须与该 URL 一致。
 | `serve` | string | resolve | `static`/`dist` 强制静态；`proxy`/`dev` 反代；未写则看 `enabled` |
 | `staticRoot` | string | resolve / build | 静态根相对路径；`"."` = 纯静态挂目录本体 |
 | `outDir` | string | resolve / build | `staticRoot` 别名 |
-| `buildOnStart` | boolean \| string | build / Launcher | **静态模式**：`if-stale`（默认）/`always`/`never` 或 `true`/`false`。**反代模式**：仅当有 `build` 段时，`!== false` 则启动前先编（语义与静态的 stale 探测不同） |
+| `buildOnStart` | boolean | Launcher | **反代**：有 `build` 段且 `!== false` 时启动前先编。静态前端不读此字段 |
 | `build` | object | build / Launcher | `{ command, args?, cwd?, env? }`。静态：无则有 `package.json` 时默认 `pnpm build`。反代：生产路径可先 build 再启进程 |
 
 ### 反代进程（仅 `serve=proxy` / `enabled` 未关）
@@ -241,7 +238,7 @@ Vite `base` 必须与该 URL 一致。
 
 ```
 FrontendLauncher.start()   → 只处理反代工程
-mountCoreWwwStatic()       → 零配置静态 + 有 sign 的静态（按需 build；应用 sign↔server 覆盖）
+mountCoreWwwStatic()       → 零配置静态 + 有 sign 的静态（只挂产物；应用 sign↔server 覆盖）
 ```
 
 ---
@@ -259,11 +256,11 @@ mountCoreWwwStatic()       → 零配置静态 + 有 sign 的静态（按需 bui
 ## 要点
 
 - 纯静态可写 sign；`staticRoot: "."` 可定制 URL、缓存与限流。
-- `enabled: false`：SPA 按需 build 并挂 dist；无产物且目录像前端源码树时跳过挂载。Vite 进程仅在反代理模式启动。
+- `enabled: false`：SPA 在启动过程 build，挂载只挂 dist；无产物且目录像前端源码树时跳过挂载。Vite 进程仅在反代理模式启动。
 - URL 映射：无 sign 时文件夹名即 URL；有 sign 时按 `proxy.mount` → `mount` → `id`。
-- 静态 build：默认仅源码新于产物时才重新编。
+- 静态 build：仅 Bootstrap / `pnpm run build:www`；默认仅源码新于产物时才重新编。
 - sign 中的 `rateLimit`：已写叶子以 sign 为准，未写叶子继承主服。
-- `buildOnStart`：静态走 stale 三态；反代仅控制「有 build 段时是否先编」。
+- `buildOnStart`：仅反代控制「有 build 段时是否先编」。
 
 ---
 

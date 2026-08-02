@@ -1,290 +1,53 @@
-import { partitionAndExecuteToolCalls } from '../../utils/llm/tool-partition-utils.js';
-import RuntimeUtil from '../../utils/runtime-util.js';
-import { buildOpenAIChatCompletionsBody, applyOpenAITools } from '../../utils/llm/openai-chat-utils.js';
-import { transformMessagesWithVision } from '../../utils/llm/message-transform.js';
-import { buildFetchOptionsWithProxy } from '../../utils/llm/proxy-utils.js';
-import { ensureMessagesImagesDataUrl } from '../../utils/llm/image-utils.js';
-import { iterateSSE } from '../../utils/llm/sse-utils.js';
+import OpenAIResponsesCompatibleLLMClient from './OpenAIResponsesCompatibleLLMClient.js';
 
 /**
- * 火山引擎豆包大模型客户端
- * 
- * 火山引擎豆包大模型 API 文档：
- * - 接口地址：https://ark.{region}.volces.com/api/v3/chat/completions
- * - 认证方式：Bearer Token（API Key）
- * - 支持的模型：doubao-pro-4k、doubao-pro-32k、doubao-lite-4k 等
- * - 详细文档：https://www.volcengine.com/docs/82379
- * - 兼容 OpenAI SDK：完全兼容 OpenAI Chat Completions API 格式
- * 
- * 注意：
- * - baseUrl 应包含 /api/v3（如：https://ark.cn-beijing.volces.com/api/v3）
- * - path 为 /chat/completions
- * - 最终端点：{baseUrl}{path} = https://ark.cn-beijing.volces.com/api/v3/chat/completions
+ * 火山方舟（Ark）Responses API 客户端
+ *
+ * @see https://www.volcengine.com/docs/82379/1569618
+ * - 端点：`POST {baseUrl}/responses`（默认 baseUrl=`https://ark.cn-beijing.volces.com/api/v3`）
+ * - 鉴权：`Authorization: Bearer <API Key>`
+ * - 深度思考：`thinking.type` = enabled | disabled | auto
+ * - 多模态 / 工具：Responses `input` + `function_call` / `function_call_output`
  */
-export default class VolcengineLLMClient {
+
+const DEFAULT_BASE_URL = 'https://ark.cn-beijing.volces.com/api/v3';
+const DEFAULT_MODEL = 'doubao-seed-2-0-lite-260428';
+
+export default class VolcengineLLMClient extends OpenAIResponsesCompatibleLLMClient {
   constructor(config = {}) {
-    this.config = config;
-    this.endpoint = this.normalizeEndpoint(config);
-    this._timeout = config.timeout ?? 360000;
+    const baseUrl = config.baseUrl
+      ? String(config.baseUrl).replace(/\/+$/, '')
+      : config.region
+        ? `https://ark.${config.region}.volces.com/api/v3`
+        : DEFAULT_BASE_URL;
+
+    super({
+      ...config,
+      baseUrl,
+      path: config.path || '/responses',
+      model: config.model || DEFAULT_MODEL,
+    });
   }
 
-  /**
-   * 获取基础 URL
-   */
-  getBaseUrl() {
-    const config = this.config;
-    if (config.region && !config.baseUrl) {
-      return `https://ark.${config.region}.volces.com/api/v3`;
-    }
-    return (config.baseUrl || 'https://ark.cn-beijing.volces.com/api/v3').replace(/\/+$/, '');
-  }
+  buildBody(input, overrides = {}, opts = {}) {
+    const body = super.buildBody(input, overrides, opts);
+    if (!body.model) body.model = DEFAULT_MODEL;
 
-  /**
-   * 规范化端点地址
-   */
-  normalizeEndpoint(config) {
-    const base = this.getBaseUrl();
-    const path = (config.path || '/chat/completions').replace(/^\/?/, '/');
-    return `${base}${path}`;
-  }
-
-  /**
-   * 获取超时时间
-   */
-  get timeout() {
-    return this._timeout ?? 360000;
-  }
-
-  /**
-   * 构建请求头
-   */
-  buildHeaders(extra = {}) {
-    const headers = {
-      'Content-Type': 'application/json',
-      ...extra
-    };
-    
-    // 火山引擎使用 Bearer Token 认证
-    if (this.config.apiKey) {
-      const apiKey = String(this.config.apiKey).trim();
-      headers['Authorization'] = `Bearer ${apiKey}`;
-    }
-    
-    if (this.config.headers) {
-      Object.assign(headers, this.config.headers);
-    }
-    
-    return headers;
-  }
-
-  /**
-   * 构建请求体
-   * 火山引擎的 API 格式与 OpenAI 兼容
-   * 支持所有标准参数：temperature、max_tokens、top_p、presence_penalty、frequency_penalty
-   * 支持工具调用：tools、tool_choice、parallel_tool_calls
-   */
-  buildBody(messages, overrides = {}) {
-    const body = buildOpenAIChatCompletionsBody(messages, this.config, overrides, (this.config.chatModel || this.config.model || 'doubao-pro-4k'));
-    applyOpenAITools(body, this.config, overrides);
-    const thinkingType = overrides.thinkingType ?? overrides.thinking_type ?? this.config.thinkingType ?? this.config.thinking_type;
-    if (thinkingType !== undefined && thinkingType !== '') {
+    const rawThinking = overrides.thinkingType ?? this.config.thinkingType;
+    const thinkingType = rawThinking != null && rawThinking !== ''
+      ? String(rawThinking).trim().toLowerCase()
+      : '';
+    if (thinkingType === 'enabled' || thinkingType === 'disabled' || thinkingType === 'auto') {
       body.thinking = { type: thinkingType };
     }
+
+    const rawEffort = overrides.reasoningEffort ?? this.config.reasoningEffort;
+    if (rawEffort != null && rawEffort !== '' && thinkingType !== 'disabled') {
+      body.reasoning_effort = String(rawEffort).trim().toLowerCase();
+    } else {
+      delete body.reasoning_effort;
+    }
+
     return body;
   }
-
-  /**
-   * 转换消息，将图片转换为火山引擎的 file_id 格式
-   * 注意：火山引擎 Chat Completions 多模态仅支持 `text` / `image_url` / `video_url`，
-   * 且 `image_url.url` 仅支持 base64(data URL) 或 http/https URL。
-   * 因此这里直接走 OpenAI 风格多模态转换即可（不再做 file_id 上传/转换）。
-   */
-  async transformMessages(messages) {
-    // 统一为 OpenAI 风格多模态（text + image_url）
-    return await transformMessagesWithVision(messages, this.config, { mode: 'openai' });
-  }
-
-  /**
-   * 非流式调用（支持工具调用）
-   * @param {Array} messages - 消息数组
-   * @param {Object} overrides - 覆盖配置
-   * @returns {Promise<string>} AI 回复文本
-   */
-  async chat(messages, overrides = {}) {
-    const transformedMessages = await this.transformMessages(messages);
-    await ensureMessagesImagesDataUrl(transformedMessages, { timeoutMs: this.timeout });
-    const enableMcpTools = overrides?.mcpToolMode !== 'passthrough';
-    const maxToolRounds = this.config.maxToolRounds || 7;
-    const currentMessages = [...transformedMessages];
-    const executedToolNames = [];
-
-    for (let round = 0; round < maxToolRounds; round++) {
-      const resp = await fetch(
-        this.endpoint,
-        buildFetchOptionsWithProxy(this.config, {
-          method: 'POST',
-          headers: this.buildHeaders(overrides.headers),
-          body: JSON.stringify(this.buildBody(currentMessages, { ...overrides })),
-          signal: AbortSignal.timeout(this.timeout)
-        })
-      );
-
-      if (!resp.ok) {
-        const text = await resp.text().catch(() => '');
-        throw new Error(`火山引擎 LLM 请求失败: ${resp.status} ${resp.statusText}${text ? ` | ${text}` : ''}`);
-      }
-
-      const result = await resp.json();
-      const message = result.choices?.[0]?.message;
-      if (!message) break;
-
-      if (message.tool_calls?.length > 0 && enableMcpTools) {
-        for (const tc of message.tool_calls) {
-          const name = tc.function?.name;
-          if (name && !executedToolNames.includes(name)) executedToolNames.push(name);
-        }
-        currentMessages.push(message);
-        const toolResults = await partitionAndExecuteToolCalls(message.tool_calls, overrides);
-        if (toolResults === null) return executedToolNames.length ? { content: '', executedToolNames } : '';
-        currentMessages.push(...toolResults);
-        continue;
-      }
-      if (message.tool_calls?.length > 0 && !enableMcpTools) break;
-
-      const content = message.content || '';
-      return executedToolNames.length > 0 ? { content, executedToolNames } : content;
-    }
-
-    const lastContent = currentMessages[currentMessages.length - 1]?.content || '';
-    return executedToolNames.length > 0 ? { content: lastContent, executedToolNames } : lastContent;
-  }
-
-  /**
-   * 流式调用
-   * @param {Array} messages - 消息数组
-   * @param {Function} onDelta - 每个数据块的回调函数
-   * @param {Object} overrides - 覆盖配置
-   * @returns {Promise<void>}
-   */
-  async chatStream(messages, onDelta, overrides = {}) {
-    const transformedMessages = await this.transformMessages(messages);
-    await ensureMessagesImagesDataUrl(transformedMessages, { timeoutMs: this.timeout });
-    
-    const maxToolRounds = this.config.maxToolRounds || 7;
-    let currentMessages = [...transformedMessages];
-    let round = 0;
-    let resp = null;
-    
-    while (round < maxToolRounds) {
-      resp = await fetch(
-      this.endpoint,
-      buildFetchOptionsWithProxy(this.config, {
-        method: 'POST',
-        headers: this.buildHeaders(overrides.headers),
-          body: JSON.stringify(this.buildBody(currentMessages, { ...overrides, stream: true })),
-        signal: AbortSignal.timeout(this.timeout)
-      })
-    );
-
-    if (!resp.ok || !resp.body) {
-      const text = await resp.text().catch(() => '');
-      throw new Error(`火山引擎 LLM 流式请求失败: ${resp.status} ${resp.statusText}${text ? ` | ${text}` : ''}`);
-    }
-      
-      const toolCallsCollector = {
-        toolCalls: [],
-        content: '',
-        finishReason: null
-      };
-      
-      const enableMcp = overrides?.mcpToolMode !== 'passthrough';
-      await this._consumeSSEWithToolCalls(resp, onDelta, toolCallsCollector, overrides);
-      
-      if (toolCallsCollector.toolCalls.length > 0 && toolCallsCollector.finishReason === 'tool_calls' && enableMcp) {
-        RuntimeUtil.makeLog('info', `[VolcengineLLMClient] 检测到工具调用，执行工具: ${toolCallsCollector.toolCalls.length}个`, 'LLMFactory');
-        
-        currentMessages.push({
-          role: 'assistant',
-          content: toolCallsCollector.content || null,
-          tool_calls: toolCallsCollector.toolCalls
-        });
-        
-        const buildPayload = (mid, res) => mid.map((tc, i) => ({
-          name: tc.function?.name || `工具${i + 1}`,
-          arguments: tc.function?.arguments || {},
-          result: res[i]?.content ?? ''
-        }));
-        const toolResults = await partitionAndExecuteToolCalls(toolCallsCollector.toolCalls, overrides, {
-          buildMcpPayload: buildPayload,
-          onDelta
-        });
-        if (toolResults === null) break;
-        currentMessages.push(...toolResults);
-        round++;
-        if (round >= maxToolRounds) {
-          RuntimeUtil.makeLog('warn', `[VolcengineLLMClient] 达到最大工具调用轮数: ${maxToolRounds}`, 'LLMFactory');
-          break;
-        }
-        continue;
-      }
-      if (toolCallsCollector.content || !toolCallsCollector.toolCalls.length || !enableMcp) break;
-      
-      round++;
-    }
-  }
-  
-  async _consumeSSEWithToolCalls(resp, onDelta, collector, options = {}) {
-    const toolCallsMap = new Map();
-    for await (const { data } of iterateSSE(resp)) {
-      try {
-        const json = JSON.parse(data);
-        const delta = json?.choices?.[0]?.delta;
-        const finishReason = json?.choices?.[0]?.finish_reason;
-
-        if (finishReason) {
-          collector.finishReason = finishReason;
-        }
-
-        if (delta?.content && typeof delta.content === 'string' && delta.content.length > 0) {
-          collector.content += delta.content;
-          if (typeof onDelta === 'function') onDelta(delta.content);
-        }
-
-        if (delta?.tool_calls && Array.isArray(delta.tool_calls)) {
-          const mode = options?.mcpToolMode || 'execute';
-          if ((mode === 'passthrough' || mode === 'hybrid') && typeof onDelta === 'function' && delta.tool_calls.length > 0) {
-            onDelta('', { tool_calls: delta.tool_calls });
-          }
-          for (const tc of delta.tool_calls) {
-            const index = tc.index;
-            if (index === undefined || index === null) continue;
-
-            if (!toolCallsMap.has(index)) {
-              toolCallsMap.set(index, {
-                id: '',
-                type: 'function',
-                function: { name: '', arguments: '' }
-              });
-            }
-
-            const toolCall = toolCallsMap.get(index);
-            if (tc.id) toolCall.id = tc.id;
-            if (tc.function?.name) toolCall.function.name = tc.function.name;
-            if (tc.function?.arguments) {
-              toolCall.function.arguments += tc.function.arguments;
-            }
-          }
-        }
-      } catch {
-        // ignore
-      }
-    }
-
-    if (toolCallsMap.size > 0) {
-      const sortedIndices = Array.from(toolCallsMap.keys()).sort((a, b) => a - b);
-      collector.toolCalls = sortedIndices.map(index => toolCallsMap.get(index));
-    }
-  }
-
 }
-

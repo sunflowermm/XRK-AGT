@@ -76,7 +76,7 @@ LLMFactory 负责管理所有大语言模型服务提供商，支持多种 LLM A
 
 | 类型 | 提供商 | v3 中 `model` 示例 | 说明 | 官方文档 / 协议 | 多模态 |
 |------|--------|--------------------|------|------------------|--------|
-| 官方 | 火山引擎 | `volcengine` | 火山引擎豆包大模型工厂 | /api/v3（Ark Chat Completions 风格） | ✅ |
+| 官方 | 火山引擎 | `volcengine` | 火山方舟 Responses（thinking / 工具多轮） | `POST …/api/v3/responses` | ✅ |
 | 官方 | 小米 MiMo | `xiaomimimo` | 兼容 OpenAI API 的 MiMo 大语言模型（仅文本） | OpenAI Chat Completions | ❌ |
 | 官方 | OpenAI | `openai` | OpenAI 官方 Chat Completions 工厂，配置文件 `openai_llm.yaml` | `POST https://api.openai.com/v1/chat/completions` | ✅ |
 | 官方 | Gemini | `gemini` | Google Generative Language API 工厂，配置文件 `gemini_llm.yaml` | `POST https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent` | ✅ |
@@ -326,12 +326,16 @@ tts:
 #### volcengine_llm.yaml（提供商配置）
 
 ```yaml
-# 火山引擎 LLM 工厂配置
-apiKey: your-api-key
-baseUrl: https://ark.cn-beijing.volces.com/api/v3
-chatModel: doubao-pro-4k
-temperature: 0.8
-maxTokens: 4096
+# 火山方舟 LLM：providers[]；model 填模型名或 ep- 接入点
+providers:
+  - key: volcengine
+    apiKey: your-api-key
+    baseUrl: https://ark.cn-beijing.volces.com/api/v3
+    path: /responses
+    model: doubao-seed-2-0-lite-260428   # 或 ep-xxxxxxxx / Seed 2.1 等现行 ID
+    thinkingType: auto                   # enabled | disabled | auto
+    temperature: 0.8
+    maxTokens: 4096
 ```
 
 ### 配置读取
@@ -870,7 +874,7 @@ Host: localhost:8080
         "key": "volcengine",
         "label": "volcengine",
         "description": "LLM提供商: volcengine",
-        "model": "doubao-pro-4k",
+        "model": "doubao-seed-2-0-lite-260428",
         "baseUrl": "https://ark.cn-beijing.volces.com/api/v3",
         "maxTokens": 2000,
         "temperature": 0.7,

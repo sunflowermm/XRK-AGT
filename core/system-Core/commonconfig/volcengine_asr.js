@@ -29,24 +29,33 @@ export default class VolcengineASRConfig extends ConfigBase {
             default: 'wss://openspeech.bytedance.com/api/v3/sauc/bigmodel_async',
             component: 'Input'
           },
+          apiKey: {
+            type: 'string',
+            label: 'API Key（新控制台）',
+            description: '新版控制台鉴权：仅填此项即可（请求头 X-Api-Key）。填了则忽略下方 App/Access Key',
+            default: '',
+            component: 'InputPassword'
+          },
           appKey: {
             type: 'string',
-            label: 'App Key',
-            description: '火山引擎控制台获取的APP ID',
+            label: 'App Key（旧控制台）',
+            description: '旧控制台 APP ID（X-Api-App-Key）；与 Access Key 成对使用',
             default: '',
             component: 'Input'
           },
           accessKey: {
             type: 'string',
-            label: 'Access Key',
-            description: '火山引擎控制台获取的Access Token（不是Secret Key）',
+            label: 'Access Key（旧控制台）',
+            description: '旧控制台 Access Token（X-Api-Access-Key），不是 Secret Key',
             default: '',
             component: 'InputPassword'
           },
           resourceId: {
             type: 'string',
             label: '资源 ID',
-            description: '火山引擎 ASR 资源 ID',
+            description:
+              '1.0 小时版 volc.bigasr.sauc.duration / 并发版 volc.bigasr.sauc.concurrent；'
+              + '2.0 小时版 volc.seedasr.sauc.duration / 并发版 volc.seedasr.sauc.concurrent（新建 2.0 应用须用 seedasr）',
             default: 'volc.bigasr.sauc.duration',
             component: 'Input'
           },

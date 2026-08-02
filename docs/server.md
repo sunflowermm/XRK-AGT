@@ -615,7 +615,7 @@ static:
 
 ### 开箱即用的Web控制台
 
-- **开箱即用**：`core/system-Core/www/xrk/`（Vue 控制台，`sign.json` → 按需 build 挂 `dist/`）
+- **开箱即用**：`core/system-Core/www/xrk/`（Vue 控制台，`sign.json` → 启动过程 build 后挂 `dist/`）
 - **访问路径**：`/xrk/`（`sign.proxy.mount`，与文件夹名一致）
 - **功能完整**：API测试、配置管理、插件管理、设备管理等
 
@@ -629,7 +629,7 @@ static:
 |------|------|-----|------|
 | **零配置静态** | 无有效 `sign.json` | 固定 `/${文件夹名}` | 目录本体 |
 | **有 sign · 纯静态** | `staticRoot: "."` 等 | `proxy.mount`… | 目录本体，不 build |
-| **有 sign · 产物** | `enabled: false` / `serve: static` | 同上 | 按需 build，挂 dist |
+| **有 sign · 产物** | `enabled: false` / `serve: static` | 同上 | 启动过程 build，挂载挂 dist |
 | **有 sign · 反代** | `enabled: true` | 同上 | **启进程 + 反代** |
 
 代码：`www-app-resolve.js` · `www-static-build.js` · `www-sign-merge.js` · `mount-core-www.js` · `frontend/launcher.js`。
@@ -644,7 +644,7 @@ static:
 | `name` / `description` | 元数据 |
 | `serve` / `enabled` | `static` 挂静态；`proxy` 拉进程反代 |
 | `staticRoot` / `outDir` | 静态根；`"."` = 纯静态 |
-| `build` / `buildOnStart` | 构建；静态有 stale 三态，反代语义不同 |
+| `build` / `buildOnStart` | 构建；静态由启动过程 stale 编，反代语义不同 |
 | `command` / `args` / `port` / `cwd` / `env` | 反代进程 |
 | `autoRestart` / `forceFreePort` | 重启与抢端口 |
 | `mode` / `prod` / `devOnly` / `modes` | 反代环境筛选与生产入口 |
