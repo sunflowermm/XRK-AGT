@@ -5,8 +5,11 @@ groups: []
 users: []
 cooldown: 300
 chance: 0.1
+# 各 *_llm 工厂 providers[].key；空=用 ai-workflow.llm.Provider
+llmProvider: ""
 mergeWorkflows:
   - memory
   - database
   - tools
+# 群覆盖可填 llmProvider / mergeWorkflows 等
 groupOverrides: []

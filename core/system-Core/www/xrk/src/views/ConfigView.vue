@@ -81,11 +81,14 @@ const showGroupHeaders = computed(() => {
   return only !== '基础';
 });
 const selectedConfig = computed(() => configs.value.find((c) => c.name === selected.value) || null);
-const isSystem = computed(() => selected.value === 'system');
-const editingSystemChild = computed(() => isSystem.value && Boolean(selectedChild.value));
+/** system / llm_factories 等：structure 带 configs 子项 */
+const isMultiFile = computed(() => Boolean(
+  selectedConfig.value?.configs && typeof selectedConfig.value.configs === 'object',
+));
+const editingMultiChild = computed(() => isMultiFile.value && Boolean(selectedChild.value));
 
 const editorTitle = computed(() => {
-  if (editingSystemChild.value) {
+  if (editingMultiChild.value) {
     const opt = childOptions.value.find((o) => o.value === selectedChild.value);
     return opt?.label || selectedChild.value;
   }
@@ -93,7 +96,7 @@ const editorTitle = computed(() => {
 });
 
 const editorDesc = computed(() => {
-  if (editingSystemChild.value) return `system / ${selectedChild.value}`;
+  if (editingMultiChild.value) return `${selected.value} / ${selectedChild.value}`;
   if (selectedConfig.value?.description) return selectedConfig.value.description;
   if (selected.value) return selected.value;
   return '';
@@ -312,7 +315,7 @@ async function loadList() {
 }
 
 function childQuery() {
-  if (isSystem.value && selectedChild.value) {
+  if (isMultiFile.value && selectedChild.value) {
     return `?path=${encodeURIComponent(selectedChild.value)}`;
   }
   return '';
@@ -325,11 +328,10 @@ function childQuery() {
 async function loadOne(name, opts = {}) {
   if (!name) return;
   if (!opts.force && !(await confirmDiscard())) return;
-  if (name === 'system' && !selectedChild.value) {
-    const cfg = configs.value.find((c) => c.name === 'system');
-    if (cfg?.configs) {
-      children.value = Object.keys(cfg.configs);
-    }
+  const cfg = configs.value.find((c) => c.name === name);
+  const multi = Boolean(cfg?.configs && typeof cfg.configs === 'object');
+  if (multi && !selectedChild.value) {
+    children.value = Object.keys(cfg.configs);
     fields.value = [];
     arraySchemas.value = {};
     clearValues();
@@ -371,8 +373,8 @@ function itemFieldsFor(f) {
 
 async function save() {
   if (!selected.value) return;
-  if (isSystem.value && !selectedChild.value) {
-    message.warning('system 需选择子配置');
+  if (isMultiFile.value && !selectedChild.value) {
+    message.warning('请先选择子配置');
     return;
   }
   if (mode.value === 'json' && !applyJsonToValues()) return;
@@ -386,7 +388,7 @@ async function save() {
   saving.value = true;
   validateErrorPaths.value = [];
   try {
-    if (!isSystem.value) {
+    if (!isMultiFile.value) {
       const allFlat = {};
       for (const f of fields.value) allFlat[f.path] = values[f.path];
       const data = flatToNested(allFlat);
@@ -415,7 +417,7 @@ async function save() {
     }
 
     const body = { flat, backup: true, validate: true };
-    if (isSystem.value && selectedChild.value) body.path = selectedChild.value;
+    if (isMultiFile.value && selectedChild.value) body.path = selectedChild.value;
     await apiJson(`/api/config/${encodeURIComponent(selected.value)}/batch-set`, body, 'POST');
     message.success(`已保存 ${Object.keys(flat).length} 项`);
     await loadFlat(selected.value);
@@ -427,8 +429,8 @@ async function save() {
 }
 
 async function backup() {
-  if (!selected.value || selected.value === 'system') {
-    message.warning('请选择非 system 配置，或对子配置使用保存时自动备份');
+  if (!selected.value || isMultiFile.value) {
+    message.warning('多文件配置请在子配置内保存（会自动备份）');
     return;
   }
   try {
@@ -440,8 +442,8 @@ async function backup() {
 }
 
 async function resetCfg() {
-  if (!selected.value || selected.value === 'system') {
-    message.warning('system 子配置请在确认后于服务端重置');
+  if (!selected.value || isMultiFile.value) {
+    message.warning('多文件子配置请在服务端重置对应 yaml');
     return;
   }
   const ok = await new Promise((resolve) => {
@@ -473,7 +475,7 @@ async function selectConfig(name) {
   if (!(await confirmDiscard())) return;
   suppressChildWatch = true;
   selected.value = name;
-  if (name !== 'system') selectedChild.value = '';
+  selectedChild.value = '';
   children.value = [];
   listOpen.value = false;
   persistSelection();
@@ -484,7 +486,7 @@ async function selectConfig(name) {
 }
 
 async function goBackChild() {
-  if (!editingSystemChild.value) return;
+  if (!editingMultiChild.value) return;
   if (!(await confirmDiscard())) return;
   suppressChildWatch = true;
   selectedChild.value = '';
@@ -530,7 +532,7 @@ function formatJsonEditor() {
 
 watch(selectedChild, async (v, prev) => {
   if (suppressChildWatch) return;
-  if (selected.value !== 'system') return;
+  if (!isMultiFile.value) return;
   if (v === prev) return;
   if (!(await confirmDiscard())) {
     suppressChildWatch = true;
@@ -541,7 +543,7 @@ watch(selectedChild, async (v, prev) => {
     return;
   }
   persistSelection();
-  if (v) void loadFlat('system');
+  if (v) void loadFlat(selected.value);
   else {
     fields.value = [];
     arraySchemas.value = {};
@@ -573,15 +575,15 @@ useAuthReload(loadList);
           v-for="c in filtered"
           :key="c.name"
           class="cfg-item"
-          :class="{ active: selected === c.name, multi: c.name === 'system' }"
+          :class="{ active: selected === c.name, multi: Boolean(c.configs) }"
           @click="selectConfig(c.name)"
         >
           <div class="cfg-meta">
             <span class="name">{{ c.displayName || c.name }}</span>
             <span v-if="c.description" class="desc">{{ c.description }}</span>
-            <span v-if="c.name === 'system'" class="multi-hint">点选后进入子配置</span>
+            <span v-if="c.configs" class="multi-hint">点选后进入子配置</span>
           </div>
-          <span v-if="c.name === 'system'" class="cfg-tag">多文件</span>
+          <span v-if="c.configs" class="cfg-tag">多文件</span>
         </li>
       </ul>
       <NEmpty v-if="!filtered.length" description="无配置项" size="small" />
@@ -609,7 +611,7 @@ useAuthReload(loadList);
             <span>{{ listOpen ? '关闭' : '列表' }}</span>
           </button>
           <button
-            v-if="editingSystemChild"
+            v-if="editingMultiChild"
             type="button"
             class="back-btn"
             title="返回子配置列表"
@@ -620,7 +622,7 @@ useAuthReload(loadList);
           </button>
           <div class="hdr-titles">
             <h2>{{ editorTitle }}</h2>
-            <p v-if="editorDesc" class="hdr-desc" :class="{ mono: editingSystemChild }">{{ editorDesc }}</p>
+            <p v-if="editorDesc" class="hdr-desc" :class="{ mono: editingMultiChild }">{{ editorDesc }}</p>
           </div>
           <NTag v-if="dirtyCount" size="small" type="warning" :bordered="true" :title="dirtySummary">
             {{ dirtyCount }} 未保存
@@ -697,8 +699,8 @@ useAuthReload(loadList);
             <NEmpty description="从左侧选择配置" />
           </div>
 
-          <div v-else-if="isSystem && !selectedChild" class="sys-chooser">
-            <p class="hint">SystemConfig 为多文件配置，请选择子项：</p>
+          <div v-else-if="isMultiFile && !selectedChild" class="sys-chooser">
+            <p class="hint">多文件配置，请选择子项：</p>
             <div class="sys-grid">
               <button
                 v-for="opt in childOptions"
@@ -708,10 +710,10 @@ useAuthReload(loadList);
                 @click="selectedChild = opt.value"
               >
                 <strong>{{ opt.label }}</strong>
-                <span class="mono">system/{{ opt.value }}</span>
+                <span class="mono">{{ selected }}/{{ opt.value }}</span>
               </button>
             </div>
-            <NEmpty v-if="!childOptions.length" description="SystemConfig 未定义子配置" size="small" />
+            <NEmpty v-if="!childOptions.length" description="未定义子配置" size="small" />
           </div>
 
           <div v-else-if="mode === 'json'" class="json-wrap">
@@ -725,7 +727,7 @@ useAuthReload(loadList);
           </div>
 
           <div v-else-if="!fields.length" class="placeholder">
-            <NEmpty description="无扁平字段（可切 JSON，或检查 system 子配置）" />
+            <NEmpty description="无扁平字段（可切 JSON，或检查多文件子配置）" />
           </div>
 
           <div v-else class="form-wrap">

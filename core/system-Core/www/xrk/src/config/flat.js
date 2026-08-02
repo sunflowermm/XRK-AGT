@@ -161,12 +161,12 @@ function normalizeOneField(raw) {
   };
 }
 
-/** 从 /structure 取当前配置的 schema 根（对齐原 extractActiveSchema） */
+/** 从 /structure 取当前配置的 schema 根（system / llm_factories 等多文件走 configs[child]） */
 export function extractActiveSchema(structure, name, child) {
   if (!structure) return null;
-  if (name === 'system') {
+  if (structure.configs && typeof structure.configs === 'object') {
     if (!child) return null;
-    const target = structure.configs?.[child];
+    const target = structure.configs[child];
     return target?.schema ?? { fields: target?.fields ?? {} };
   }
   return structure.schema ?? { fields: structure.fields ?? {} };
@@ -410,14 +410,21 @@ const FULL_KEY_PATTERN =
 
 /**
  * 统一字段控件类型（ConfigView / ConfigArrayForm / 嵌套子表共用）
- * @returns {'switch'|'select'|'tags'|'textarea'|'number'|'password'|'array'|'json'|'kv'|'nested'|'input'}
+ * @returns {'switch'|'select'|'multiselect'|'tags'|'textarea'|'number'|'password'|'array'|'json'|'kv'|'nested'|'keyed'|'input'}
  */
 export function resolveFieldControl(field = {}) {
   const c = String(field?.component || '').toLowerCase();
   const t = String(field?.type || '').toLowerCase();
   if (c === 'switch' || t === 'boolean') return 'switch';
+
+  // 多选必须先于 hasChoiceOptions：否则带 enum 的 MultiSelect 会被误判成单选 Select
+  if (c === 'multiselect') return 'multiselect';
+  if (c === 'tags') return 'tags';
+  if (t === 'array' && c !== 'arrayform') {
+    return hasChoiceOptions(field) ? 'multiselect' : 'tags';
+  }
+
   if (c === 'select' || c === 'radio' || hasChoiceOptions(field)) return 'select';
-  if (c === 'multiselect' || c === 'tags' || (t === 'array' && c !== 'arrayform')) return 'tags';
   if (c === 'textarea' || c === 'text-area') return 'textarea';
   if (c === 'number' || c === 'inputnumber' || c === 'slider' || c === 'range' || t === 'number') {
     return 'number';
@@ -425,22 +432,18 @@ export function resolveFieldControl(field = {}) {
   if (c === 'inputpassword' || c === 'password') return 'password';
   if (c === 'arrayform' || t === 'array<object>') return 'array';
   if (c === 'kv') return 'kv';
-  // 动态键 map / keyedObject → 工厂式条目编辑（可切 JSON）
   if (c === 'keyedobject' || c === 'keyed' || t === 'map') return 'keyed';
   if (c === 'json') {
-    // 显式 json 但 example 是「键→对象」时，仍走工厂表单
     if (inferFieldsFromExample(field.example)) return 'keyed';
     return 'json';
   }
 
   const nestedFields = fieldNestedFields(field);
   const hasNested = Object.keys(nestedFields).length > 0;
-  // example 呈现「键 → 对象」时，fields 是值模板 → 工厂式 keyed（非固定 SubForm）
   if (hasNested && (c === 'subform' || t === 'object')) {
     if (inferFieldsFromExample(field.example)) return 'keyed';
     return 'nested';
   }
-  // 无子 schema：若 example 像 keyed map → 工厂；否则 JSON
   if (c === 'subform' || t === 'object') {
     if (inferFieldsFromExample(field.example)) return 'keyed';
     return 'json';
@@ -481,7 +484,15 @@ export function isFieldFullSpan(field) {
 
   if (ctrl === 'tags') return false;
   if (FULL_COMPONENTS.has(component)) return true;
-  if (ctrl === 'textarea' || ctrl === 'array' || ctrl === 'json' || ctrl === 'kv' || ctrl === 'nested' || ctrl === 'keyed') {
+  if (
+    ctrl === 'textarea'
+    || ctrl === 'array'
+    || ctrl === 'json'
+    || ctrl === 'kv'
+    || ctrl === 'nested'
+    || ctrl === 'keyed'
+    || ctrl === 'multiselect'
+  ) {
     return true;
   }
   if (type === 'object' || type === 'map' || type === 'array<object>') {

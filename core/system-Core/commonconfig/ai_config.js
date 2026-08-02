@@ -3,6 +3,7 @@
  */
 import ConfigBase from '#infrastructure/commonconfig/commonconfig.js';
 import AiWorkflowLoader from '#infrastructure/ai-workflow/loader.js';
+import LLMFactory from '#factory/llm/LLMFactory.js';
 import { mergeUniqueStrings, normalizeStringArray } from '#utils/string-array-utils.js';
 import RuntimeUtil from '#utils/runtime-util.js';
 import fs from 'node:fs/promises';
@@ -12,7 +13,16 @@ export const DATA_AI_CONFIG_REL = 'data/ai/config.yaml';
 
 const FALLBACK_MERGE_WORKFLOWS = ['memory', 'database', 'tools', 'desktop', 'web', 'browser'];
 
-function listMergeWorkflowCandidates() {
+function listLlmProviders(extra = []) {
+  try {
+    return mergeUniqueStrings(LLMFactory.listProviders?.() || [], extra);
+  } catch (e) {
+    RuntimeUtil.makeLog('warn', `[AIConfig] 获取 LLM providers 失败: ${e.message}`, 'AIConfig');
+    return mergeUniqueStrings([], extra);
+  }
+}
+
+function listMergeWorkflows(extra = []) {
   const names = [];
   try {
     for (const s of AiWorkflowLoader.getWorkflowsByPriority?.() || []) {
@@ -29,16 +39,32 @@ function listMergeWorkflowCandidates() {
   } catch (e) {
     RuntimeUtil.makeLog('warn', `[AIConfig] 获取远程 MCP 列表失败: ${e.message}`, 'AIConfig');
   }
-  return names.length ? names : [...FALLBACK_MERGE_WORKFLOWS];
+  return mergeUniqueStrings(names.length ? names : FALLBACK_MERGE_WORKFLOWS, extra);
 }
 
-function mergeWorkflowFieldSchema(extraEnum = [], overrides = {}) {
+/** Select 可清空；空=回落。不把 '' 放进 enum。 */
+function llmProviderField(extra = [], overrides = {}) {
+  const keys = listLlmProviders(extra);
+  return {
+    type: 'string',
+    label: 'LLM 模型配置',
+    description: '已挂载的 providers[].key；清空=回落 ai-workflow.llm.Provider',
+    default: '',
+    component: 'Select',
+    placeholder: '空=工作流默认',
+    ...(keys.length ? { enum: keys } : {}),
+    group: '模型',
+    ...overrides,
+  };
+}
+
+function mergeWorkflowField(extra = [], overrides = {}) {
   return {
     type: 'array',
     label: '合并工作流',
-    description: '并入 chat 的副工作流 / remote-mcp；勾选即严格生效，不会再自动加料。',
+    description: '并入 chat 的副工作流 / remote-mcp；勾选即严格生效',
     itemType: 'string',
-    enum: mergeUniqueStrings(listMergeWorkflowCandidates(), extraEnum),
+    enum: listMergeWorkflows(extra),
     default: ['memory', 'database', 'tools'],
     component: 'MultiSelect',
     group: '工作流',
@@ -46,7 +72,7 @@ function mergeWorkflowFieldSchema(extraEnum = [], overrides = {}) {
   };
 }
 
-function groupOverrideFields(extraEnum = []) {
+function groupOverrideFields(workflowExtra = [], providerExtra = []) {
   return {
     groupId: {
       type: 'string',
@@ -87,7 +113,12 @@ function groupOverrideFields(extraEnum = []) {
       component: 'InputNumber',
       nullable: true,
     },
-    mergeWorkflows: mergeWorkflowFieldSchema(extraEnum, {
+    llmProvider: llmProviderField(providerExtra, {
+      label: '本群 LLM 模型',
+      description: '选择或清空；空=沿用全局',
+      group: undefined,
+    }),
+    mergeWorkflows: mergeWorkflowField(workflowExtra, {
       label: '本群合并工作流',
       description: '整表替换全局（勾几个就几个；空=仅 chat）',
       default: [],
@@ -96,12 +127,17 @@ function groupOverrideFields(extraEnum = []) {
   };
 }
 
+function trimProvider(v) {
+  if (v == null || v === '') return '';
+  return String(v).trim();
+}
+
 export default class AIConfig extends ConfigBase {
   constructor() {
     super({
       name: 'ai_config',
       displayName: 'AI 助手配置',
-      description: '触发策略、人设、白名单、群覆盖、合并工作流',
+      description: '触发策略、人设、模型、白名单、群覆盖、合并工作流',
       filePath: DATA_AI_CONFIG_REL,
       defaultTemplatePath: 'core/system-Core/default/ai_config.yaml',
       fileType: 'yaml',
@@ -172,11 +208,12 @@ export default class AIConfig extends ConfigBase {
           component: 'InputNumber',
           group: '触发',
         },
-        mergeWorkflows: mergeWorkflowFieldSchema(),
+        llmProvider: llmProviderField(),
+        mergeWorkflows: mergeWorkflowField(),
         groupOverrides: {
           type: 'array',
           label: '群单独配置',
-          description: 'mergeWorkflows 整表替换；其余字段有值才覆盖',
+          description: '可单独选模型与工作流；mergeWorkflows 整表替换，其余有值才覆盖',
           itemType: 'object',
           default: [],
           component: 'ArrayForm',
@@ -188,18 +225,26 @@ export default class AIConfig extends ConfigBase {
     };
   }
 
+  /** 每次取结构/扁平 schema 都刷新，工厂里刚加的 key 立刻出现在下拉 */
   _refreshDynamicSchema(validateSnapshot = null) {
     try {
       const fields = this.schema?.fields;
       if (!fields) return;
       const snap = validateSnapshot && typeof validateSnapshot === 'object' ? validateSnapshot : {};
-      const extra = [
+      const rows = Array.isArray(snap.groupOverrides) ? snap.groupOverrides : [];
+      const workflowExtra = [
         ...(Array.isArray(snap.mergeWorkflows) ? snap.mergeWorkflows : []),
-        ...((Array.isArray(snap.groupOverrides) ? snap.groupOverrides : [])
-          .flatMap((row) => (Array.isArray(row?.mergeWorkflows) ? row.mergeWorkflows : []))),
+        ...rows.flatMap((row) => (Array.isArray(row?.mergeWorkflows) ? row.mergeWorkflows : [])),
       ];
-      fields.mergeWorkflows = mergeWorkflowFieldSchema(extra);
-      fields.groupOverrides = { ...fields.groupOverrides, fields: groupOverrideFields(extra) };
+      const providerExtra = [snap.llmProvider, ...rows.map((r) => r?.llmProvider)]
+        .map(trimProvider)
+        .filter(Boolean);
+      fields.llmProvider = llmProviderField(providerExtra);
+      fields.mergeWorkflows = mergeWorkflowField(workflowExtra);
+      fields.groupOverrides = {
+        ...fields.groupOverrides,
+        fields: groupOverrideFields(workflowExtra, providerExtra),
+      };
     } catch (e) {
       RuntimeUtil.makeLog('error', `[AIConfig] 刷新动态 schema 失败: ${e.message}`, 'AIConfig');
     }
@@ -210,11 +255,17 @@ export default class AIConfig extends ConfigBase {
     return super.getStructure();
   }
 
+  getFlatSchema(prefix = '', schema = this.schema) {
+    this._refreshDynamicSchema();
+    return super.getFlatSchema(prefix, schema);
+  }
+
   static normalizeConfig(raw) {
     const data = raw && typeof raw === 'object' ? { ...raw } : {};
     data.prefixes = normalizeStringArray(data.prefixes);
     data.groups = normalizeStringArray(data.groups);
     data.users = normalizeStringArray(data.users);
+    data.llmProvider = trimProvider(data.llmProvider);
     data.mergeWorkflows = normalizeStringArray(data.mergeWorkflows);
     data.groupOverrides = Array.isArray(data.groupOverrides)
       ? data.groupOverrides
@@ -223,6 +274,7 @@ export default class AIConfig extends ConfigBase {
             ...row,
             groupId: String(row.groupId).trim(),
             prefixes: normalizeStringArray(row.prefixes),
+            llmProvider: trimProvider(row.llmProvider),
             mergeWorkflows: normalizeStringArray(row.mergeWorkflows),
           }))
       : [];
@@ -244,5 +296,9 @@ export default class AIConfig extends ConfigBase {
       this._cacheTime = Date.now();
       return defaultData;
     }
+  }
+
+  async write(data, options = {}) {
+    return super.write(AIConfig.normalizeConfig(data ?? {}), options);
   }
 }

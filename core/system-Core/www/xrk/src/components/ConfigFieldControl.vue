@@ -22,7 +22,8 @@ const emit = defineEmits(['update:modelValue']);
 const ctrl = computed(() => props.control || resolveFieldControl(props.schema));
 
 const selectOptions = computed(() =>
-  normalizeOptions(props.schema?.options || props.schema?.enum || props.schema?.choices),
+  normalizeOptions(props.schema?.options || props.schema?.enum || props.schema?.choices)
+    .filter((o) => o.value !== '' && o.value != null),
 );
 
 function set(v) {
@@ -30,6 +31,13 @@ function set(v) {
 }
 
 const boolValue = computed(() => Boolean(props.modelValue));
+
+/** MultiSelect：始终数组；可清空 */
+const multiValue = computed(() => {
+  if (Array.isArray(props.modelValue)) return props.modelValue;
+  if (props.modelValue == null || props.modelValue === '') return [];
+  return [props.modelValue];
+});
 </script>
 
 <template>
@@ -44,12 +52,26 @@ const boolValue = computed(() => Boolean(props.modelValue));
     <NSelect
       v-else-if="ctrl === 'select'"
       :id="inputId || undefined"
-      :value="modelValue"
+      :value="modelValue === '' ? null : modelValue"
       size="small"
       :options="selectOptions"
+      :placeholder="schema.placeholder || '请选择'"
       clearable
       filterable
-      @update:value="set"
+      @update:value="(v) => set(v == null ? '' : v)"
+    />
+    <NSelect
+      v-else-if="ctrl === 'multiselect'"
+      :id="inputId || undefined"
+      :value="multiValue"
+      size="small"
+      multiple
+      :options="selectOptions"
+      :placeholder="schema.placeholder || '可多选，可清空'"
+      clearable
+      filterable
+      max-tag-count="responsive"
+      @update:value="(v) => set(Array.isArray(v) ? v : [])"
     />
     <NInputNumber
       v-else-if="ctrl === 'number'"
@@ -122,7 +144,8 @@ const boolValue = computed(() => Boolean(props.modelValue));
 .cfg-ctrl[data-ctrl='json'],
 .cfg-ctrl[data-ctrl='kv'],
 .cfg-ctrl[data-ctrl='nested'],
-.cfg-ctrl[data-ctrl='keyed'] {
+.cfg-ctrl[data-ctrl='keyed'],
+.cfg-ctrl[data-ctrl='multiselect'] {
   align-items: stretch;
 }
 .cfg-ctrl :deep(.num) {

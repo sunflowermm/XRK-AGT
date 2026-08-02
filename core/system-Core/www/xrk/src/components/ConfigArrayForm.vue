@@ -148,7 +148,12 @@ function setAllOpen(open) {
       <span>新增{{ label || '条目' }}</span>
     </button>
 
-    <details v-for="(item, i) in items" :key="rowKeys[i] || i" class="card" open>
+    <details
+      v-for="(item, i) in items"
+      :key="rowKeys[i] || i"
+      class="card"
+      v-bind="isProviders ? {} : { open: true }"
+    >
       <summary class="card-head">
         <span class="card-title">{{ summary(item, i) }}</span>
         <div class="card-acts" @click.stop>
@@ -195,7 +200,7 @@ function setAllOpen(open) {
             v-for="sec in sectionsForItem"
             :key="sec.id"
             class="section"
-            v-bind="sec.collapsible ? { open: true } : {}"
+            v-bind="sec.collapsible && !isProviders ? { open: true } : {}"
           >
             <summary v-if="sec.collapsible" class="section-head">{{ sec.label }}</summary>
             <header v-else-if="sec.label" class="section-head static">{{ sec.label }}</header>

@@ -33,7 +33,7 @@ function findGroupOverride(config, groupId) {
 
 /**
  * 全局默认 + 群覆盖。
- * 有群覆盖行时 mergeWorkflows 整表替换；prefixes/chance/cooldown/enabled 有值才盖。
+ * 有群覆盖行时 mergeWorkflows 整表替换；llmProvider/prefixes/chance/cooldown/enabled 有值才盖。
  */
 export function resolveEffectiveAiConfig(e, config) {
   const base = config && typeof config === 'object' ? config : {};
@@ -41,6 +41,7 @@ export function resolveEffectiveAiConfig(e, config) {
     ...base,
     prefixes: normalizeStringArray(base.prefixes),
     mergeWorkflows: normalizeStringArray(base.mergeWorkflows),
+    llmProvider: base.llmProvider != null ? String(base.llmProvider).trim() : '',
     cooldown: base.cooldown ?? 300,
     chance: base.chance ?? 0.1,
     enabled: base.enabled !== false,
@@ -60,6 +61,8 @@ export function resolveEffectiveAiConfig(e, config) {
   if (typeof ov.cooldown === 'number' && Number.isFinite(ov.cooldown)) {
     effective.cooldown = ov.cooldown;
   }
+  const ovProvider = ov.llmProvider != null ? String(ov.llmProvider).trim() : '';
+  if (ovProvider) effective.llmProvider = ovProvider;
   effective.mergeWorkflows = normalizeStringArray(ov.mergeWorkflows);
   return effective;
 }
@@ -215,10 +218,16 @@ export async function runChatAgent(plugin, e, {
   }
 
   const effective = resolveEffectiveAiConfig(e, config);
+  const options = {
+    mergeWorkflows: normalizeStringArray(effective.mergeWorkflows),
+  };
+  if (effective.llmProvider) {
+    options.provider = effective.llmProvider;
+  }
   await stream.process(
     e,
     { content: text, text, persona, isGlobalTrigger, debugDumpFullPrompt: !!debugDumpFullPrompt },
-    { mergeWorkflows: normalizeStringArray(effective.mergeWorkflows) },
+    options,
   );
   return true;
 }
@@ -239,9 +248,10 @@ export async function handleClearConversation(e) {
 export function logAiInit(config) {
   const prefixes = normalizeStringArray(config?.prefixes);
   const overrides = Array.isArray(config?.groupOverrides) ? config.groupOverrides.length : 0;
+  const provider = config?.llmProvider != null ? String(config.llmProvider).trim() : '';
   logger.mark(
     `[XRK-AI] 就绪 · 群 ${config.groups?.length || 0} · 用户 ${config.users?.length || 0}`
     + ` · 前缀[${prefixes.join(',') || '无'}] · 群覆盖 ${overrides}`
-    + ` · merge=[${normalizeStringArray(config?.mergeWorkflows).join(',')}]`,
+    + ` · llm=${provider || 'ai-workflow'} · merge=[${normalizeStringArray(config?.mergeWorkflows).join(',')}]`,
   );
 }

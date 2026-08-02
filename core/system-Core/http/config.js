@@ -9,6 +9,11 @@ import { HttpResponse } from '#utils/http-utils.js';
 
 const getConfig = (name) => CommonConfigRegistry?.get(name);
 
+/** 多文件配置：system / llm_factories 等（有 configFiles + getConfigInstance） */
+function isMultiFileConfig(config) {
+  return Boolean(config?.configFiles && typeof config.getConfigInstance === 'function');
+}
+
 /** CommonConfig 写入后清 runtimeConfig 内存缓存，使 LLMFactory 等立即读到新 providers[] */
 function invalidateRuntimeCfgCache(configName) {
   if (!runtimeConfig?.config || !configName) return;
@@ -18,13 +23,13 @@ function invalidateRuntimeCfgCache(configName) {
 }
 
 const resolveConfigInstance = (name, keyPath) => {
-        const config = getConfig(name);
+  const config = getConfig(name);
   if (!config) return { error: `配置 ${name} 不存在` };
-  if (name === 'system') {
-    if (!keyPath) return { error: 'SystemConfig 需要提供 path（子配置名称）' };
-    return { config: config.getConfigInstance(keyPath) };
+  if (isMultiFileConfig(config)) {
+    if (!keyPath) return { error: `${config.displayName || name} 需要提供 path（子配置名称）` };
+    return { config: config.getConfigInstance(keyPath), multi: true };
   }
-  return { config };
+  return { config, multi: false };
 };
 
 // 严格模式：不做任何回退或清洗，完全依赖 schema 校验与前端输入标准化
@@ -40,9 +45,10 @@ export default {
       handler: HttpResponse.asyncHandler(async (req, res) => {
         let configList = (global.CommonConfigRegistry?.getList?.() || []);
         // 确保 system 配置排在第一位，其余按名称排序，提升前端展示的一致性
+        const rank = (n) => (n === 'system' ? 0 : n === 'llm_factories' ? 1 : 2);
         configList = configList.slice().sort((a, b) => {
-        if (a.name === 'system') return -1;
-          if (b.name === 'system') return 1;
+          const dr = rank(a.name) - rank(b.name);
+          if (dr !== 0) return dr;
           const an = (a.displayName || a.name || '').toLowerCase();
           const bn = (b.displayName || b.name || '').toLowerCase();
           return an.localeCompare(bn, 'zh-CN');
@@ -73,8 +79,8 @@ export default {
       handler: HttpResponse.asyncHandler(async (req, res) => {
         const { name } = req.params;
         const { path: keyPath } = req.query || {};
-        const { config, error } = resolveConfigInstance(name, keyPath);
-        if (error) return HttpResponse.error(res, new Error(error), name === 'system' ? 400 : 404, 'config.flat-structure');
+        const { config, error, multi } = resolveConfigInstance(name, keyPath);
+        if (error) return HttpResponse.error(res, new Error(error), multi || keyPath ? 400 : 404, 'config.flat-structure');
         const flat = config.getFlatSchema();
         HttpResponse.success(res, { flat });
       }, 'config.flat-structure')
@@ -87,8 +93,8 @@ export default {
       handler: HttpResponse.asyncHandler(async (req, res) => {
         const { name } = req.params;
         const { path: keyPath } = req.query || {};
-        const { config, error } = resolveConfigInstance(name, keyPath);
-        if (error) return HttpResponse.error(res, new Error(error), name === 'system' ? 400 : 404, 'config.flat');
+        const { config, error, multi } = resolveConfigInstance(name, keyPath);
+        if (error) return HttpResponse.error(res, new Error(error), multi || keyPath ? 400 : 404, 'config.flat');
         const data = await config.read();
         const flat = config.flattenData(data);
         HttpResponse.success(res, { flat });
@@ -105,9 +111,9 @@ export default {
         if (!flat || typeof flat !== 'object') {
           return HttpResponse.validationError(res, '缺少 flat 对象');
         }
-        const { config, error } = resolveConfigInstance(name, keyPath);
+        const { config, error, multi } = resolveConfigInstance(name, keyPath);
         if (error) {
-          return HttpResponse.error(res, new Error(error), name === 'system' ? 400 : 404, 'config.batch-set');
+          return HttpResponse.error(res, new Error(error), multi || keyPath ? 400 : 404, 'config.batch-set');
         }
 
         const current = await config.read(false);
@@ -130,7 +136,7 @@ export default {
           return HttpResponse.validationError(res, `校验失败: ${valid.errors.join('; ')}`);
         }
         await config.write(merged, { backup, validate });
-        const cacheKey = name === 'system' ? keyPath : name;
+        const cacheKey = multi ? keyPath : name;
         if (cacheKey) invalidateRuntimeCfgCache(cacheKey);
         HttpResponse.success(res, null, '批量写入成功');
       }, 'config.batch-set')
@@ -144,10 +150,10 @@ export default {
         const { path: keyPath } = req.query || {};
         if (!configName) return HttpResponse.validationError(res, '配置名称不能为空');
         if (!global.CommonConfigRegistry) return HttpResponse.error(res, new Error('配置管理器未初始化'), 503, 'config.read');
-        const { config, error } = resolveConfigInstance(configName, keyPath);
+        const { config, error, multi } = resolveConfigInstance(configName, keyPath);
         if (error) return HttpResponse.notFound(res, error);
         let data;
-        if (configName === 'system' && keyPath) data = await config.read();
+        if (multi && keyPath) data = await config.read();
         else if (keyPath && typeof config.get === 'function') data = await config.get(keyPath);
         else if (typeof config.read === 'function') data = await config.read();
         else throw new Error('配置对象不支持 read/get 方法');
@@ -169,9 +175,10 @@ export default {
         if (!global.CommonConfigRegistry) return HttpResponse.error(res, new Error('配置管理器未初始化'), 503, 'config.write');
         const config = getConfig(configName);
         if (!config) return HttpResponse.notFound(res, `配置 ${configName} 不存在`);
+        const multi = isMultiFileConfig(config);
         let result;
         if (keyPath) {
-          if (configName === 'system' && typeof config.write === 'function') {
+          if (multi && typeof config.write === 'function') {
             result = await config.write(keyPath, data, { backup, validate });
           } else if (typeof config.set === 'function') {
             result = await config.set(keyPath, data, { backup, validate });
@@ -179,9 +186,8 @@ export default {
             throw new Error('配置对象不支持 set 方法');
           }
         } else {
-          // 没有 keyPath，写入完整配置
-          if (configName === 'system') {
-            throw new Error('SystemConfig 需要指定子配置名称（使用 path 参数）');
+          if (multi) {
+            throw new Error(`${config.displayName || configName} 需要指定子配置名称（使用 path 参数）`);
           } else if (typeof config.write === 'function') {
             result = await config.write(data, { backup, validate });
           } else {
@@ -189,7 +195,7 @@ export default {
           }
         }
 
-        const cacheKey = configName === 'system' ? keyPath : configName;
+        const cacheKey = multi ? keyPath : configName;
         if (cacheKey) invalidateRuntimeCfgCache(cacheKey);
         HttpResponse.success(res, { result }, '配置已保存');
       }, 'config.write')
