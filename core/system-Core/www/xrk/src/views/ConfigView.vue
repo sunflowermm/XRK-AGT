@@ -756,8 +756,13 @@ useAuthReload(loadList);
                     {{ f.label }}
                     <span v-if="f.required" class="req">*</span>
                   </label>
-                  <p class="desc" :class="{ compact: !isFieldFullSpan(f) }" :title="f.description || undefined">
-                    {{ f.description || '' }}
+                  <p
+                    v-if="f.description"
+                    class="desc"
+                    :class="{ compact: !isFieldFullSpan(f) }"
+                    :title="f.description"
+                  >
+                    {{ f.description }}
                   </p>
                   <div class="ctrl">
                     <ConfigArrayForm
@@ -793,13 +798,14 @@ useAuthReload(loadList);
                       >
                         <label class="fname" :title="ns.description || nk">{{ ns.label || nk }}</label>
                         <p
+                          v-if="ns.description"
                           class="desc"
                           :class="{
                             compact: !isFieldFullSpan({ ...ns, path: `${f.path}.${nk}` }),
                           }"
-                          :title="ns.description || undefined"
+                          :title="ns.description"
                         >
-                          {{ ns.description || '' }}
+                          {{ ns.description }}
                         </p>
                         <div class="ctrl">
                           <ConfigFieldControl
@@ -922,16 +928,11 @@ useAuthReload(loadList);
   box-shadow: var(--shadow);
 }
 .cfg-item.multi {
-  padding: 14px 12px;
   border-width: 2px;
   background: color-mix(in srgb, var(--cyan) 10%, var(--card));
 }
 .cfg-item.multi .name {
   font-size: 14px;
-}
-.cfg-item.multi .cfg-tag {
-  font-size: 11px;
-  padding: 3px 10px;
 }
 .multi-hint {
   font-size: var(--font-xs);
@@ -977,7 +978,6 @@ useAuthReload(loadList);
   display: block;
   min-width: 0;
   max-width: 100%;
-  white-space: normal;
   overflow-wrap: anywhere;
   word-break: break-word;
 }
@@ -985,12 +985,15 @@ useAuthReload(loadList);
   font-size: var(--font-ui);
   font-weight: 700;
   line-height: 1.3;
-  padding-right: 2px;
 }
 .cfg-item .desc {
-  font-size: var(--font-sm);
+  font-size: var(--font-xs);
   color: var(--muted);
-  line-height: 1.45;
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 .cfg-tag {
   flex: 0 0 auto;
@@ -1009,6 +1012,7 @@ useAuthReload(loadList);
   flex-direction: column;
   overflow: hidden;
   min-height: 0;
+  min-width: 0;
 }
 .editor-body {
   flex: 1 1 0;
@@ -1054,7 +1058,8 @@ header h2 {
 }
 .form-wrap,
 .json-wrap {
-  overflow: visible;
+  overflow-x: hidden;
+  min-width: 0;
   min-height: 0;
 }
 .json-bar {
@@ -1143,7 +1148,7 @@ header h2 {
 .field {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 4px;
   min-width: 0;
   padding: 8px 4px 10px;
   border-bottom: 1px solid var(--config-divider);
@@ -1171,35 +1176,6 @@ header h2 {
   grid-template-columns: repeat(3, minmax(0, 1fr));
   column-gap: 12px;
 }
-/* 同行三轨：名字 / 注释 / 控件，按最高对齐 */
-@supports (grid-template-rows: subgrid) {
-  .field:not(.full) {
-    display: grid;
-    grid-template-rows: subgrid;
-    grid-row: span 3;
-    gap: 0;
-    align-items: stretch;
-  }
-  .field:not(.full):has(> .example) {
-    grid-row: span 4;
-  }
-  .field:not(.full) > .fname,
-  .field:not(.full) > label.fname {
-    grid-row: 1;
-    align-self: start;
-  }
-  .field:not(.full) > .desc {
-    grid-row: 2;
-    align-self: start;
-  }
-  .field:not(.full) > .ctrl {
-    grid-row: 3;
-    align-self: start;
-  }
-  .field:not(.full) > .example {
-    grid-row: 4;
-  }
-}
 .fname {
   display: block;
   font-size: var(--font-sm);
@@ -1212,10 +1188,13 @@ header h2 {
 .req { color: var(--red); }
 .desc {
   margin: 0;
-  min-height: 1.45em;
+  min-width: 0;
+  max-width: 100%;
   font-size: var(--font-xs);
   color: var(--muted);
   line-height: 1.45;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 .desc.compact {
   display: -webkit-box;

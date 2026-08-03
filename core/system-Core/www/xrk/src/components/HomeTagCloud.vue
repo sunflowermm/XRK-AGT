@@ -87,46 +87,47 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div ref="root" class="tag-cloud" role="list">
-    <Teleport to="body">
-      <div
-        v-if="activeChip"
-        class="xrk-tag-detail-layer"
-        data-tag-detail
-        role="dialog"
-        aria-modal="true"
-        :aria-label="activeChip.popoverTitle || activeChip.label"
-      >
-        <div class="xrk-tag-detail-scrim" @click="closeDetail" />
-        <div class="xrk-tag-detail">
-          <div class="xrk-tag-detail-head">
-            <div class="xrk-tag-detail-titles">
-              <strong class="xrk-tag-detail-title">{{ activeChip.popoverTitle || activeChip.label }}</strong>
-              <span v-if="activeChip.popoverKey" class="xrk-tag-detail-key mono">{{ activeChip.popoverKey }}</span>
-            </div>
-            <button
-              type="button"
-              class="xrk-tag-detail-close"
-              aria-label="关闭详情"
-              title="关闭"
-              @click="closeDetail"
-            >
-              <XrkIcon name="close" :size="14" />
-            </button>
+  <!-- Teleport 放在 flex 容器外，避免占位节点干扰换行 -->
+  <Teleport to="body">
+    <div
+      v-if="activeChip"
+      class="xrk-tag-detail-layer"
+      data-tag-detail
+      role="dialog"
+      aria-modal="true"
+      :aria-label="activeChip.popoverTitle || activeChip.label"
+    >
+      <div class="xrk-tag-detail-scrim" @click="closeDetail" />
+      <div class="xrk-tag-detail">
+        <div class="xrk-tag-detail-head">
+          <div class="xrk-tag-detail-titles">
+            <strong class="xrk-tag-detail-title">{{ activeChip.popoverTitle || activeChip.label }}</strong>
+            <span v-if="activeChip.popoverKey" class="xrk-tag-detail-key mono">{{ activeChip.popoverKey }}</span>
           </div>
-          <div class="xrk-tag-detail-body ink-scroll">
-            <p class="xrk-tag-detail-desc">{{ activeChip.desc || '暂无描述' }}</p>
-            <ul v-if="activeChip.facts?.length" class="xrk-tag-detail-facts">
-              <li v-for="(f, fi) in activeChip.facts" :key="fi">
-                <span>{{ f.label }}</span>
-                <em>{{ f.value }}</em>
-              </li>
-            </ul>
-          </div>
+          <button
+            type="button"
+            class="xrk-tag-detail-close"
+            aria-label="关闭详情"
+            title="关闭"
+            @click="closeDetail"
+          >
+            <XrkIcon name="close" :size="14" />
+          </button>
+        </div>
+        <div class="xrk-tag-detail-body ink-scroll">
+          <p class="xrk-tag-detail-desc">{{ activeChip.desc || '暂无描述' }}</p>
+          <ul v-if="activeChip.facts?.length" class="xrk-tag-detail-facts">
+            <li v-for="(f, fi) in activeChip.facts" :key="fi">
+              <span>{{ f.label }}</span>
+              <em>{{ f.value }}</em>
+            </li>
+          </ul>
         </div>
       </div>
-    </Teleport>
+    </div>
+  </Teleport>
 
+  <div ref="root" class="tag-cloud" role="list">
     <div
       v-for="chip in chips"
       :key="chip.tip"
@@ -143,6 +144,7 @@ onBeforeUnmount(() => {
         type="button"
         class="chip-btn"
         :aria-expanded="chip.tip === activeTip ? 'true' : 'false'"
+        :title="chip.popoverTitle || chip.label"
         @click="toggleChip(chip.tip)"
       >
         <span class="chip-label">{{ chip.label }}</span>
@@ -157,13 +159,17 @@ onBeforeUnmount(() => {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
+  align-content: flex-start;
   justify-content: flex-start;
   gap: 4px 5px;
   padding: 2px 0;
+  width: 100%;
+  min-width: 0;
 }
 .chip {
   position: relative;
   flex: 0 0 auto;
+  max-width: 100%;
   animation: chip-in 0.36s cubic-bezier(0.22, 1, 0.36, 1) backwards;
   animation-delay: calc(var(--stagger, 0) * 22ms);
 }
@@ -187,7 +193,7 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 3px;
   margin: 0;
-  max-width: min(160px, 100%);
+  max-width: 160px;
   border: 1.5px solid var(--ink);
   border-radius: 6px;
   background: var(--card);
@@ -238,6 +244,7 @@ onBeforeUnmount(() => {
   outline-offset: 1px;
 }
 .chip-label {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -254,7 +261,7 @@ onBeforeUnmount(() => {
 }
 </style>
 
-<!-- Teleport 到 body，样式不能 scoped 依赖父级；用单独非 scoped 块会污染，改用 :global -->
+<!-- Teleport 到 body，样式不能 scoped 依赖父级 -->
 <style>
 .xrk-tag-detail-layer {
   position: fixed;

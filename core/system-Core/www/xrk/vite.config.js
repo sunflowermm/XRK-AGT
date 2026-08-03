@@ -36,5 +36,7 @@ export default defineConfig({
     emptyOutDir: true,
     sourcemap: false,
     reportCompressedSize: false,
+    /* 异步 chunk CSS 易与 JS 哈希脱节（漏挂则整页丢样式）；并入主 CSS */
+    cssCodeSplit: false,
   },
 });
