@@ -54,8 +54,7 @@ export class Bootstrap {
       await this.dependencyManager.ensureFrontendDependencies(root);
     }
     if (
-      process.env.XRK_SKIP_WWW_BUILD !== '1' &&
-      process.env.XRK_SKIP_FRONTEND_BOOTSTRAP !== '1'
+      process.env.XRK_SKIP_WWW_BUILD !== '1'
     ) {
       const { buildSignedStaticWwwBeforeRuntime } = await import(
         '#infrastructure/http/www-static-build.js'

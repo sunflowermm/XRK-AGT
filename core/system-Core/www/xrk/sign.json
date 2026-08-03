@@ -5,7 +5,7 @@
   "serve": "static",
   "staticRoot": "dist",
   "build": { "command": "pnpm", "args": ["build"] },
-  "_note": "挂载不 build。启动过程 Bootstrap 按 stale 编（或 pnpm run build:www）。跳过：XRK_SKIP_WWW_BUILD=1。开发 HMR：enabled=true + serve=proxy。",
+  "_note": "挂载不 build。app.js server（冷/热）引导按 stale 编；pnpm run build:www 等同。跳过：XRK_SKIP_WWW_BUILD=1。开发 HMR：enabled=true + serve=proxy。",
   "command": "pnpm",
   "args": ["dev"],
   "port": 5177,

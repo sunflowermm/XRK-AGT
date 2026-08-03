@@ -50,9 +50,10 @@ flowchart TD
 
 1. 根目录 `package.json` 缺失项 → **仅 pnpm install**（`PUPPETEER_SKIP_DOWNLOAD` 默认 `true`）。
 2. `core/*` 含 `package.json` 的子包各自 `pnpm install`。
-3. `core/*/www/<app>/` 前端依赖（`XRK_SKIP_FRONTEND_BOOTSTRAP=1` 可跳过；热重启默认跳过）。
-4. **不在引导阶段安装 Playwright Chromium**；见下方「Playwright 浏览器」。
-5. 合并 `data/importsJson/*.json` 的 `imports` 到根 `package.json`。
+3. `core/*/www/<app>/` 前端依赖（`XRK_SKIP_FRONTEND_BOOTSTRAP=1` 可跳过；冷/热启动默认都会查）。
+4. **启动过程 stale www build**（`XRK_SKIP_WWW_BUILD=1` 可跳过；冷/热启动默认都会按需编）。
+5. **不在引导阶段安装 Playwright Chromium**；见下方「Playwright 浏览器」。
+6. 合并 `data/importsJson/*.json` 的 `imports` 到根 `package.json`。
 
 ---
 
@@ -72,7 +73,8 @@ flowchart TD
 | 变量 | 作用 |
 |------|------|
 | `XRK_SKIP_CONFIG_CHECK=1` | 跳过端口配置检查（热重启由父进程设置） |
-| `XRK_SKIP_FRONTEND_BOOTSTRAP=1` | 跳过 `core/*/www` 前端依赖检查（热重启默认设置） |
+| `XRK_SKIP_FRONTEND_BOOTSTRAP=1` | 跳过 `core/*/www` 前端依赖检查 |
+| `XRK_SKIP_WWW_BUILD=1` | 跳过启动过程 stale www build |
 | `XRK_SKIP_FRONTEND_START=1` | 跳过前端 dev server |
 | `PUPPETEER_SKIP_DOWNLOAD` | 覆盖 Puppeteer Chromium 下载（默认 `true`） |
 
