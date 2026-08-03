@@ -584,35 +584,37 @@ export const aiWorkflowConfig = {
               webSearch: {
                 type: 'object',
                 label: 'web_search',
-                description: '联网搜索工具与各 Provider 凭据',
+                description: '联网搜索工具：全局选项 + 各 Provider 凭据（只用到的填 Key，其余留空）',
                 component: 'SubForm',
                 fields: {
                   enabled: {
                     type: 'boolean',
                     label: '启用 web_search',
-                    description: '关闭后 MCP web_search 工具不可用',
+                    description: '关闭后 Agent / MCP 无法调用 web_search 工具',
                     default: true,
                     component: 'Switch'
                   },
                   provider: {
                     type: 'string',
-                    label: '默认提供商',
-                    description: '留空=auto-detect（无 Key 时 parallel-free）',
+                    label: '默认提供商 ID',
+                    description:
+                      '强制指定一家：brave / perplexity / exa / tavily / parallel / parallel-free / gemini / kimi / minimax / firecrawl / ollama / searxng / duckduckgo。留空=按已填 Key 自动选；都无 Key 时用 parallel-free，再回退 duckduckgo',
                     default: '',
-                    component: 'Input'
+                    component: 'Input',
+                    layout: 'full'
                   },
                   timeoutSeconds: {
                     type: 'number',
-                    label: '超时（秒）',
-                    description: '搜索 API 调用的最长等待时间',
+                    label: '搜索超时（秒）',
+                    description: '单次搜索 API 最长等待；超时则失败或换回退提供商',
                     min: 1,
                     default: 20,
                     component: 'InputNumber'
                   },
                   cacheTtlMinutes: {
                     type: 'number',
-                    label: '缓存 TTL（分钟）',
-                    description: '相同查询结果的内存缓存时长',
+                    label: '结果缓存（分钟）',
+                    description: '相同查询命中内存缓存的时长；0=不缓存',
                     min: 0,
                     default: 15,
                     component: 'InputNumber'
@@ -620,35 +622,35 @@ export const aiWorkflowConfig = {
                   region: {
                     type: 'string',
                     label: 'DuckDuckGo region',
-                    description: 'DuckDuckGo 搜索的地区代码，如 wt-wt',
+                    description: '仅 duckduckgo 使用。地区码，如 wt-wt（全球）、us-en、cn-zh；留空用默认',
                     default: '',
                     component: 'Input'
                   },
                   safeSearch: {
                     type: 'string',
                     label: 'DuckDuckGo SafeSearch',
-                    description: 'DuckDuckGo 安全搜索严格程度',
+                    description: '仅 duckduckgo：strict / moderate / off',
                     enum: ['strict', 'moderate', 'off'],
                     default: 'moderate',
                     component: 'Select'
                   },
                   country: {
                     type: 'string',
-                    label: '国家/地区（2 字母）',
-                    description: '部分 Provider 使用的 ISO 3166-1 国家码',
+                    label: '国家码（2 字母，可选）',
+                    description: '部分付费 Provider（如 Brave）的地区偏好，ISO 3166-1，如 CN、US；不用可留空',
                     default: '',
                     component: 'Input'
                   },
                   parallelFree: {
                     type: 'object',
-                    label: 'parallel-free',
-                    description: '零配置 Parallel 免费搜索 MCP 端点',
+                    label: 'parallel-free（免 Key）',
+                    description: '默认零配置搜索：走 Parallel 免费 MCP，无需 API Key',
                     component: 'SubForm',
                     fields: {
                       url: {
                         type: 'string',
-                        label: 'MCP URL',
-                        description: 'parallel-free MCP 服务地址',
+                        label: 'parallel-free MCP URL',
+                        description: '免费搜索 MCP 地址；一般保持默认即可',
                         default: 'https://search.parallel.ai/mcp',
                         component: 'Input',
                         layout: 'full'
@@ -658,31 +660,33 @@ export const aiWorkflowConfig = {
                   brave: {
                     type: 'object',
                     label: 'Brave',
-                    description: 'Brave Search API',
+                    description: 'Brave Search API（需 api.brave.com 密钥）',
                     component: 'SubForm',
-                    fields: crawlProviderApiFields()
+                    fields: crawlProviderApiFields('Brave')
                   },
                   perplexity: {
                     type: 'object',
                     label: 'Perplexity',
-                    description: 'Perplexity 搜索；可用 OpenRouter 中转',
+                    description: 'Perplexity 搜索；可直连或经 OpenRouter',
                     component: 'SubForm',
                     fields: {
-                      ...crawlProviderApiFields(),
+                      ...crawlProviderApiFields('Perplexity'),
                       openRouterApiKey: {
                         type: 'string',
-                        label: 'OpenRouter API Key（可选）',
-                        description: '经 OpenRouter 调用时填写；与直连 apiKey 二选一',
+                        label: 'Perplexity · OpenRouter Key（可选）',
+                        description:
+                          '走 OpenRouter 中转 Perplexity 时填此项；与上方「Perplexity API Key」二选一，不要两个都填',
                         default: '',
                         component: 'Input',
                         layout: 'full'
                       },
                       model: {
                         type: 'string',
-                        label: 'Model（可选）',
-                        description: '覆盖默认搜索/对话模型名',
+                        label: 'Perplexity Model（可选）',
+                        description: '覆盖默认模型名；直连与 OpenRouter 均可；留空用内置默认',
                         default: '',
-                        component: 'Input'
+                        component: 'Input',
+                        layout: 'full'
                       }
                     }
                   },
@@ -691,51 +695,53 @@ export const aiWorkflowConfig = {
                     label: 'Exa',
                     description: 'Exa 神经搜索 API',
                     component: 'SubForm',
-                    fields: crawlProviderApiFields()
+                    fields: crawlProviderApiFields('Exa')
                   },
                   tavily: {
                     type: 'object',
                     label: 'Tavily',
                     description: 'Tavily 搜索 API',
                     component: 'SubForm',
-                    fields: crawlProviderApiFields()
+                    fields: crawlProviderApiFields('Tavily')
                   },
                   parallel: {
                     type: 'object',
                     label: 'Parallel（付费）',
-                    description: 'Parallel.ai 付费搜索',
+                    description: 'Parallel.ai 付费搜索（与上方免 Key 的 parallel-free 不同）',
                     component: 'SubForm',
-                    fields: crawlProviderApiFields()
+                    fields: crawlProviderApiFields('Parallel 付费')
                   },
                   gemini: {
                     type: 'object',
                     label: 'Gemini',
-                    description: 'Google Gemini 联网搜索能力',
+                    description: 'Google Gemini 带联网的搜索能力',
                     component: 'SubForm',
                     fields: {
-                      ...crawlProviderApiFields(),
+                      ...crawlProviderApiFields('Gemini'),
                       model: {
                         type: 'string',
-                        label: 'Model（可选）',
-                        description: 'Gemini 模型名，留空用默认',
+                        label: 'Gemini Model（可选）',
+                        description: 'Gemini 模型名，留空用内置默认',
                         default: '',
-                        component: 'Input'
+                        component: 'Input',
+                        layout: 'full'
                       }
                     }
                   },
                   kimi: {
                     type: 'object',
                     label: 'Kimi / Moonshot',
-                    description: '月之暗面搜索接口',
+                    description: '月之暗面（Moonshot）搜索接口',
                     component: 'SubForm',
                     fields: {
-                      ...crawlProviderApiFields(),
+                      ...crawlProviderApiFields('Kimi'),
                       model: {
                         type: 'string',
-                        label: 'Model（可选）',
-                        description: 'Kimi 模型名，留空用默认',
+                        label: 'Kimi Model（可选）',
+                        description: 'Kimi 模型名，留空用内置默认',
                         default: '',
-                        component: 'Input'
+                        component: 'Input',
+                        layout: 'full'
                       }
                     }
                   },
@@ -745,19 +751,19 @@ export const aiWorkflowConfig = {
                     description: 'MiniMax 搜索；可指定 region / host',
                     component: 'SubForm',
                     fields: {
-                      ...crawlProviderApiFields(),
+                      ...crawlProviderApiFields('MiniMax'),
                       region: {
                         type: 'string',
-                        label: 'Region',
-                        description: 'global / cn；空则按 apiHost 推断',
+                        label: 'MiniMax Region',
+                        description: 'global=国际 / cn=国内；留空则按下方 API Host 推断',
                         enum: ['', 'global', 'cn'],
                         default: '',
                         component: 'Select'
                       },
                       apiHost: {
                         type: 'string',
-                        label: 'API Host（可选，用于推断 cn）',
-                        description: '自定义 API 主机名；含国内域名时按 cn 处理',
+                        label: 'MiniMax API Host（可选）',
+                        description: '自定义主机名；含国内域名时按 cn 处理；一般留空',
                         default: '',
                         component: 'Input',
                         layout: 'full'
@@ -767,35 +773,35 @@ export const aiWorkflowConfig = {
                   firecrawl: {
                     type: 'object',
                     label: 'Firecrawl Search',
-                    description: 'Firecrawl 搜索接口（与 scrape 共用密钥体系）',
+                    description: 'Firecrawl 搜索（可与 scrape 共用同一套密钥）',
                     component: 'SubForm',
-                    fields: crawlProviderApiFields()
+                    fields: crawlProviderApiFields('Firecrawl')
                   },
                   searxng: {
                     type: 'object',
                     label: 'SearXNG',
-                    description: '自建 SearXNG 元搜索实例',
+                    description: '自建 SearXNG 元搜索；填实例地址即可，无需商业 Key',
                     component: 'SubForm',
                     fields: {
                       baseUrl: {
                         type: 'string',
-                        label: '实例 Base URL',
-                        description: '如 http://127.0.0.1:8080',
+                        label: 'SearXNG 实例 URL',
+                        description: '必填才启用，如 http://127.0.0.1:8080',
                         default: '',
                         component: 'Input',
                         layout: 'full'
                       },
                       categories: {
                         type: 'string',
-                        label: '默认 categories',
-                        description: 'SearXNG categories 参数，如 general,news',
+                        label: 'SearXNG categories（可选）',
+                        description: 'categories 参数，如 general 或 general,news；留空用实例默认',
                         default: '',
                         component: 'Input'
                       },
                       language: {
                         type: 'string',
-                        label: '默认 language',
-                        description: 'SearXNG language 参数，如 zh-CN',
+                        label: 'SearXNG language（可选）',
+                        description: 'language 参数，如 zh-CN、en；留空用实例默认',
                         default: '',
                         component: 'Input'
                       }
@@ -804,21 +810,21 @@ export const aiWorkflowConfig = {
                   ollama: {
                     type: 'object',
                     label: 'Ollama',
-                    description: '本地或 Ollama Cloud 的 web search',
+                    description: '本地 Ollama 或 Ollama Cloud 的 web search',
                     component: 'SubForm',
                     fields: {
                       baseUrl: {
                         type: 'string',
-                        label: 'Base URL',
-                        description: '本地 Ollama 地址',
+                        label: 'Ollama Base URL',
+                        description: '本地服务地址，默认 http://127.0.0.1:11434',
                         default: 'http://127.0.0.1:11434',
                         component: 'Input',
                         layout: 'full'
                       },
                       apiKey: {
                         type: 'string',
-                        label: '本地 API Key（可选）',
-                        description: '若本地实例启用了鉴权则填写',
+                        label: 'Ollama 本地 API Key（可选）',
+                        description: '仅当本地实例开启了鉴权时填写',
                         default: '',
                         component: 'Input',
                         layout: 'full'
@@ -826,7 +832,7 @@ export const aiWorkflowConfig = {
                       cloudApiKey: {
                         type: 'string',
                         label: 'Ollama Cloud API Key（可选）',
-                        description: '使用 Ollama 云端搜索时填写',
+                        description: '使用 Ollama 云端搜索时填写；与本地地址二选场景',
                         default: '',
                         component: 'Input',
                         layout: 'full'

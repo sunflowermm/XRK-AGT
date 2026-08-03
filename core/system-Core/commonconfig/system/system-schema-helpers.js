@@ -43,21 +43,32 @@ export function subserverRuntimeSubFormFields() {
   );
 }
 
-/** crawl.webSearch 提供商凭据 SubForm 字段（commonconfig 与 ai-workflow.yaml 对齐） */
-export function crawlProviderApiFields(extraFields = {}) {
+/**
+ * crawl.webSearch 提供商凭据 SubForm 字段（commonconfig 与 ai-workflow.yaml 对齐）
+ * @param {string} providerLabel 提供商显示名（写入 label，避免多组同名「API Key」）
+ * @param {Record<string, object>} [extraFields]
+ */
+export function crawlProviderApiFields(providerLabel, extraFields = {}) {
+  // 兼容旧调用 crawlProviderApiFields({ model: … })
+  if (providerLabel && typeof providerLabel === 'object' && !Array.isArray(providerLabel)) {
+    extraFields = providerLabel;
+    providerLabel = '';
+  }
+  const name = String(providerLabel || '').trim();
+  const who = name || '该搜索提供商';
   return {
     apiKey: {
       type: 'string',
-      label: 'API Key',
-      description: '该搜索提供商的鉴权密钥；留空则跳过该提供商',
+      label: name ? `${name} API Key` : 'API Key',
+      description: `${who} 的鉴权密钥。留空则跳过，不参与 web_search 自动选择。`,
       default: '',
       component: 'Input',
       layout: 'full'
     },
     baseUrl: {
       type: 'string',
-      label: 'Base URL（可选）',
-      description: '覆盖默认 API 根地址；自建/代理时填写',
+      label: name ? `${name} Base URL（可选）` : 'Base URL（可选）',
+      description: `一般留空用官方默认地址。仅自建或反向代理 ${who} 时填写 API 根 URL。`,
       default: '',
       component: 'Input',
       layout: 'full'

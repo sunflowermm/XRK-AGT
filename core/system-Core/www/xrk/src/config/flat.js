@@ -85,13 +85,14 @@ export function normalizeFlatFields(flat) {
     }
   }
 
-  // 子字段归入最近「浅层」容器（避免 viewport 等深层 SubForm 拆成碎分区）
+  // 子字段归入最近「深层」容器（最长 path），保留 Brave / Perplexity 等 SubForm 身份；
+  // 若取浅层，同名 apiKey/baseUrl 会堆进同一组，表单上看不出归属。
   for (const f of list) {
     if (f.container) continue;
     let best = '';
     for (const cpath of containers.keys()) {
       if (!f.path.startsWith(`${cpath}.`)) continue;
-      if (!best || cpath.length < best.length) best = cpath;
+      if (!best || cpath.length > best.length) best = cpath;
     }
     if (!best) continue;
     const info = containers.get(best);
