@@ -23,7 +23,9 @@ import { getAiWorkflowConfigOptional } from '#utils/ai-workflow-config.js';
 import { resolveConfiguredWorkspace } from '../lib/ai-workspace-runtime.js';
 import {
   buildOutboundSegments,
+  collectReplyAtQqs,
   contentHasGroupAt,
+  prependReplyAtMarkers,
   replyContentForbidden,
   resolveOutgoingMessage,
   splitProtocolParts,
@@ -1109,14 +1111,22 @@ export default class ChatStream extends AiWorkflow {
 
     this.registerMCPTool('reply', {
       description:
-        '向当前会话发文字（立即到 QQ）。默认普通发言、不引用。仅当要挂引用气泡时：content 写 [回复:消息ID]，或填 messageId。| 分句；群聊 [at:数字QQ]。禁止 @QQ/@昵称；表情用 emotion。',
+        '向当前会话发文字（立即到 QQ）。群聊要@人：优先 atSender=true（@刚才说话的人），或 at="QQ号"；也可 content 写 [at:QQ]。禁止手写 @昵称 / [CQ:at]。默认不引用；要引用气泡时写 [回复:消息ID] 或填 messageId。| 分句。表情用 emotion。',
       inputSchema: {
         type: 'object',
         properties: {
-          content: { type: 'string', description: '正文（必填）。普通说话不要写 [回复:…]' },
+          content: { type: 'string', description: '正文（必填）。普通说话不要写 [回复:…]；不要手写 @昵称' },
           messageId: {
             type: 'string',
             description: '仅在要引用某条消息时填写；省略则不引用',
+          },
+          atSender: {
+            type: 'boolean',
+            description: '群聊：true=@当前这条消息的发送者（最常用，不用记 QQ）',
+          },
+          at: {
+            type: 'string',
+            description: '群聊：要@的 QQ，多个用逗号分隔，如 "123456,789012"',
           },
         },
         required: ['content']
@@ -1124,13 +1134,16 @@ export default class ChatStream extends AiWorkflow {
       handler: async (args = {}, context = {}) => {
         const e = context.e;
         const turn = this._getTurnState(context);
-        const rawContent = String(args.content ?? '').trim();
+        const rawContent = prependReplyAtMarkers(
+          String(args.content ?? '').trim(),
+          collectReplyAtQqs(args, e),
+        );
         if (!rawContent) return { success: false, error: 'content 不能为空' };
 
         const forbidden = replyContentForbidden(rawContent);
         if (forbidden) return { success: false, error: forbidden };
         if (contentHasGroupAt(rawContent) && !e?.isGroup) {
-          return { success: false, error: '[at:QQ] 仅群聊可用' };
+          return { success: false, error: '[at:QQ] / at 参数仅群聊可用' };
         }
 
         // 仅显式 messageId / content 内 [回复:ID] 才挂引用；绝不默认挂 [当前消息]
@@ -2527,7 +2540,7 @@ export default class ChatStream extends AiWorkflow {
       persona,
       '',
       '## 对用户说话（须调 MCP，勿用文字假装）',
-      '- **reply**：当前会话文字（调用后立即发到 QQ）。默认普通发言、**不要**写 `[回复:ID]`；仅要挂引用气泡时才写 `[回复:那条的ID]` 或填 messageId。`|` 分句 · 群聊 `[at:QQ]`',
+      '- **reply**：当前会话文字（调用后立即发到 QQ）。群聊@人：`atSender=true` 或 `at="QQ"`；也可 content 写 `[at:QQ]`。默认不引用；仅要挂引用气泡时才写 `[回复:那条的ID]` 或填 messageId。`|` 分句',
       '- **poke** / **emotion** / **send_image** / **send_file** / **emojiReaction**：戳一戳、表情、图文件、表情回应',
       '- **saveMessageAsset**：按消息 ID 把图/文件/自定义表情落到工作区 `downloads/`；成功拿到 `workspacePath` 后再 `send_image`/`send_file`',
       '- **relayPrivate***：向好友私聊传话（正文不在群里露出）',

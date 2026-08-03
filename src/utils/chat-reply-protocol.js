@@ -6,6 +6,8 @@
 import { PARSEABLE_EMOTIONS } from '#utils/emotion-utils.js';
 
 const AT_MARKER = /\[at:(\d{5,10})\]/gi;
+/** 误写的 OneBot CQ at → 规范 [at:QQ] */
+const CQ_AT_RE = /\[CQ:at,[^\]]*qq=(\d{5,10})[^\]]*\]/gi;
 
 const EMOTION_TAG_RE = new RegExp(
   `\\[(${PARSEABLE_EMOTIONS.map((name) => name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})\\]`
@@ -15,9 +17,60 @@ const EMOTION_TAG_RE = new RegExp(
 export const PROTOCOL_MARKER_RE =
   /(\[at:\d{5,10}\]|(?:\[图片内容:[^\]]+\])|(?:\[回复:(?:ID:)?\d+\])|(?:\[CQ:[^\]]+\]))/gi;
 
-/** reply content 校验 */
+/** 把 [CQ:at,qq=…] 收成 [at:QQ]，避免模型被教错协议后 @ 失效 */
+export function normalizeReplyAtMarkers(text) {
+  return String(text ?? '').replace(CQ_AT_RE, '[at:$1]');
+}
+
+/**
+ * 从 reply 工具参数收集要 @ 的 QQ（atSender / at）。
+ * @param {{ at?: string|string[]|number, atSender?: boolean }} args
+ * @param {{ user_id?: string|number, sender?: { user_id?: string|number } }|null|undefined} e
+ * @returns {string[]}
+ */
+export function collectReplyAtQqs(args = {}, e = null) {
+  /** @type {string[]} */
+  const out = [];
+  const push = (raw) => {
+    const q = String(raw ?? '').trim();
+    if (/^\d{5,10}$/.test(q) && !out.includes(q)) out.push(q);
+  };
+  if (args.atSender) {
+    push(e?.user_id ?? e?.sender?.user_id);
+  }
+  const at = args.at;
+  if (Array.isArray(at)) {
+    for (const item of at) push(item);
+  } else if (at != null && String(at).trim()) {
+    for (const part of String(at).split(/[,，\s]+/)) push(part);
+  }
+  return out;
+}
+
+/**
+ * 把 at QQ 列表前置成 [at:QQ]（已存在则不重复）。
+ * @param {string} content
+ * @param {string[]} qqList
+ */
+export function prependReplyAtMarkers(content, qqList = []) {
+  let work = normalizeReplyAtMarkers(content);
+  const existing = new Set(
+    [...work.matchAll(new RegExp(AT_MARKER.source, 'gi'))].map((m) => m[1]),
+  );
+  const prefix = [];
+  for (const q of qqList) {
+    const qq = String(q ?? '').trim();
+    if (!/^\d{5,10}$/.test(qq) || existing.has(qq)) continue;
+    prefix.push(`[at:${qq}]`);
+    existing.add(qq);
+  }
+  if (!prefix.length) return work;
+  return `${prefix.join('')}${work}`;
+}
+
+/** reply content 校验（先 normalizeReplyAtMarkers） */
 export function replyContentForbidden(text) {
-  const s = String(text ?? '');
+  const s = normalizeReplyAtMarkers(text);
   if (EMOTION_TAG_RE.test(s)) return '发表情包请用 emotion 工具，勿在 reply 写 [开心] 等';
   if (/\[CQ:at/i.test(s)) return '禁止 [CQ:at]；群聊@用 [at:数字QQ]';
   const withoutAt = s.replace(AT_MARKER, '');
@@ -27,7 +80,7 @@ export function replyContentForbidden(text) {
 
 /** [at:QQ] → segment 数组，支持多处、多人 */
 export function parseContentToSendSegments(text) {
-  const work = String(text ?? '');
+  const work = normalizeReplyAtMarkers(text);
   if (!work.trim()) return [];
   const out = [];
   let last = 0;
@@ -110,7 +163,7 @@ export function resolveOutgoingMessage(text, { fallbackReplyId } = {}) {
 }
 
 export function contentHasGroupAt(text) {
-  return /\[at:\d{5,10}\]/i.test(String(text ?? ''));
+  return /\[at:\d{5,10}\]/i.test(normalizeReplyAtMarkers(text));
 }
 
 /** 半角/全角 | 分句（reply / emotion 附言共用） */
