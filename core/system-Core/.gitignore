@@ -19,6 +19,9 @@ plugin/**
 !plugin/ai.js
 !plugin/music.js
 !plugin/help.js
+!plugin/skills-update.js
+!plugin/tool-approval.js
+!plugin/recipe-schedule.js
 
 !tasker
 tasker/**
