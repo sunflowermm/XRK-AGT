@@ -8,8 +8,9 @@
 | 文件 | 读者 | 内容 |
 |------|------|------|
 | **本文** | 用户 / 运维 / 维护者 | 办事助手怎么用、改哪里、实现索引 |
-| **[agent-context.md](agent-context.md)** | 框架 / Core / 运维 | 概念地图 + 消息三层 + Workspace + 工具环（契约真源） |
-| 仓库根 [`AGENTS.md`](../AGENTS.md) | Cursor / Core 开发 | 框架与业务代码约定、`xrk-*` skill |
+| **[agent-context.md](agent-context.md)** | 框架 / Core / 运维 | 概念地图 + 消息三层 + 出站/安全 + Workspace + 工具环 |
+| 仓库根 [`AGENTS.md`](../AGENTS.md) | **Coding Agent** / Core 开发 | 框架放码、`xrk-*` skill（**不**注入办事助手） |
+| `agents/skills/standard/**` | **产品 Agent 模型** | 工具/场景细则（`tools.read`） |
 | `~/.cursor/AGENTS.md` | 本机所有项目 | 全局工程师技能、代理、生图等 |
 | `agents/workspace/AGENTS.md` → `data/ai-workspace/{id}/AGENTS.md` | 办事助手模型 | 注入 prompt 的办事规则 |
 | `core/<core>/AGENTS.md`（若有） | 产品 Agent | 该产品人格与工具边界 |
@@ -58,6 +59,21 @@
 - **群聊 / QQ 机器人**：@ 或按群规则触发；短问短答、纪要、提醒。
 - **控制台 / stdin**：长任务、连续改稿、批量整理工作区。
 - **HTTP / 设备通道**：见各产品 Core 说明。
+
+### 斜杠与配方
+
+- `/recipes`：列出可用配方  
+- `/recipe <id> [k=v …]`：注入该配方的 instructions + prompt（种子在 `agents/recipes/`）  
+- 需已触发助手（@ / 前缀等）；配方 cron 见配置 `recipes.scheduleEnabled`（默认关，开启后插件默认只打日志）
+
+### 危险命令审批（可选）
+
+默认：`security.approval.enabled=false`，危险/策略 ask 直接拒绝（主人调用可放行）。  
+开启后主人私聊回复 `#批准` / `#批准id`（空格可选）；插件 `tool-approval`。
+
+### 工作区文件工具（摘）
+
+合并 `tools` 时可用：`repo_map`（陌生仓定位）、`apply_edit` / `verify`（批量改与校验）、`update_todos`（多步待办）。全表见技能 **agent-tools** 或 [mcp-guide.md](mcp-guide.md)。
 
 ### 工作区
 
@@ -125,14 +141,18 @@
 
 ## 改工作区文件
 
-实现：`src/utils/base-tools.js`、`core/system-Core/workflow/tools.js`。
+实现：`src/utils/base-tools.js`、`core/system-Core/workflow/tools.js`（增强：`apply-edit-blocks.js`、`repo-map-lite.js`）。
 
 | 情况 | 工具 | 说明 |
 |------|------|------|
+| 陌生仓定位 | `repo_map` | 先于盲目 `list_files`；可带 `query` |
 | 改已有文件局部 | `search_replace`（`oldText` / `newText`） | 唯一匹配或 `replaceAll`；首选 |
+| 多文件 / 多处批量改 | `apply_edit`（SEARCH/REPLACE 块） | 可 `dryRun`；改后建议 `verify` |
+| 改后校验 | `verify` | 需 `tools.file.runEnabled`；传 lint/test 命令 |
 | 新建文件 | `write` | 自动建目录 |
 | 整篇覆盖已有文件 | `write` + `overwrite=true` | 用户要求全文改版时 |
 | 查找 | `read` / `grep` / `list_files` | 改前确认路径 |
+| 多步任务 | `update_todos` | 整表覆盖；status 含 pending/completed 等 |
 
 ---
 

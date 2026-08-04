@@ -102,12 +102,14 @@
 - **说明**：Node 侧统一通过工作流 + MCP 工具完成能力编排；如需 Python 侧能力，请在子服务端按 `apis/<group>/*.py` 扩展自定义接口。
 - **[底层架构设计](底层架构设计.md)** - AI 主链路、AiWorkflow 链路、子服务端职责边界（权威）
 - **[办事助手说明](agents.md)** - 怎么用、改哪里、工作区注入、Agents 清单、实现索引；框架写码见根 [AGENTS.md](../AGENTS.md)
-- **[Agent 运行链与上下文](agent-context.md)** - **概念地图** + mergeWorkflows、消息三层、Workspace/rules/skills、工具环契约 ⭐
-- **[MCP 完整指南](mcp-guide.md)** - MCP 工具注册与连接
+- **[Agent 运行链与上下文](agent-context.md)** - **概念地图** + mergeWorkflows、消息三层、**出站压缩/策略安全/斜杠**、Workspace/skills、工具环 ⭐
+- **[MCP 完整指南](mcp-guide.md)** - MCP 工具注册与连接（含 `apply_edit` / `repo_map` 等）
 - **[MCP 配置指南](mcp-config-guide.md)** - Cursor、Claude Desktop 等外部平台连接配置
-- **[AiWorkflow 工作流基类文档](ai-workflow.md)** - `AiWorkflow` 基类；Embedding、Function Calling；**禁止文本假 ReAct**；跑通契约见 agent-context
+- **[AiWorkflow 工作流基类文档](ai-workflow.md)** - `AiWorkflow` 基类；`context` / `policies` / `security` / `recipes` 配置键；禁止文本假 ReAct
 - **[工厂系统文档](factory.md)** - LLM（含多模态）/ASR/TTS 工厂系统，统一管理多厂商 AI 服务提供商
 - **[子服务端 API 文档](subserver-api.md)** - Python 子服务端底层系统接口与扩展装载说明
+
+**技能分流**：Coding → `.cursor/skills/xrk-*`；产品 Agent → `agents/skills/standard/`（见 [SKILL_INDEX](../.cursor/skills/SKILL_INDEX.md)）。
 
 ### ⚙️ 配置与工具
 

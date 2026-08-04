@@ -151,9 +151,14 @@ class LLMClient {
 
 #### 特殊功能
 
-- **Tool Calling 支持**：支持 OpenAI tools / tool_calls 协议的 LLM 客户端（如 Volcengine、OpenAI、Azure OpenAI、OpenAI-Compatible 等）都会将工具调用统一交给 `MCPToolAdapter` 处理。
+- **Tool Calling 支持**：支持 OpenAI tools / tool_calls 协议的 LLM 客户端（如 Volcengine、OpenAI、Azure OpenAI、OpenAI-Compatible 等）都会将工具调用统一交给 `MCPToolAdapter` 处理；**执行前门禁**在 `MCPServer.handleToolCall`（策略 + 威胁扫描 + 可选审批）。
+- **工具轮收尾（finalize）**：达到 `maxToolRounds` 后，Chat Completions / Responses 客户端可再请求一轮无工具终答（`tool-loop-finalize.js`），避免把最后一条 tool 结果当成助手回复。
+- **variants / reasoning**：Provider 可配 `variant`/`variants` 与 reasoning budget；解析见 `provider-variant.js` · `reasoning-budget.js`（schema 在 `llm-provider-fields.js`）。
+- **重试**：空回复 / rate_limit 等经 `llm-retry.js`（含 Retry-After）；HTTP 错误形状见 `llm-http-error.js`。
 - **工作流作用域控制（streams）**：当通过 `/api/v3/chat/completions` 调用时，请求体中的 `workflow` 字段会被整理为 `streams` 白名单，LLM 工厂据此只注入这些工作流下的 MCP 工具，其它未在 `streams` 中声明的工具不会被注入和调用。
 - **多模态输入**：部分 LLM（如 Volcengine、OpenAI、Gemini、Azure OpenAI 等）直接支持图片输入，消息结构会通过 `transformMessagesWithVision` 统一转成各家兼容的 `text + image_url`（含 base64 data URL）格式。
+
+出站压缩与策略不在工厂内，而在 AiWorkflow `prepareOutboundMessages`（见 [agent-context.md](agent-context.md) §5 · [ai-workflow.md](ai-workflow.md)）。
 
 ---
 
@@ -939,13 +944,15 @@ Host: localhost:8080
 
 ## 相关文档
 
+- **[Agent 运行链与上下文](agent-context.md)** - 出站压缩、策略安全、工具环契约 ⭐
 - **[system-Core 特性](system-core.md)** - system-Core 内置模块完整说明，包含AI服务API和所有工作流的实际实现 ⭐
 - **[AiWorkflow 文档](ai-workflow.md)** - AiWorkflow 基类技术文档，了解如何在 AiWorkflow 中使用 LLM 工厂
 - **[配置基类文档](config-base.md)** - 了解配置系统的使用
 - **[MCP 完整指南](mcp-guide.md)** - MCP 工具注册与连接
 - **[HTTP API 文档](http-api.md)** - 了解 HTTP API 基类
 - **[框架可扩展性指南](框架可扩展性指南.md)** - 扩展开发完整指南
+- Coding：skill `xrk-llm` · `xrk-ai-workflow`（`.cursor/skills/`）
 
 ---
 
-*最后更新：2026-04-14（对齐底层架构基线与 v3 接口实际返回口径）*
+*最后更新：2026-08-04（对齐工具轮 finalize / variants / 执行门禁与 agent-context）*

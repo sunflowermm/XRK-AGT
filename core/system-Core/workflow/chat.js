@@ -2550,7 +2550,7 @@ export default class ChatStream extends AiWorkflow {
       '- 查询：getGroupInfo / getMemberInfo / getGroupMembers / getBanList / listAnnouncements / **readChatRecord**',
       '- 好友：getFriendList / getFriendInfo；备注与删友（setFriendRemark / deleteFriend）仅主人',
       '- 申请：**handleRequest**（list/approve/deny）处理加好友/加群，仅主人',
-      '- **tools.***：工作区 read / grep / search_replace（改已有）/ write（新建；覆盖须 overwrite）/ run',
+      '- **tools.***（须 merge `tools`）：read / grep / search_replace / write / list_files / delete_file / run；陌生仓先 **repo_map**；多文件改用 **apply_edit**，改后 **verify**；多步用 **update_todos**',
       '- 禁止 `@QQ`/`@昵称`；用户已能看见后勿重复 reply；只答 `[当前消息]`',
       '',
       '## 图片与文件',

@@ -29,16 +29,23 @@
 ## 配置要点（对齐现状）
 
 运行时文件：`data/server_bots/{port}/ai-workflow.yaml`  
-模板文件：`config/default_config/ai-workflow.yaml`
+模板文件：`config/default_config/ai-workflow.yaml`  
+Schema：`core/system-Core/commonconfig/system/system-ai-workflow.js`（Web `/xrk` 表单同源）
 
 常用字段：
-- `llm.Provider`
-- `llm.timeout`
-- `llm.retry.*`
-- `embedding.enabled` / `embedding.maxContexts`
-- `mcp.*`
-- `agentWorkspace.*`（注入与预算；运营见 [agents.md](agents.md)；**运行链与消息三层**见 [agent-context.md](agent-context.md)）
-- `tools.file.*`
+- `llm.Provider` · `llm.aux`（辅模型：压缩/摘要）· `llm.timeout` · `llm.retry.*`
+- Provider 条目：`contextWindow` · `variant` / `variants` · `maxToolRounds` 等（见工厂字段预设）
+- `embedding.enabled` / `embedding.maxContexts`（现行为关键词召回，非向量）
+- `mcp.*` · `agentWorkspace.*`（注入与预算；运营见 [agents.md](agents.md)；跑通见 [agent-context.md](agent-context.md)）
+- `tools.file.*`（含 `runEnabled`；`run` / `verify` 依赖）
+- **`context.*`**：`compaction`（阈值摘要 + backup + sessionCache）· `toolPair`（旧 tool 出站投影）· `chatHistory`（limit / keepFirst）
+- **`policies[]`**：`provider.use` / `tool.call` / `mcp.connect`；effect=`allow|deny|ask`
+- **`security.toolScan`** · **`security.approval`**（默认关；开启后主人 `#批准`）
+- **`recipes.scheduleEnabled`**：配方 cron（插件默认仅日志）
+
+出站准备：`prepareOutboundMessages` → toolPair → compaction(+sidecar) → contextWindow 裁剪 → LLM。  
+工具执行门禁：`MCPServer.handleToolCall` → `inspectToolCallSecurity`（覆盖 LLM / HTTP / WS）。  
+斜杠：`chat-pipeline` + `slash-commands`（`/recipe` · `/recipes`）。细则见 [agent-context.md](agent-context.md) §5。
 
 说明：
 - `ai-workflow.tools` 当前仅包含 `file` 配置段

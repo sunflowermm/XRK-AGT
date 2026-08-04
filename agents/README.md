@@ -7,7 +7,9 @@
 | 用户 / 运维 / 维护者 | [docs/agents.md](../docs/agents.md) |
 | Agent 跑通契约 | [docs/agent-context.md](../docs/agent-context.md) |
 | 模型注入规则（模板） | [workspace/AGENTS.md](workspace/AGENTS.md) |
-| 框架 / Core 开发 | 仓库根 [AGENTS.md](../AGENTS.md) |
+| 框架 / Core 开发（Coding Agent） | 仓库根 [AGENTS.md](../AGENTS.md) · `.cursor/skills/xrk-*` |
+
+**技能分流**：本目录 `skills/standard/` 只给**办事助手模型**（`tools.read` 细则）。Cursor 改框架请看 `.cursor/skills/`，不要把 `xrk-*` 写进本树。
 
 ## 目录
 
@@ -15,7 +17,9 @@
 |------|------|
 | `workspace/` | 工作区模板：规则、偏好、本机备注、记忆结构 |
 | `rules/` | 办事行为规则（注入 prompt） |
-| `skills/standard/` | 技能种子：办公、检索、环境、基础路由 |
+| `skills/standard/` | 产品 Agent 技能：办公、检索、环境、`agent-tools` 等 |
+| `recipes/` | 斜杠配方（`/recipes` · `/recipe <id>`）；种子 yaml |
+| `microagents/` | triggers 命中时整段注入的短手册 |
 | `subagents.yaml` | 主助手与专项角色清单 |
 
 ## 改哪里
@@ -27,5 +31,6 @@
 | 角色说明 | 工作区 `subagents.yaml`（优先）或本目录 `subagents.yaml` |
 | 注入规则 | `agents/rules/`（[rules/README.md](rules/README.md)） |
 | 技能 | `agents/skills/standard/<name>/SKILL.md`，再同步到工作区 |
+| 配方 | `agents/recipes/*.yaml` |
 
-配置：`ai-workflow.yaml` → `agentWorkspace`。工程契约：[docs/agent-context.md](../docs/agent-context.md)。运营说明：[docs/agents.md](../docs/agents.md)。
+配置：`ai-workflow.yaml` → `agentWorkspace` · `recipes` · `security` · `context`。工程契约：[docs/agent-context.md](../docs/agent-context.md)。运营说明：[docs/agents.md](../docs/agents.md)。

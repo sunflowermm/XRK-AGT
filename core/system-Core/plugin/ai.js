@@ -1,6 +1,9 @@
 /**
  * XRK AI 助手 — 对齐 XRK-Yunzai plugin/ai.js
- * @ 机器人 / 配置前缀 / 群内随机触发；合并 memory、tools 等工作流
+ *
+ * 职责：触发（@ / 前缀 / 随机）→ `runChatAgent` → `ChatStream.process({ mergeWorkflows })`。
+ * 不在此注册 MCP；文件工具面随 `ai_config.mergeWorkflows`（默认含 `tools`）并入 chat。
+ * 斜杠 `/recipe`、压缩、策略/安全扫描在 chat-pipeline / MCP 执行链，本插件只做入口。
  */
 import RuntimeUtil from '#utils/runtime-util.js';
 import {

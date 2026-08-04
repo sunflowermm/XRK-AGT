@@ -99,12 +99,40 @@
   - `dirs`: 仅目录
 
 #### `tools.run`
-执行命令（工作区：桌面）
+执行命令（工作区 cwd）
 
 **参数**：
 - `command` (string, 必需): 要执行的命令
 
-**注意**：`run` 在 Windows 与 Unix 均可使用（Unix 为 `/bin/sh -lc`）。
+**注意**：需 `ai-workflow.tools.file.runEnabled=true`（默认关）。Windows 与 Unix 均可（Unix 为 `/bin/sh -lc`）。危险命令经 `security.toolScan`；可选 `security.approval`。
+
+#### `tools.apply_edit`
+批量应用 aider 式 SEARCH/REPLACE 块（一次改多文件/多处）。
+
+**参数**：
+- `patch` (string, 必需): 含一个或多个块：`path\\n<<<<<<< SEARCH\\n旧\\n=======\\n新\\n>>>>>>> REPLACE`
+- `dryRun` (boolean, 可选): true=只校验不写盘
+
+#### `tools.verify`
+改码后校验闭环：在工作区执行检查命令（lint / test / `node --check` 等）。
+
+**参数**：
+- `command` (string, 必需): 校验命令
+
+**注意**：与 `run` 相同，依赖 `runEnabled`。
+
+#### `tools.repo_map`
+生成工作区轻量代码地图（路径 + 符号骨架，按 query 加权）。陌生仓定位优先于盲目 `list_files`。
+
+**参数**：
+- `query` (string, 可选): 任务关键词（文件名/符号/主题）
+- `maxTokens` (number, 可选): 地图文本预算（默认约 1200）
+
+#### `tools.update_todos`
+更新当前工作区会话的待办清单（整表覆盖）。多步任务自检与续作。
+
+**参数**：
+- `todos` (array, 必需): `{ id, content, status }`；status=`pending|in_progress|completed|cancelled`
 
 ### 2. 记忆系统工具（memory工作流）
 

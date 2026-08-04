@@ -4,9 +4,11 @@
  * 匹配：action/resource 支持 * 与 ?；同序扫描，**最后一条匹配生效**。
  *
  * 常用 action：
- *   provider.use  — LLM 厂商 key
- *   tool.call     — MCP / 工作流工具名
- *   mcp.connect   — 远程 MCP 服务器名（连接/注册前）
+ *   provider.use  — LLM 厂商 key（deny/ask 在选模时拒绝）
+ *   tool.call     — MCP 工具名；ask 仍注入工具列表，执行时走审批/拒绝
+ *   mcp.connect   — 远程 MCP 服务器名（连接/注册前，ask 按拒绝）
+ *
+ * 配置：`ai-workflow.policies[]`；空数组 = 全部允许。
  */
 import { getAiWorkflowConfigOptional } from '#utils/ai-workflow-config.js';
 

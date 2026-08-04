@@ -5,17 +5,12 @@ import os from 'os';
 
 /**
  * Model Context Protocol (MCP) 服务器实现
- * 符合MCP 2025-11-25规范，基于JSON-RPC 2.0协议
- * 
- * 功能：
- * - 统一管理所有工作流的函数，作为MCP工具暴露给外部AI平台
- * - 支持Cursor、Claude、小智AI等平台通过HTTP/WebSocket/SSE调用工具
- * - 提供标准化的工具注册、调用、错误处理机制
- * - 支持资源管理和提示词管理
- * 
- * 协议版本：2025-11-25
- * 传输方式：stdio、SSE、HTTP
- * 
+ * 符合 MCP 2025-11-25，基于 JSON-RPC 2.0
+ *
+ * - 工作流 `registerMCPTool` 统一挂到本服务器，对外暴露给 LLM / Cursor / HTTP·WS·SSE
+ * - **执行前门禁**：`handleToolCall` 内 `inspectToolCallSecurity`（policies + toolScan + 可选审批）
+ *   覆盖所有调用路径，避免只拦 LLM 适配器
+ *
  * 参考：https://modelcontextprotocol.io/specification/2025-11-25
  */
 export class MCPServer {
@@ -98,17 +93,15 @@ export class MCPServer {
   }
 
   /**
-   * 处理MCP工具调用请求（符合MCP标准）
-   * 
-   * 返回格式说明：
-   * - 标准MCP格式：{ content: [{ type: 'text', text: string }], isError: boolean }
-   * - 工具handler返回的结构化数据会被转换为JSON字符串放入text字段
-   * - 如果工具返回{ success: false }，isError会被设置为true
-   * 
-   * @param {Object} request - MCP请求
-   * @param {string} request.name - 工具名称
-   * @param {Object} request.arguments - 工具参数
-   * @returns {Promise<Object>} MCP响应（符合MCP标准格式）
+   * 处理 MCP 工具调用（符合 MCP 标准）
+   *
+   * 顺序：工具存在性 → **安全/策略检查** → inputSchema 校验 → handler → 结果投影。
+   * 返回：`{ content: [{ type:'text', text }], isError }`；结构化结果经 `summarizeToolResultText`。
+   *
+   * @param {Object} request
+   * @param {string} request.name
+   * @param {Object} [request.arguments]
+   * @returns {Promise<Object>}
    */
   async handleToolCall(request) {
     const { name, arguments: args } = request;

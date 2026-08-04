@@ -96,15 +96,16 @@ XRK-AGT 提供以下工作流，每个工作流包含一组相关工具：
 
 | 工作流 | 说明 | 主要工具 |
 |--------|------|----------|
-| `tools` | 文件操作工具 | `read`, `grep`, `search_replace`, `write`（已存在须 `overwrite`）, `delete_file`, `list_files`, `run` |
+| `tools` | 文件操作工具 | `read`, `grep`, `search_replace`, `write`（已存在须 `overwrite`）, `delete_file`, `list_files`, `run`, **`apply_edit`**, **`verify`**, **`repo_map`**, **`update_todos`** |
 | `memory` | 记忆系统 | `query_memory`, `save_memory`, `list_memories`, `delete_memory` |
 | `database` | 知识库 | `query_knowledge`, `save_knowledge`, `list_knowledge`, `delete_knowledge` |
 
 **工作流使用说明**：
 - **主工作流**：通过 `mergeWorkflows` 参数合并，用于完整功能场景
 - **工具工作流**：写入 `mergeWorkflows: ['memory','database','tools']`（或兼容别名 `enableMemory` 等，最终仍走 `AiWorkflowLoader.mergeWorkflows`）
+- **执行安全**：外部 MCP 调用同样走 `MCPServer.handleToolCall` 门禁（`ai-workflow.policies` · `security.toolScan` · 可选 `security.approval`）
 
-> 详细工具列表和参数说明请参考 [MCP 完整指南](mcp-guide.md)。
+> 详细工具列表和参数说明请参考 [MCP 完整指南](mcp-guide.md)；跑通契约见 [agent-context.md](agent-context.md)。
 
 ---
 

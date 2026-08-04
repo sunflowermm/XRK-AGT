@@ -341,9 +341,15 @@ const stream = await this.getWorkflow('desktop');
 **文件**: `core/system-Core/workflow/tools.js`  
 **优先级**: 200  
 
-**工具**：`read`、`grep`、`search_replace`、`write`、`delete_file`、`list_files`、`run`（改已有用 `search_replace`；`write` 新建，已存在须 `overwrite=true`；契约见 [agents.md](agents.md)）  
+**工具**：
+- 基础：`read`、`grep`、`search_replace`、`write`、`delete_file`、`list_files`、`run`
+- 增强：`apply_edit`（aider SEARCH/REPLACE 批量）、`verify`（改后校验，需 `runEnabled`）、`repo_map`（轻量代码地图）、`update_todos`（会话待办）
 
-**配置**：`ai-workflow.tools.file`（`workspace`、`maxReadChars`、`grepMaxResults`、`runEnabled`、`runTimeoutMs`、`maxCommandOutputChars`）。`run` 在 Windows 与 Unix 下均可使用（Unix 为 `/bin/sh -lc`）。
+改已有用 `search_replace`；多文件/多处用 `apply_edit`；`write` 新建，已存在须 `overwrite=true`。契约见 [agents.md](agents.md)、[mcp-guide.md](mcp-guide.md)。
+
+与 **chat** 融合：`mergeWorkflows` 含 `tools` 时工具挂入合成实例；`buildSystemPrompt` 经 `collectAuxiliaryStreamPrompts` 注入 chat system「可用能力」段。
+
+**配置**：`ai-workflow.tools.file`（`workspace`、`maxReadChars`、`grepMaxResults`、`runEnabled`、`runTimeoutMs`、`maxCommandOutputChars`）。`run` / `verify` 在 Windows 与 Unix 下均可使用（Unix 为 `/bin/sh -lc`）。
 
 ### 4. memory 工作流
 

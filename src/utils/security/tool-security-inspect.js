@@ -1,7 +1,7 @@
 /**
  * 工具调用安全检查（goose ToolInspection + SecurityManager 可移植核）。
- * 在 MCP 执行前：策略 ask + 危险命令模式扫描。
- * ask：主人直放行；或 security.approval.enabled 时私聊主人等待批准。
+ * 调用点：`MCPServer.handleToolCall`（统一覆盖 LLM / HTTP / WS / JSON-RPC）。
+ * 顺序：policies（tool.call allow|deny|ask）→ toolScan 模式匹配 → ask 时主人旁路或 interactive approval。
  */
 import { getAiWorkflowConfigOptional } from '#utils/ai-workflow-config.js';
 import { getWorkflowRequestContext } from '#infrastructure/ai-workflow/workflow-request-context.js';

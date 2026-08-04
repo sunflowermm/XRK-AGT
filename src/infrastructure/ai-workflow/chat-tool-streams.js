@@ -93,6 +93,10 @@ export function resolveToolStreamNames(stream) {
   return expandChatToolWorkflowWhitelist(own);
 }
 
+/**
+ * 收集已并入 chat 工具面的副流 `buildSystemPrompt`，拼成 system「可用能力」段。
+ * 例如 merge 含 `tools` 时注入 `### tools` + 文件工具使用约定（含 apply_edit / repo_map 等）。
+ */
 export function collectAuxiliaryStreamPrompts(stream, context = {}) {
   if (!stream || !isChatToolSurface(stream)) return '';
   const names = resolveToolStreamNames(stream);

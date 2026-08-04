@@ -3,9 +3,13 @@ name: agent-tools
 description: MCP 全工具地图、参数要点、search_replace vs write、失败恢复、按需工作流启用
 ---
 
+> **读者：办事助手模型**（目录卡命中后 `tools.read` 本文件）。  
+> 勿写 Cursor / 工厂 / 放码约定；那些在仓库 `.cursor/skills/xrk-*` 与 `docs/`。
+
 ## 契约来源
 
-- 文件工具：`docs/agents.md` · 实现 `core/system-Core/workflow/tools.js` + `src/utils/base-tools.js`
+- 怎么用（运营）：`docs/agents.md`
+- 工具参数真源：本文件；实现 `core/system-Core/workflow/tools.js`
 - 默认 cwd：`data/ai-workspace/{id}/`
 
 ---
@@ -22,10 +26,12 @@ description: MCP 全工具地图、参数要点、search_replace vs write、失�
 | `chat.*` | chat | 视配置 | QQ 群管（办公通常不用） |
 | `remote-mcp.*` | 用户配置 | 视 yaml | 第三方 MCP |
 
-在 v3 请求 `workflow[]` 或控制台勾选追加；未列出时仅 **tools + web**。
+在 v3 请求 `workflow[]` 或控制台勾选追加；未列出时仅 **tools + web**。  
+群聊助手默认合并 `tools`（及 memory/database）时，下列 `tools.*` 可直接调用。
+
+斜杠（用户消息）：`/recipes` 列表；`/recipe <id> k=v` 注入配方说明与提示。
 
 ---
-
 ## tools 工作流 — 全工具表
 
 ### read
@@ -215,10 +221,13 @@ docx/xlsx/pdf **无** desktop MCP；走 `run` + office-* skills。
 
 | 任务 | 首选工具 / 工作流 |
 |------|-------------------|
-| 找文件 | list_files → read |
+| 陌生仓找入口 | **repo_map** → grep / read |
+| 找文件（已知名） | list_files → read |
 | 改配置 / 草稿几行 | read → search_replace |
+| 多文件批量改 | **apply_edit** → **verify** |
 | 新建纪要 / 脚本 | write |
 | 搜关键字 | grep |
+| 多步自检 | **update_todos** |
 | 配方任务 | `/recipes` 列表；`/recipe <id> k=v` 注入 instructions+prompt |
 | 危险 run | 默认扫描拦截；`security.approval` 默认关（ask=拒）。开启后主人 `#批准`/`#批准id`（空格可选） |
 | 跑 Python / pandoc | tools.run |

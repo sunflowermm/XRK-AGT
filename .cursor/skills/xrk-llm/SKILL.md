@@ -3,6 +3,8 @@ name: xrk-llm
 description: 当你需要配置/新增/排查 LLM 提供商（OpenAI/Azure/Gemini/Anthropic/Ollama/各类兼容网关）时使用；确保 YAML/Schema/代码一致。
 ---
 
+> **读者：Coding Agent**（工厂与配置三同步）。办事助手勿读本文件。
+
 ## 入口
 
 `docs/factory.md`、`src/factory/llm/LLMFactory.js`、`core/system-Core/http/ai.js`
@@ -22,6 +24,8 @@ slash/recipe → messages → toolPair → compaction(+sidecar) → trim → LLM
 ```
 
 并行：`policies` + `security.toolScan`（`approval` 默认关）+ SystemContext 指纹。
+
+群聊入口：`plugin/ai.js` → `ChatStream.process({ mergeWorkflows })`；`tools` 在名单内则 MCP + 副流提示一并生效（见 `docs/agent-context.md`）。
 
 ## 已吸收（过三准则）
 

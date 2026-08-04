@@ -73,6 +73,8 @@ runChatAgent
 
 `mergeWorkflows` 决定**手上有什么工具**；下文 Workspace 决定**按什么规矩、先读哪本手册**。
 
+`tools` 副流工具面（`tools.*`）：`read` / `grep` / `search_replace` / `write` / `delete_file` / `list_files` / `run`，以及 `apply_edit` / `verify` / `repo_map` / `update_todos`。副流 `buildSystemPrompt` 经 `collectAuxiliaryStreamPrompts` 注入 chat system；细则见 [mcp-guide.md](mcp-guide.md)、技能 `agent-tools`。
+
 ---
 
 ## 3. LLM 消息三层（assembleChatLlmMessages）
@@ -110,7 +112,7 @@ runChatAgent
 实现：`src/utils/agent-workspace.js` → `buildAgentWorkspaceSection`。  
 开关与预算：`ai-workflow.yaml` → `agentWorkspace`。
 
-**不进本链**：仓库根 `AGENTS.md`、`.cursor/rules`、`.cursor/skills`（给 Cursor / 维护者）。
+**不进本链**：仓库根 `AGENTS.md`、`.cursor/rules`、`.cursor/skills`（给 **Coding Agent** / 维护者，见 [SKILL_INDEX](../.cursor/skills/SKILL_INDEX.md)）。
 
 | 磁盘 | 角色 |
 |------|------|
@@ -141,13 +143,43 @@ runChatAgent
 
 ## 5. 工具环与出站
 
-`callAI` → `LLMFactory.createClient().chat`：`tool_calls` 时按 `mcpToolMode` 中游执行 MCP，多轮直到正文或 `onAfterToolRound` 提前结束（如 reply 已发出）。
+`callAI` → `prepareOutboundMessages` → `LLMFactory.createClient().chat/chatStream`：`tool_calls` 时按 `mcpToolMode` 中游执行 MCP，多轮直到正文或 `onAfterToolRound` 提前结束（如 reply 已发出）。工具轮用尽时各客户端可再发一轮无工具 finalize。
+
+### 5.1 出站消息链（固定）
+
+```
+slash 展开（/recipe · /recipes …）
+  → assemble 消息三层
+  → toolPair（旧 tool 结果投影，不改持久历史）
+  → compaction（辅/主模型摘要 + 可选 backup / session sidecar）
+  → contextWindow 尾部裁剪
+  → LLM
+```
+
+配置：`ai-workflow.context.compaction` · `context.toolPair` · `context.chatHistory` · Provider `contextWindow`。  
+实现：`ai-workflow.js` `prepareOutboundMessages` · `context-compaction.js` · `tool-pair-compact.js` · `chat-pipeline.js`。
+
+### 5.2 策略与安全
+
+| 能力 | 配置 | 落点 |
+|------|------|------|
+| 运行时策略 | `policies[]` | `runtime-policy.js`：`provider.use` / `tool.call` / `mcp.connect`；`ask` 工具仍注入，执行时审批或拒绝 |
+| 威胁扫描 | `security.toolScan` | `tool-security-inspect.js`（默认开） |
+| 交互审批 | `security.approval`（默认 **false**） | 主人私聊 `#批准` / `#批准id`；关则 ask=拒绝（主人可 bypass） |
+| 执行门禁 | — | **统一**在 `MCPServer.handleToolCall`（LLM / HTTP / WS / JSON-RPC） |
+
+### 5.3 斜杠与配方
+
+- `/recipes` · `/recipe <id> [k=v]`：`slash-commands.js`；列表类可短路直接 reply
+- 种子：`agents/recipes/*.yaml`；`recipes.scheduleEnabled` 时 cron 由 `recipe-schedule` 插件注册（默认只打日志）
+
+### 5.4 工具环概念
 
 | 概念 | 本仓落点 |
 |------|----------|
-| **智能体循环**（ReAct / Plan-and-Execute / Reflection） | 工厂客户端多轮 `tool_calls`；`maxToolRounds`（多客户端默认约 7）；**禁止**文本假 ReAct（见 [ai-workflow.md](ai-workflow.md)） |
-| **智能体图编排**（DAG / 条件边） | 主路径是**固定**消息三层 + 工具白名单环，不是通用 DAG 编辑器；复杂分支在 Core / 外挂编排，或靠 `mergeWorkflows` 拼能力面 |
-| **harness 对照**（如 Pi） | 同为工具环；Pi 等产品常默认不内置 MCP——**本仓相反**（MCP + `mergeWorkflows` 为一等公民）。对照即可，不必引入其运行时 |
+| **智能体循环** | 工厂客户端多轮 `tool_calls`；`maxToolRounds`（多客户端默认约 7）；**禁止**文本假 ReAct（见 [ai-workflow.md](ai-workflow.md)） |
+| **智能体图编排** | 固定消息三层 + 工具白名单环；复杂 DAG 在 Core / 外挂 |
+| **harness 对照** | 本仓默认有 MCP + `mergeWorkflows`；对照即可 |
 
 出站：`reply` 工具优先；否则 `_resolveOutboundText` + `sendMessages`；再 `recordAIResponse` 写回历史。
 
@@ -159,27 +191,34 @@ runChatAgent
 |-------------|------|
 | 触发策略、人设、merge 列表 | `data/ai/config.yaml` · `ai_config` |
 | 工作区注入开关与预算 | `ai-workflow.yaml` → `agentWorkspace` |
+| 压缩 / toolPair / 历史条数 | `ai-workflow.yaml` → `context.*` |
+| 策略 / 扫描 / 审批 | `policies` · `security.*` |
+| 配方 cron | `recipes.scheduleEnabled` · `agents/recipes/` |
 | 语气 / 红线 | 工作区 `AGENTS.md` |
 | 称呼 / 偏好 | `USER.md` · `memory/MEMORY.md` |
 | 行为规则全文 | `agents/rules/` |
-| 技能细则 | 工作区 `skills/` 或 `agents/skills/standard/` |
+| 技能细则（产品 Agent） | `agents/skills/standard/` 或工作区 `skills/` |
+| Coding Agent 技能 | `.cursor/skills/xrk-*`（**不**注入办事助手） |
 | 角色路由提示 | `subagents.yaml` |
 | 消息组装顺序 | `assembleChatLlmMessages` |
 | 工具合并 | `AiWorkflowLoader.mergeWorkflows` |
 | 工具轮上限 / 轮后钩子 | LLM 工厂客户端 `maxToolRounds` · `onAfterToolRound` |
+| MCP 新文件工具 | `tools.apply_edit` / `verify` / `repo_map` / `update_todos` |
 
 运营向说明见 [agents.md](agents.md)；基类与 Loader 见 [ai-workflow.md](ai-workflow.md)；MCP 运维见 [mcp-guide.md](mcp-guide.md)。
 
 ---
 
-## 7. 文档分工（避免重复真源）
+## 7. 文档与技能分工（避免混读者）
 
-| 文档 | 写什么 | 不写什么 |
-|------|--------|----------|
-| **本文** | 跑通一次 Agent 的消息/工作区/工具环契约 | 基类 API 细节、MCP 服务器配置大全 |
-| [ai-workflow.md](ai-workflow.md) | `AiWorkflow` / Loader / `registerMCPTool` / 禁止假 ReAct | 办事助手运营话术 |
-| [agents.md](agents.md) | 怎么用、改种子/工作区、场景能力 | 消息三层实现细节（链到本文） |
-| [mcp-guide.md](mcp-guide.md) | MCP 挂载与排错 | 上下文注入顺序 |
-| 根 [AGENTS.md](../AGENTS.md) | Cursor / Core 放码与 skill 路由 | 运行时 prompt 注入 |
+| 真源 | 读者 | 写什么 | 不写什么 |
+|------|------|--------|----------|
+| **本文** | 框架 / Core / 运维 | 跑通消息/工作区/出站/安全契约 | 办公 skill 细则、Cursor 放码 |
+| [ai-workflow.md](ai-workflow.md) | 框架开发 | `AiWorkflow` / Loader / 配置键 | 办事语气 |
+| [agents.md](agents.md) | 用户 / 运维 | 怎么用、改种子/工作区 | 出站实现细节（链到本文） |
+| [mcp-guide.md](mcp-guide.md) | 运维 / 集成 | MCP 工具清单与排错 | 上下文注入顺序 |
+| `agents/skills/standard/**` | **产品 Agent 模型** | 工具/场景怎么干活 | `.cursor`、工厂、三准则 |
+| `.cursor/skills/xrk-*` | **Coding Agent** | 改本仓怎么放码 | 注入到办事助手 prompt |
+| 根 [AGENTS.md](../AGENTS.md) | Cursor / Core | skill 路由与放码 | 运行时 prompt 注入 |
 
-*最后更新：2026-07-29*
+*最后更新：2026-08-04*

@@ -38,7 +38,13 @@
 
 ## 一眼锁定（任务 → Skill）
 
-改 `core/` / `src/` 前：Grep 调用方 → **Read** 对应 `SKILL.md` → 再动手。索引：[`.cursor/skills/SKILL_INDEX.md`](.cursor/skills/SKILL_INDEX.md)。
+改 `core/` / `src/` 前：Grep 调用方 → **Read** 对应 `SKILL.md` → 再动手。索引：[`.cursor/skills/SKILL_INDEX.md`](.cursor/skills/SKILL_INDEX.md)（含**读者分流**）。
+
+| 读者 | 技能树 |
+|------|--------|
+| **Coding Agent**（本对话改代码） | `.cursor/skills/xrk-*` |
+| **产品 / 办事助手模型** | `agents/skills/standard/**`（注入目录卡，细则 `tools.read`） |
+| **人读契约** | `docs/*`（勿把 coding skill 写进产品 skill） |
 
 | 你在做什么 | 先读 |
 |------------|------|
@@ -47,7 +53,7 @@
 | HTTP API / handler / 响应形状 | `xrk-http-api`；前端解包见 `xrk-www-compat` |
 | 新增/改 YAML 字段、schema、模板路径 | `xrk-config` |
 | 插件 / Loader / 基类扩展点 | `xrk-infrastructure` · `xrk-plugins` |
-| AI 工作流 / MCP / 工具环 | `xrk-ai-workflow` · `xrk-mcp` · [`docs/agent-context.md`](docs/agent-context.md) |
+| AI 工作流 / 出站 / 策略安全 / MCP | `xrk-ai-workflow` · `xrk-mcp` · [`docs/agent-context.md`](docs/agent-context.md) |
 | 办事助手种子 / 工作区注入 | [`docs/agents.md`](docs/agents.md) · [`docs/agent-context.md`](docs/agent-context.md) · `src/utils/agent-workspace.js` |
 | LLM 工厂 / 代理 fetch | `xrk-llm` · `xrk-v3-api` |
 | Tasker / OneBot | `xrk-tasker` |

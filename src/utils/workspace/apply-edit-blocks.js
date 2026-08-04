@@ -1,12 +1,16 @@
 /**
  * aider editblock 可移植核：解析并应用 SEARCH/REPLACE 围栏。
- * 格式：
+ * 供 `tools.apply_edit` 使用；路径相对工作区根解析。
+ *
+ * 块格式（可多个连续）：
  *   path/to/file.ext
  *   <<<<<<< SEARCH
  *   ...old...
  *   =======
  *   ...new...
  *   >>>>>>> REPLACE
+ *
+ * dryRun=true 时只校验匹配、不写盘。
  */
 import fs from 'node:fs/promises';
 import path from 'node:path';

@@ -3,8 +3,9 @@ import path from 'path';
 import { estimateTokensMixed } from '#utils/token-estimate.js';
 
 /**
- * 工作区地图（aider RepoMap 可移植核心，无 tree-sitter / networkx）：
- * 扩展名扫描 + 符号正则 + import 图 + 迭代 PageRank + 查询/焦点个性化。
+ * 工作区地图（aider RepoMap 可移植核心，无 tree-sitter / networkx）。
+ * 供 `tools.repo_map`：扩展名扫描 + 符号正则 + import 图 + 迭代 PageRank + query 个性化。
+ * 输出为截断后的纯文本地图，便于塞进 tool 结果；非完整 AST。
  */
 
 const SKIP_DIRS = new Set([
