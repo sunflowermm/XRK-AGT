@@ -15,6 +15,7 @@ description: 当你需要理解/开发插件（plugin 基类）、插件加载�
 - 基类：`import PluginBase from '#infrastructure/plugins/plugin-base.js'`；`extends PluginBase`。
 - 裸名 **`msgSegment`**、**`AgentRuntime`**；勿 `global.msgSegment` / `global.AgentRuntime`。
 - constructor 不建缓存/Map；`rule[].fnc(e)` 用 `e.msg`。
+- **戳一戳等 notice**：`event: 'notice.*.poke'`（或具体 `notice.group.poke`）；逻辑放 `accept()`。同类通知同模式。勿为业务去改 Tasker。
 - 调 AI：`this.getWorkflow('chat'|...)` + `stream.process(e, e.msg, options)`。
 - 错误：`Error.isError` / `normalizeError`（skill **`xrk-node-runtime`**）。
-- 产品 / 办事助手写工作区 Core：导航 skill **`agent-core-dev`**（只读本 skill，不改本树）。
+- 产品 / 办事助手写工作区 Core：导航 skill **`agent-core-dev`**（配方优先，只读本 skill）。

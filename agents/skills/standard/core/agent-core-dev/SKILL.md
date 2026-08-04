@@ -1,148 +1,163 @@
 ---
 name: agent-core-dev
-description: 在工作区写完整 Core 业务层（plugin/http/workflow/events/commonconfig）：只写工作区、可读项目根、# 导入；用户说写插件、加命令、工作区 API、问架构时加载
+description: 工作区 Core 全扩展点写法清单（PluginBase/HTTP/workflow/events/commonconfig）：写插件、#命令、notice、HTTP、工作流、配置、事件监听时加载
 ---
 
-> 读者：办事助手。  
-> **硬边界：业务代码只写本工作区 `core/`；项目根 `.cursor` / `docs` / 仓库 `core` / `src` 只读。**  
-> 编码真源在 Cursor 的 `xrk-*`（只读）。勿把 xrk 全文贴进回复。
+> 读者：办事助手。只写本工作区 `core/workspace-Core/`。  
+> **常驻**：rules `workspace-dev` 每轮带边界 + message 骨架；说「写插件」等时 microagent **plugin-write** 注入通用选型。  
+> **常见任务有常驻/注入则直接 write**；本文件给各基类完整字段，勿翻 `src/`。
 
-## 硬边界（先读这段）
-
-| 操作 | 允许 | 禁止 |
-|------|------|------|
-| **写** | `core/workspace-Core/**`（相对本工作区）；文稿等非代码可写工作区其它目录 | `../../../` 之外；`src/`；`.cursor/`；仓库 `core/system-Core` 与其它产品 Core |
-| **读** | 工作区任意；项目根框架与示例（见下） | 读完再改回去；`run` 改工作区外文件 |
-| **用户要你改框架** | 只读 + 给方案 / 说明请维护者用 Cursor | 假装已改仓库文件 |
-
-工具会对「写出工作区」直接失败。不要尝试用绝对路径或 `run` 绕过。
+相对工作区：项目根 = `../../../`。
 
 ---
 
-## 地图（cwd = 本工作区）
+## 0. 总清单（放哪 / 基类 / 导出）
 
-```text
-项目根/                          ← 相对工作区：../../../
-  .cursor/skills/xrk-*/SKILL.md  ← 【只读】编码真源
-  docs/*.md                      ← 【只读】契约
-  core/system-Core/…             ← 【只读】示例
-  package.json → imports         ← 【只读】# 别名
-  src/                           ← 【只读】底层；你不改
-  data/ai-workspace/{id}/        ← 你在这里（可写）
-    core/workspace-Core/         ← 【可写】业务代码
-    skills/ rules/ docs/ …       ← 【可写】办事文件
-```
+| 扩展点 | 工作区路径 | 基类 / 形态 | 加载器扫描 |
+|--------|------------|-------------|------------|
+| 消息/通知插件 | `plugin/*.js` | 裸名 **PluginBase**（或 Enhancer） | PluginLoader |
+| HTTP API | `http/*.js` | **对象导出**（推荐）或 HttpApi | HttpApiLoader |
+| AI 工作流 | `workflow/*.js` | `import AiWorkflow from '#infrastructure/ai-workflow/ai-workflow.js'` | AiWorkflowLoader |
+| 事件监听 | `events/*.js` | ListenerBase（见下） | Listener Loader |
+| 配置 Schema | `commonconfig/*.js` | ConfigBase（见下） | CommonConfigRegistry |
+| Tasker | `tasker/*.js` | **无统一基类**；工作区一般不写 | TaskerLoader |
+| 静态页 | `www/<应用名>/` | 静态文件；根名勿用 `api\|core\|media\|uploads\|File\|shared` | mountCoreWwwStatic |
 
----
-
-## 充分了解项目（写码 / 答架构前）
-
-按需 `tools.read`（路径相对工作区）。**先总览再专题**，每任务约 2–4 个文件，勿一次灌完。
-
-### 总览（第一次写 Core 或用户问「这项目怎么回事」）
-
-1. `../../../.cursor/skills/xrk-project-overview/SKILL.md`
-2. `../../../docs/runtime-surface.md`（裸名、`AgentRuntime`、Loader）
-3. `../../../docs/base-classes.md`（各扩展点最小形状）
-4. `../../../.cursor/skills/SKILL_INDEX.md`（还有哪些 xrk 可查）
-
-### 写码专题
-
-| 你在做 | 再 read |
-|--------|---------|
-| 任意 JS | `../../../.cursor/skills/xrk-coding-style/SKILL.md` → `xrk-node-runtime` |
-| 消息插件 / `#命令` | `xrk-plugins`；对照 `../../../core/system-Core/plugin/` 只读示例 |
-| HTTP | `xrk-http-api` |
-| 工作流 | `xrk-ai-workflow` |
-| 配置 schema | `xrk-config` |
-| 扩展点迷路 | `xrk-infrastructure` · `../../../docs/框架可扩展性指南.md` |
-| `#` 别名不确定 | `../../../package.json` 的 `imports` |
-
-办公（邮件/表格）用 office-*，**不必**读 xrk-*。
+热加载：已有 `workspace-Core/plugin/` 内增改 `.js` 通常可热加载；**新建另一个 Core 目录名**需重启 / `#重启`。
 
 ---
 
-## 放码（只写这里）
+## 1. PluginBase（最常用）
 
-```text
-core/workspace-Core/
-  plugin/*.js          # 消息 / 定时 / 规则
-  http/*.js            # HTTP API
-  workflow/*.js        # AI 工作流（少用；办公优先 MCP）
-  events/*.js          # 事件监听
-  commonconfig/*.js    # 配置 schema（yaml 仍只在主服编辑）
-  tasker/*.js          # 一般不碰
-  www/<应用名>/        # 静态页（根名勿用 api|core|media|uploads|File|shared）
-```
+### 1.1 `super({...})` 字段
 
-- 已有 `workspace-Core/plugin/`：增改 `.js` 可热加载  
-- **新建另一个 Core 目录名**：需重启 / `#重启`  
-- Loader 还扫仓库 `core/*`——你只写工作区这份
+| 字段 | 类型 | 默认 | 说明 |
+|------|------|------|------|
+| `name` | string | — | 插件名 |
+| `dsc` | string | — | 描述 / 帮助文案 |
+| `event` | string | `'message'` | 事件键（见 1.3） |
+| `priority` | number \| `'extended'` | `5000` | **越小越先**；`'extended'` 进扩展队列（先于普通插件） |
+| `rule` | array | `[]` | 规则（见 1.2）；notice 常配合空数组 + `accept()` |
+| `task` | array | — | Cron：`{ name?, cron, fnc, log? }` |
+| `handler` | array/object | — | 默认消息处理器 |
+| `eventSubscribe` | array/object | — | 自定义事件订阅 |
+| `bypassThrottle` | boolean | `false` | 绕过节流 |
+| `namespace` | string | `''` | 与 handler 配合 |
 
----
+类字段存缓存（`cache = new Map()`）；**禁止**在 constructor 里 `this.cache = new Map()`。
 
-## 引入路径
+导出：`export class Xxx extends PluginBase`（可多个类）。可选 `async init()` / `async destroy()`。
 
-工作区 Core **无**自有 `package.json`，`#` 解析到**仓库根**：
+### 1.2 `rule[]` 字段
 
-| 别名 | 落到 |
+| 字段 | 说明 |
 |------|------|
-| `#infrastructure/*` | `src/infrastructure/*` |
-| `#utils/*` | `src/utils/*` |
-| `#factory/*` | `src/factory/*` |
-| `#config/*` | `config/*` |
-| `#data/*` | `data/*` |
-| `#core/*` | 仓库 `core/*`（一般只读引用，勿当可写目标） |
+| `reg` | 匹配 `e.msg`（string → 正则 / RegExp） |
+| `fnc` | **方法名**字符串 |
+| `event` | 可选，再滤子事件 |
+| `permission` | `master` / `owner` / `admin` / `all` |
+| `log` | 默认 true |
 
-### 裸名（勿 `global.` / 勿 `import AgentRuntime`）
+返回：`false` = 未处理（同优先级继续）；其它 = 已处理。
 
-| 符号 | 用途 |
-|------|------|
-| `PluginBase` | 插件基类 |
-| `msgSegment` | 消息段 |
-| `AgentRuntime` | 运行时；HTTP 用 `req.agentRuntime` |
+### 1.3 `event` 常用键
 
-```js
-import { HttpResponse } from '#utils/http-utils.js';
-import { normalizeError } from '#utils/normalize-error.js';
-import { exec } from '#utils/exec-async.js';
-import runtimeConfig from '#infrastructure/config/config.js';
-```
+Loader 会拼：`{post}.{notice_type|message_type}.{sub_type}` 等；也支持 `*` 段匹配（段数须一致）。
 
-禁止项以读到的 `xrk-node-runtime` / `xrk-coding-style` 为准（`node-fetch`、文件内 promisify、`instanceof Error` 判错等）。
+| 场景 | `event` 示例 |
+|------|----------------|
+| 群/私聊消息 | `message` · `message.group` · `message.private` |
+| 戳一戳等通知 | `notice.*.poke` · `notice.group.poke` · `notice.friend.poke`（**示例**；同类还有 increase 等） |
+| 进群等 | `notice.group.increase` 等（按实际 `notice_type`/`sub_type`） |
+| 请求 | `request` · `request.friend` … |
+| 通配（慎用） | `notice.*`（段数不够时用 `accept` 里自己判断） |
 
----
+### 1.4 实例 API（够用）
 
-## 最小形状
+| API | 用途 |
+|-----|------|
+| `this.e` | 当前事件 |
+| `this.reply(msg)` | 回复；段用裸名 `msgSegment` |
+| `this.accept()` | 前置；`false` 跳过；`'return'` 截断整条链 |
+| `setContext` / `getContext` / `finish` | 多轮上下文 |
+| `this.getWorkflow(name)` | 取已加载工作流 |
 
-### plugin
+纯 **notice**（含戳一戳、进群等）：逻辑放 **`accept()`**（常无可靠 `e.msg`）。
+
+### 1.5 配方 A — `#命令`
 
 ```js
 export class MyCmd extends PluginBase {
   constructor() {
     super({
-      name: '我的命令',
-      dsc: '#我的命令',
-      event: 'message',
-      priority: 5000,
+      name: '我的命令', dsc: '#我的命令', event: 'message', priority: 5000,
       rule: [{ reg: '^#我的命令$', fnc: 'run' }],
     });
   }
-  async run() {
-    await this.reply(this.e?.msg || 'ok');
+  async run() { await this.reply(this.e?.msg || 'ok'); }
+}
+```
+
+### 1.6 配方 B — notice + `accept()`（示例：被戳反戳）
+
+任意 notice 子类型同一模式；下面**仅一例**，不要默认所有需求都写成反戳。
+
+```js
+export class PokeBack extends PluginBase {
+  constructor() {
+    super({
+      name: '反戳', dsc: '被戳则反戳', event: 'notice.*.poke', priority: 5000, rule: [],
+    });
+  }
+  async accept() {
+    const e = this.e;
+    if (!e || e.sub_type !== 'poke') return false;
+    if (String(e.target_id) !== String(e.self_id)) return false;
+    if (String(e.operator_id) === String(e.self_id)) return false;
+    const who = e.operator_id;
+    if (e.group?.pokeMember) await e.group.pokeMember(who);
+    else if (e.friend?.poke) await e.friend.poke();
+    else await e.reply({ type: 'poke', qq: who });
+    return 'return';
   }
 }
 ```
 
-### http
+### 1.7 Enhancer（少用）
+
+继承增强基类思路同插件，`priority: 'extended'` 或框架 Enhancer；对照只读 `../../../core/system-Core/plugin/OneBotEnhancer.js`。工作区一般写普通 PluginBase 即可。
+
+---
+
+## 2. HTTP（HttpApi / 对象导出）
+
+路径：`core/workspace-Core/http/<名>.js`
+
+| 项 | 约定 |
+|----|------|
+| 推荐导出 | `export default { name?, priority?, routes: [...] }` |
+| route | `method` · `path` · `handler` · 可选 `systemAuth` / middleware |
+| 运行时 | `req.agentRuntime` 或 handler 第三参；勿 `global.AgentRuntime` |
+| `/api/*` | 默认要系统鉴权；公开：`systemAuth: false` |
+
+### `HttpResponse.success` 形状
+
+| 第二参 | JSON |
+|--------|------|
+| 普通对象 | `{ success, message, ...字段 }`（**拍平**） |
+| 数组 / 标量 | `{ success, message, data: 值 }` |
+| `null` | `{ success, message }` |
 
 ```js
 import { HttpResponse } from '#utils/http-utils.js';
 
 export default {
+  name: 'workspace-ping',
+  priority: 100,
   routes: [{
     method: 'GET',
     path: '/api/workspace/ping',
+    systemAuth: false, // 若需免 Key；默认 true 更安全
     handler: HttpResponse.asyncHandler(async (req, res) => {
       return HttpResponse.success(res, { ok: true });
     }, 'workspace-ping'),
@@ -150,25 +165,128 @@ export default {
 };
 ```
 
-`HttpResponse.success`：普通对象拍平到顶层；数组/标量才进 `data`（见 `xrk-http-api`）。
-
-其它扩展点：`base-classes.md` + 对应 xrk；对照 `system-Core` **只读**抄结构。
+也可用：`HttpResponse.error` / `validationError` / `notFound` / `unauthorized`。
 
 ---
 
-## 步骤
+## 3. AiWorkflow（工作流）
 
-1. 确认落点在本工作区 `core/workspace-Core/`（否则拒绝改仓库）
-2. 按「充分了解项目」补读 1–3 个真源文件
-3. `grep` 工作区避免命令冲突
-4. `write` / `search_replace` **只**动工作区内路径
-5. 热加载或告知重启；触发句验收；不编造「已加载」
+路径：`core/workspace-Core/workflow/<名>.js`  
+办公优先 MCP；**仅用户要自定义工具面时再写**。
+
+```js
+import AiWorkflow from '#infrastructure/ai-workflow/ai-workflow.js';
+
+export default class MyStream extends AiWorkflow {
+  constructor() {
+    super({
+      name: 'my-stream',           // getWorkflow('my-stream')；工具前缀 my-stream.*
+      description: '……',
+      capabilities: ['tools'],     // 可选 'prompt' 等
+      // frameworkToolSurface: true, // 要始终进 chat MCP 白名单再开
+    });
+  }
+  async init() {
+    await super.init();
+    this.registerMCPTool('tool_name', {
+      description: '……',
+      inputSchema: { type: 'object', properties: {} },
+      handler: async (args, ctx) => ({ success: true }),
+    });
+  }
+  buildSystemPrompt() {
+    return '需要时调用 my-stream.tool_name。';
+  }
+  async cleanup() {}
+}
+```
+
+调用方：`process({ mergeWorkflows: ['my-stream'] })`。细则不够再 read `../../../.cursor/skills/xrk-ai-workflow/SKILL.md` **一次**。
 
 ---
 
-## 与 SKILL / Cursor
+## 4. ConfigBase（commonconfig）
 
-| | 工作区 Core | 办事 SKILL | Cursor xrk-* |
-|--|-------------|------------|--------------|
-| 写？ | ✅ 本工作区 `core/` | ✅ 本工作区 `skills/` | ❌ 只读 |
-| 技能 | **agent-core-dev** | **agent-build-skill** | 路径见上表 |
+路径：`core/workspace-Core/commonconfig/<名>.js`  
+**配置只在主服编辑**；工作区模块提供 schema。运行时 yaml 建议：`data/ai-workspace/...` 或产品 `data/<名>/`（勿塞进 `config/default_config/`）。
+
+```js
+export default class MyConfig extends ConfigBase {
+  constructor() {
+    super({
+      name: 'workspace-demo',
+      displayName: '工作区示例配置',
+      filePath: 'data/ai-workspace/default/workspace-demo.yaml',
+      defaultTemplatePath: 'agents/workspace/core/workspace-Core/default/workspace-demo.yaml', // 若有模板
+      schema: { fields: { /* 控制台字段 */ } },
+    });
+  }
+}
+```
+
+裸名或 `import` ConfigBase：`#infrastructure/commonconfig/commonconfig.js`（与仓库示例一致即可）。
+
+---
+
+## 5. ListenerBase（events）
+
+路径：`core/workspace-Core/events/<名>.js`  
+工作区**少用**（通道级）；优先 PluginBase 的 `event`。
+
+```js
+export default class MyEvent extends ListenerBase {
+  constructor() { super('MyAdapter'); }
+  async init() {
+    // this.bot.on(...); 处理完 markProcessed(e)
+  }
+}
+```
+
+导入：`#infrastructure/listener/base.js`（以仓库 `system-Core/events` 示例为准）。
+
+---
+
+## 6. Tasker / www
+
+| | 说明 |
+|--|------|
+| **tasker** | 无统一基类；工作区默认**不写**。用户点名再对照 `../../../docs/tasker-base-spec.md` 与 `system-Core/tasker` **只读**。 |
+| **www** | `www/<应用名>/` 静态页；兼容层见只读 `xrk-www-compat`；勿用保留根名。 |
+
+---
+
+## 7. 引入速查
+
+| 符号 / 模块 | 写法 |
+|-------------|------|
+| PluginBase / msgSegment / AgentRuntime | **裸名**（勿 `global.`、勿 `import AgentRuntime`） |
+| HttpResponse | `import { HttpResponse } from '#utils/http-utils.js'` |
+| normalizeError | `#utils/normalize-error.js` |
+| exec | `#utils/exec-async.js` |
+| AiWorkflow | `#infrastructure/ai-workflow/ai-workflow.js` |
+| runtimeConfig | `#infrastructure/config/config.js` |
+
+`#` ← 仓库根 `package.json` → `imports`。工作区**不要**自建 `package.json`。
+
+禁止：`node-fetch`、文件内 `promisify(exec)`、`instanceof Error` 判错、改 `src/` / 仓库 `core/system-Core`。
+
+---
+
+## 8. 工作方式
+
+1. 常驻配方 / microagent 已够 → **直接 write**。  
+2. 需要字段表 / 非 message 扩展点 → read **本文件对应节**（勿整份 docs + src）。  
+3. 用户已要求写 → 不要再确认；「继续」后禁止重读。  
+4. 写完：路径 + 验收方式。
+
+## 9. 可选深读（每个缺口最多 1 个）
+
+| 缺口 | 读 |
+|------|-----|
+| Node/编码禁令 | `../../../.cursor/skills/xrk-node-runtime/SKILL.md` |
+| HTTP 细节 | `../../../.cursor/skills/xrk-http-api/SKILL.md` |
+| 工作流细节 | `../../../.cursor/skills/xrk-ai-workflow/SKILL.md` |
+| 架构总览 | `../../../.cursor/skills/xrk-project-overview/SKILL.md` |
+| 人读契约 | `../../../docs/base-classes.md` |
+
+**不要默认读**：`src/infrastructure/**`、整份框架可扩展性指南、Tasker 全文。

@@ -187,6 +187,7 @@
 | 技能种子 | `agents/skills/standard/`（含 agent-skillhub） |
 | 共享行为规则 | `agents/rules/`（运行时直接注入，不拷进工作区） |
 | 工作区规则（用户加法） | `data/ai-workspace/{id}/rules/` |
+| Microagents（triggers 命中整段注入） | `agents/microagents/`（如 **plugin-write**；写工作区 Core 时少 read 长 skill） |
 | MCP | [mcp-guide.md](mcp-guide.md)、[mcp-config-guide.md](mcp-config-guide.md) |
 | 工作流基类 | [ai-workflow.md](ai-workflow.md) |
 | 框架开发 | 根 [AGENTS.md](../AGENTS.md) · `.cursor/skills/xrk-*` |

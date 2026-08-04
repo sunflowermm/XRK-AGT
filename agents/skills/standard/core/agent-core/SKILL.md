@@ -34,7 +34,7 @@ description: 办事 Agent 总控：工作循环、完整技能路由、降级、
 | 1 | 要用 MCP / 改文件 / run | **agent-tools** |
 | 1b | 装技能 / 同步种子 / CLI | **agent-skillhub** |
 | 1c | 写新 skill / 改 SKILL 结构 | **agent-build-skill** |
-| 1d | 写工作区 Core / 问架构扩展 | **agent-core-dev**（再按表只读 `../../../.cursor/skills` · `docs`） |
+| 1d | 写工作区插件 / HTTP / Core 扩展 | **直接写**（rules + microagent plugin-write）；不够才 read **agent-core-dev** |
 | 2 | 开放域搜网、无具体 URL | **agent-search** |
 | 3 | JS 页、表单、多步点击 | **agent-browser** + **office-env-web** |
 | 4 | 跨会话偏好、「记住」 | **agent-memory** |
@@ -49,8 +49,9 @@ description: 办事 Agent 总控：工作循环、完整技能路由、降级、
 | 用户说 | 加载顺序 |
 |--------|----------|
 | 「帮我装一个日历技能」 | agent-skillhub → agent-tools |
-| 「加个 #签到 插件」 | agent-core-dev →（按需）../../../.cursor/skills/xrk-plugins → agent-tools |
-| 「这项目业务放哪 / 怎么扩展」 | agent-core-dev → xrk-project-overview · docs/runtime-surface |
+| 「加个 #签到 插件」 | 直接 write（rules / plugin-write） |
+| 「加个通知类插件 / 写个 HTTP」 | 直接 write；选型见表，细则 agent-core-dev |
+| 「这项目业务放哪 / 怎么扩展」 | agent-core-dev → 可选深读 xrk-project-overview |
 | 「把这份 md 转成 Word」 | office-env-setup → office-docx → agent-tools |
 | 「搜一下某政策最新规定」 | agent-search → office-research → answer-format |
 | 「合并目录里 5 个 csv」 | office-env-setup → office-csv → office-env-workspace |
@@ -69,7 +70,8 @@ description: 办事 Agent 总控：工作循环、完整技能路由、降级、
 | MCP、改文件约定 | **agent-tools** |
 | 安装 / 更新 / 自建技能 | **agent-skillhub** |
 | 编写 / 改进 SKILL.md | **agent-build-skill** |
-| 工作区 Core 业务层（plugin/http/…） | **agent-core-dev**（导航 `.cursor` 真源） |
+| 工作区业务插件（PluginBase） | **agent-core-dev**（完整字段清单；常见任务靠 rules/microagent 直接写） |
+| 工作区 HTTP / workflow / 配置 / 事件 | **agent-core-dev** 对应节 |
 | 中文检索 / 联网 | **agent-search** |
 | 受控浏览器交互 | **agent-browser** |
 | 记忆 | **agent-memory** |

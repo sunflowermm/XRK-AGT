@@ -1,37 +1,42 @@
 ---
-description: 读写硬边界——只写工作区；可读项目根以了解框架；写 Core 走 agent-core-dev
+description: 工作区写 Core——边界 + 最短通用骨架（每轮注入；细则读 agent-core-dev）
 alwaysApply: true
 ---
 
-# 读写硬边界（必须遵守）
+# 工作区写 Core
 
-## 一句话
+## 边界
 
-**写 = 只在本工作区；读 = 工作区 + 项目根（了解框架）。**  
-工具层也会拒绝写出工作区；不要用 `run` 绕过。
+- **写**：仅本工作区 `core/workspace-Core/`（plugin / http / workflow / …）。
+- **读**：可读 `../../../.cursor` / `docs` / 仓库示例；禁止写回去。
+- 用户已说「写/加一个」→ **直接 write**；说「继续」后禁止重读同一批文档。
+- **禁止**为常见需求去翻 `src/`、Tasker；字段/其它扩展点 read **一次** **agent-core-dev**。
 
-## 写（write / search_replace / delete / apply_edit）
+## 最短骨架（message）
 
-| 允许 | 禁止 |
-|------|------|
-| 本工作区内任意用户文件（文稿、`skills/`、`memory/`…） | 任何 `../../../` 落到工作区外的路径 |
-| **项目业务代码**仅：`core/workspace-Core/**`（或用户点名的本工作区 `core/<名>/`） | 写 `src/`、`.cursor/`、仓库 `core/system-Core`、其它产品 Core、`package.json` |
+路径：`core/workspace-Core/plugin/<名>.js`
 
-用户若要求「改框架 / 改仓库 core」：说明你办不到，请用 Cursor / 维护者；你最多 **read** 后给方案。
+```js
+export class MyCmd extends PluginBase {
+  constructor() {
+    super({
+      name: '我的命令', dsc: '#我的命令', event: 'message', priority: 5000,
+      rule: [{ reg: '^#我的命令$', fnc: 'run' }],
+    });
+  }
+  async run() { await this.reply('ok'); }
+}
+```
 
-## 读（充分了解项目 —— 鼓励）
+## 选型（勿偏一种玩法）
 
-相对工作区根，项目根 = `../../../`。写码或答架构前按需 read，**不要凭印象**：
+| 需求类型 | 落点 | 要点 |
+|----------|------|------|
+| `#命令` / 聊天关键词 | `plugin` + `event: 'message'` + `rule` | 上表骨架 |
+| 通知类（进群、戳一戳、名片赞等） | `plugin` + `event: 'notice…'` | 逻辑多在 **`accept()`**；`rule` 可空（notice 常无 `e.msg`） |
+| HTTP 接口 | `http/*.js` | `HttpResponse`；见 agent-core-dev §2 |
+| 自定义 MCP 工具面 | `workflow/*.js` | AiWorkflow；少用 |
+| 配置面板字段 | `commonconfig/*.js` | ConfigBase |
 
-| 目的 | 路径（相对工作区） |
-|------|-------------------|
-| 技能索引 | `../../../.cursor/skills/SKILL_INDEX.md` |
-| 架构总览 | `../../../.cursor/skills/xrk-project-overview/SKILL.md` |
-| 运行时裸名 / 挂载 | `../../../docs/runtime-surface.md` |
-| 扩展点 / 放码 | `../../../docs/框架可扩展性指南.md` · `../../../docs/base-classes.md` |
-| 编码 / Node26 | `../../../.cursor/skills/xrk-coding-style/SKILL.md` · `xrk-node-runtime` |
-| 插件 / HTTP | `../../../.cursor/skills/xrk-plugins/SKILL.md` · `xrk-http-api` |
-| `#` 别名真源 | `../../../package.json`（`imports` 字段） |
-| 官方示例（只读对照） | `../../../core/system-Core/plugin/` 等 |
-
-写 Core 业务：先 **agent-core-dev**，再按上表补读。办公任务用 office-*，不必读 xrk-*。
+导入：裸名 `PluginBase` / `msgSegment`；HTTP → `#utils/http-utils.js`。  
+**完整基类字段清单**：read **agent-core-dev**（Plugin / HTTP / workflow / events / config），勿翻 `src/`。

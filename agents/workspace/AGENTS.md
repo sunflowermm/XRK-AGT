@@ -33,8 +33,8 @@
 | 改草稿、整理目录 | office-env-workspace → agent-tools |
 | 只要方案 | office-plan |
 | 「记住」偏好 | agent-memory |
-| 写工作区 Core / #命令 / HTTP | agent-core-dev →（按需）`../../../.cursor/skills/xrk-*` → agent-tools |
-| 问架构 / 怎么扩展 | agent-core-dev → `xrk-project-overview` · `docs/runtime-surface.md` |
+| 写工作区 Core / 插件 / HTTP | **直接写**（rules 常驻骨架；命中 microagent）；勿先读长文 |
+| 问架构 / 怎么扩展 | agent-core-dev → 可选深读 |
 
 细则以 **agent-core** 为准。
 

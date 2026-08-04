@@ -120,7 +120,7 @@ runChatAgent
 | `agents/rules/` ∪ 工作区 `rules/` | 共享护栏直接读 `agents/rules/`；工作区仅为用户加法（同名才覆盖） |
 | `agents/skills/standard/` + 工作区 `skills/` | 技能目录（name + location）；细则靠 `tools.read`；安装见 agent-skillhub |
 | 工作区 `core/<Core>/plugin/` 等 | 业务插件/API（与仓库/子服 core 一并扫描；写法 **agent-core-dev**，编码真源只读 `.cursor/skills/xrk-*`） |
-| `agents/subagents.yaml`（工作区可覆盖） | 路由提示清单；**不**起隔离子会话 |
+| `agents/microagents/` | triggers 命中则**整段注入**（如 plugin-write）；不靠 tools.read |
 
 ### 注入顺序（固定）
 
