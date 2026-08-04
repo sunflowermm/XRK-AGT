@@ -200,7 +200,7 @@ slash 展开（/recipe · /recipes …）
 | 行为规则全文 | `agents/rules/`（共享直接注入）∪ 工作区 `rules/`（用户加法） |
 | 技能细则（产品 Agent） | `agents/skills/standard/` 或工作区 `skills/`（装技能：agent-skillhub） |
 | Coding Agent 技能 | `.cursor/skills/xrk-*`（**不**注入办事助手） |
-| 托管技能同步 | 主人 `#skills更新`（指纹安全，改过的跳过）· `#skills更新 强制`；锁文件 `.xrk/managed-skills-lock.json` |
+| 托管技能同步 | 主人 `#skills更新`（托管按种子覆盖；自建不动）；锁 `.xrk/managed-skills-lock.json` |
 | 角色路由提示 | `subagents.yaml` |
 | 消息组装顺序 | `assembleChatLlmMessages` |
 | 工具合并 | `AiWorkflowLoader.mergeWorkflows` |

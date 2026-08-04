@@ -75,10 +75,7 @@ skillhub install <slug> --dir "data/ai-workspace/default/skills"
 
 ## 托管更新（主人）
 
-| 命令 | 行为 |
-|------|------|
-| `#skills更新` | 安全：未改托管包对齐种子；已改跳过；自建不动 |
-| `#skills更新 强制` | 托管全覆盖；自建仍不动 |
+`#skills更新`：种子里有的托管包**按种子覆盖**；工作区里种子没有的目录（用户自建）**不动**。
 
 锁：工作区 `.xrk/managed-skills-lock.json`。
 

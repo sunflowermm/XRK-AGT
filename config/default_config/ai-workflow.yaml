@@ -104,7 +104,7 @@ agentWorkspace:
   customSkillRoots:
     - "agents/skills/standard/core"  # agent-core / tools / core-dev / skillhub / build-skill / memory…
     - "agents/skills/standard"       # office-* 等；工作区 data/ai-workspace/{id}/skills 另自动并入
-  # 另自动合并 data/ai-workspace/{id}/skills（种子缺啥补啥；托管更新见 #skills更新）
+  # 另自动合并 data/ai-workspace/{id}/skills（种子缺啥补啥；托管覆盖见 #skills更新）
   maxRulesChars: 12000
   maxAgentMdChars: 12000
   maxSubagentsChars: 4000    # agents/subagents.yaml 注入预算（OpenCode 式 mode/when/skills 清单）

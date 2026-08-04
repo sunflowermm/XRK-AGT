@@ -1,14 +1,11 @@
 /**
  * 项目托管技能（agents/skills/standard 有对应包）：
  * - seed：缺啥补啥
- * - #skills更新：安全同步（工作区相对上次种子未改动才覆盖；改过的跳过）
- * - #skills更新 强制：托管包全部覆盖；用户自建（种子无包）永不碰
- * - 允许用户/AI 改托管副本；改过即视为定制，安全更新会跳过
+ * - #skills更新：托管包按种子覆盖；用户自建（种子无包）永不碰
  */
 import fs from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
-import { isPathInside, realpathSyncOrResolve } from '#utils/path-guards.js';
 import {
   PROJECT_SKILLS_STANDARD_REL,
   WORKSPACE_SKILLS_DIR,
@@ -46,41 +43,6 @@ export function listProjectManagedSkillRels(projectRoot = getProjectRoot()) {
   return out.sort((a, b) => a.localeCompare(b));
 }
 
-/**
- * @param {string} workspaceRoot
- * @param {string} filePath
- */
-export function isProjectManagedSkillPath(workspaceRoot, filePath) {
-  if (!workspaceRoot || filePath == null || String(filePath).trim() === '') return false;
-  try {
-    const abs = path.isAbsolute(filePath)
-      ? path.normalize(filePath)
-      : path.resolve(workspaceRoot, filePath);
-    const skillsNorm = path.normalize(path.join(workspaceRoot, WORKSPACE_SKILLS_DIR));
-    let absNorm = abs;
-    try {
-      const skillsRoot = realpathSyncOrResolve(skillsNorm);
-      const fileReal = realpathSyncOrResolve(abs);
-      if (!isPathInside(skillsRoot, fileReal) && fileReal !== skillsRoot) return false;
-      return isRelUnderManagedPackage(path.relative(skillsRoot, fileReal).replace(/\\/g, '/'));
-    } catch {
-      absNorm = path.normalize(abs);
-      if (!absNorm.startsWith(skillsNorm + path.sep) && absNorm !== skillsNorm) return false;
-      return isRelUnderManagedPackage(path.relative(skillsNorm, absNorm).replace(/\\/g, '/'));
-    }
-  } catch {
-    return false;
-  }
-}
-
-function isRelUnderManagedPackage(rel) {
-  if (!rel || rel.startsWith('..')) return false;
-  for (const pkg of listProjectManagedSkillRels()) {
-    if (rel === pkg || rel.startsWith(`${pkg}/`)) return true;
-  }
-  return false;
-}
-
 function listFilesRecursive(dir) {
   const out = [];
   const walk = (cur) => {
@@ -102,7 +64,7 @@ function listFilesRecursive(dir) {
 }
 
 /** 目录内容指纹（路径相对 dir，排序后哈希） */
-export function hashSkillPackageDir(dirAbs) {
+function hashSkillPackageDir(dirAbs) {
   if (!fs.existsSync(dirAbs)) return '';
   const files = listFilesRecursive(dirAbs)
     .map((fp) => path.relative(dirAbs, fp).replace(/\\/g, '/'))
@@ -149,11 +111,10 @@ function copyDirOverwrite(src, dest) {
 }
 
 /**
+ * 托管包按种子覆盖；种子中不存在的工作区技能（用户自建）不碰。
  * @param {string} [workspaceAbs]
- * @param {{ force?: boolean }} [opts] force=true 时覆盖已定制的托管包；自建仍不动
  */
-export function syncManagedSkills(workspaceAbs, opts = {}) {
-  const force = opts.force === true;
+export function syncManagedSkills(workspaceAbs) {
   const ws =
     workspaceAbs && String(workspaceAbs).trim()
       ? path.normalize(workspaceAbs)
@@ -170,7 +131,6 @@ export function syncManagedSkills(workspaceAbs, opts = {}) {
   const pkgs = listProjectManagedSkillRels(projectRoot);
 
   const updated = [];
-  const skippedModified = [];
   const unchanged = [];
   const installed = [];
 
@@ -178,8 +138,6 @@ export function syncManagedSkills(workspaceAbs, opts = {}) {
     const src = path.join(standard, rel);
     const dest = path.join(destRoot, rel);
     const seedHash = hashSkillPackageDir(src);
-    const prev = lock.packages[rel];
-    const prevSeed = typeof prev?.seedHash === 'string' ? prev.seedHash : '';
 
     try {
       if (!fs.existsSync(dest)) {
@@ -190,53 +148,21 @@ export function syncManagedSkills(workspaceAbs, opts = {}) {
       }
 
       const wsHash = hashSkillPackageDir(dest);
-
-      if (force) {
-        if (wsHash === seedHash) {
-          lock.packages[rel] = { seedHash, syncedAt: new Date().toISOString() };
-          unchanged.push(rel);
-        } else {
-          copyDirOverwrite(src, dest);
-          lock.packages[rel] = { seedHash, syncedAt: new Date().toISOString() };
-          updated.push(rel);
-        }
-        continue;
+      if (wsHash === seedHash) {
+        lock.packages[rel] = { seedHash, syncedAt: new Date().toISOString() };
+        unchanged.push(rel);
+      } else {
+        copyDirOverwrite(src, dest);
+        lock.packages[rel] = { seedHash, syncedAt: new Date().toISOString() };
+        updated.push(rel);
       }
-
-      // 安全模式：仅当工作区仍等于「上次同步的种子」时才覆盖
-      const pristine = prevSeed && wsHash === prevSeed;
-      if (pristine) {
-        if (seedHash === prevSeed) {
-          unchanged.push(rel);
-        } else {
-          copyDirOverwrite(src, dest);
-          lock.packages[rel] = { seedHash, syncedAt: new Date().toISOString() };
-          updated.push(rel);
-        }
-        continue;
-      }
-
-      // 无 lock：若已与当前种子一致 → 只记账；否则视为用户定制，跳过
-      if (!prevSeed) {
-        if (wsHash === seedHash) {
-          lock.packages[rel] = { seedHash, syncedAt: new Date().toISOString() };
-          unchanged.push(rel);
-        } else {
-          skippedModified.push(rel);
-        }
-        continue;
-      }
-
-      // 有 lock 但工作区已改
-      skippedModified.push(rel);
     } catch (err) {
       return {
         ok: false,
         error: `同步失败 ${rel}: ${err?.message || err}`,
         updated,
         installed,
-        skippedModified,
-        unchanged
+        unchanged,
       };
     }
   }
@@ -244,18 +170,9 @@ export function syncManagedSkills(workspaceAbs, opts = {}) {
   writeLock(ws, lock);
   return {
     ok: true,
-    force,
     updated,
     installed,
-    skippedModified,
     unchanged,
-    hint: force
-      ? '已强制覆盖托管包；种子中不存在的工作区技能（用户自建）未改动。'
-      : '安全更新：未改动的托管包已对齐种子；你改过的托管包已跳过（需要时用 #skills更新 强制）。用户自建未改动。'
+    hint: '已按种子覆盖托管包；种子中不存在的工作区技能（用户自建）未改动。',
   };
-}
-
-/** @deprecated 用 syncManagedSkills(..., { force: true }) */
-export function forceSyncManagedSkills(workspaceAbs) {
-  return syncManagedSkills(workspaceAbs, { force: true });
 }

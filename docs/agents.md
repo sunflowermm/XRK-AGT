@@ -66,7 +66,7 @@
 - `/recipe <id> [k=v …]`：注入该配方的 instructions + prompt（种子在 `agents/recipes/`）  
 - 需已触发助手（@ / 前缀等）；配方 cron 见配置 `recipes.scheduleEnabled`（默认关，开启后插件默认只打日志）
 
-主人命令：`#skills更新`（安全：改过的托管包跳过）· `#skills更新 强制`（托管全覆盖）。用户自建 `skills/` 目录两种都不会动。
+主人命令：`#skills更新`（托管包按种子覆盖；用户自建 `skills/` 不动）。
 
 ### 危险命令审批（可选）
 
@@ -103,7 +103,7 @@
 | 本机路径、邮箱、依赖 | `TOOLS.md`、`ENV.md` |
 | 注入用行为规则 | 共享改 `agents/rules/`；本工作区加法写 `rules/`（同名可覆盖共享） |
 | 技能细则 | 工作区 `skills/`，或 `agents/skills/standard/` |
-| 安装 / 同步技能 | **agent-skillhub**；主人 `#skills更新`（安全）/ `#skills更新 强制`；自建永不碰 |
+| 安装 / 同步技能 | **agent-skillhub**；主人 `#skills更新`（托管覆盖；自建不动） |
 | 工作区 Core 业务 | 工作区 `core/workspace-Core/`（**agent-core-dev**；可读项目根 `.cursor/skills/xrk-*`）；种子 `agents/workspace/core/` |
 | 主助手 / 专项角色 | 工作区 `subagents.yaml`（优先）或 `agents/subagents.yaml` |
 | 注入开关与字符预算 | `ai-workflow.yaml` → `agentWorkspace` |
