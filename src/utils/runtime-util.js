@@ -697,11 +697,20 @@ export default class RuntimeUtil {
     }
 
     let logMessage = logParts.join(" ");
-    const maxLength = 5000;
+    // warn/error 多留上下文便于排障；info/debug 仍截断防刷屏
+    const logCfg = runtimeConfig.agt?.logging || {};
+    const isHot = level === 'warn' || level === 'error' || level === 'fatal';
+    const maxLength = typeof logCfg.maxLength === 'number'
+      ? logCfg.maxLength
+      : (isHot ? 16000 : 5000);
+    const preview = typeof logCfg.truncateHead === 'number'
+      ? logCfg.truncateHead
+      : (isHot ? 6000 : 1000);
+    const suffix = typeof logCfg.truncateTail === 'number'
+      ? logCfg.truncateTail
+      : (isHot ? 4000 : 1000);
 
     if (logMessage.length > maxLength) {
-      const preview = 1000;
-      const suffix = 1000;
       logMessage = `${logMessage.slice(0, preview)}... [截断 ${logMessage.length} 字符] ...${logMessage.slice(-suffix)}`;
     }
 

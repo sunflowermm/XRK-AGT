@@ -1,6 +1,7 @@
 import AiWorkflowLoader from '#infrastructure/ai-workflow/loader.js';
 import RuntimeUtil from '#utils/runtime-util.js';
 import { filterToolsByPolicy } from '#utils/runtime-policy.js';
+import { previewToolCallArguments } from '#utils/llm/parse-tool-arguments.js';
 
 /**
  * MCP 工具适配器
@@ -181,36 +182,17 @@ export class MCPToolAdapter {
           };
         }
 
-        let argumentsObj = {};
-
-        if (toolCall.function?.arguments) {
-          try {
-            argumentsObj = typeof toolCall.function.arguments === 'string'
-              ? JSON.parse(toolCall.function.arguments)
-              : toolCall.function.arguments;
-          } catch {
-            argumentsObj = { raw: toolCall.function.arguments };
-          }
-        }
-
-        const argPreview = (() => {
-          try {
-            const s = JSON.stringify(argumentsObj);
-            return s.length > 500 ? `${s.slice(0, 500)}...` : s;
-          } catch {
-            return '[unserializable arguments]';
-          }
-        })();
-
+        const rawArgs = toolCall.function?.arguments;
         RuntimeUtil.makeLog(
           'info',
-          `MCP 工具调用开始: #${index + 1} name=${functionName}, args=${argPreview}`,
+          `MCP 工具调用开始: #${index + 1} name=${functionName}, args=${previewToolCallArguments(rawArgs)}`,
           'MCPToolAdapter'
         );
 
+        // 参数解析 / 安全门禁统一在 MCPServer.handleToolCall
         const result = await mcpServer.handleToolCall({
           name: functionName,
-          arguments: argumentsObj
+          arguments: rawArgs
         });
 
         let content = result?.content?.[0]?.text;

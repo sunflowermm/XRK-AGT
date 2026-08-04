@@ -120,6 +120,27 @@ export const agtConfig = {
               }
             }
           },
+              maxLength: {
+                type: 'number',
+                label: '单条日志最大字符',
+                description: 'RuntimeUtil.makeLog 超长截断阈值；不填则 info=5000、warn/error=16000',
+                min: 2000,
+                component: 'InputNumber'
+              },
+              truncateHead: {
+                type: 'number',
+                label: '截断保留头部字符',
+                description: '超长时保留开头长度',
+                min: 200,
+                component: 'InputNumber'
+              },
+              truncateTail: {
+                type: 'number',
+                label: '截断保留尾部字符',
+                description: '超长时保留结尾长度',
+                min: 200,
+                component: 'InputNumber'
+              },
               dir: {
                 type: 'string',
                 label: '日志目录',

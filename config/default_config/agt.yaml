@@ -29,6 +29,10 @@ logging:
     breakLength: 100
     maxArrayLength: 100
     maxStringLength: 1000
+  # 单条日志截断（RuntimeUtil.makeLog）；warn/error 默认更长
+  # maxLength: 16000
+  # truncateHead: 6000
+  # truncateTail: 4000
   # 日志目录（相对于项目根）
   dir: "logs"
   # 主日志 / trace 日志保留天数

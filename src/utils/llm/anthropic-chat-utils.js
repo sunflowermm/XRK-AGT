@@ -1,15 +1,7 @@
 import { MCPToolAdapter } from './mcp-tool-adapter.js';
 import RuntimeUtil from '../runtime-util.js';
+import { parseToolCallArguments } from '#utils/llm/parse-tool-arguments.js';
 
-function parseToolArguments(raw) {
-  if (raw == null || raw === '') return {};
-  if (typeof raw === 'object') return raw;
-  try {
-    return JSON.parse(String(raw));
-  } catch {
-    return { raw: String(raw) };
-  }
-}
 
 /** OpenAI 风格 messages → Anthropic Messages（含 tool / tool_calls 历史） */
 export function normalizeAnthropicMessages(messages = []) {
@@ -42,7 +34,7 @@ export function normalizeAnthropicMessages(messages = []) {
           type: 'tool_use',
           id: tc.id,
           name: tc.function?.name || 'tool',
-          input: parseToolArguments(tc.function?.arguments)
+          input: parseToolCallArguments(tc.function?.arguments).args
         });
       }
       out.push({ role: 'assistant', content: blocks });

@@ -1,6 +1,7 @@
 import RuntimeUtil from '#utils/runtime-util.js';
 import { summarizeToolResultText } from '#utils/mcp-tool-result-text.js';
 import { inspectToolCallSecurity } from '#utils/security/tool-security-inspect.js';
+import { parseToolCallArguments, toolArgumentsParseHint } from '#utils/llm/parse-tool-arguments.js';
 import os from 'os';
 
 /**
@@ -127,11 +128,32 @@ export class MCPServer {
 
     const tool = this.tools.get(name);
     const isRemote = name.startsWith('remote-mcp.');
-    const callArgs = args || {};
+    const parsedArgs = parseToolCallArguments(args);
+    if (!parsedArgs.ok) {
+      RuntimeUtil.makeLog(
+        'warn',
+        `MCP 工具参数解析失败: ${name}: ${parsedArgs.error} | snippet=${parsedArgs.snippet}`,
+        'MCPServer'
+      );
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify({
+              success: false,
+              error: toolArgumentsParseHint(parsedArgs.error),
+              snippet: parsedArgs.snippet
+            }, null, 2)
+          }
+        ],
+        isError: true
+      };
+    }
+    const callArgs = parsedArgs.args;
 
     RuntimeUtil.makeLog(
       'info',
-      `MCP 工具调用开始: ${name}${isRemote ? ' (remote)' : ''}`,
+      `MCP 工具调用开始: ${name}${isRemote ? ' (remote)' : ''} keys=[${Object.keys(callArgs).join(',')}]`,
       'MCPServer'
     );
 
@@ -223,8 +245,11 @@ export class MCPServer {
     // 检查必需参数
     if (schema.required) {
       for (const required of schema.required) {
-        if (!(required in args)) {
-          throw new Error(`缺少必需参数: ${required}`);
+        if (!(required in args) || args[required] === undefined || args[required] === null) {
+          const hint = args && typeof args.raw === 'string'
+            ? '（收到未解析的 raw 字符串，请检查 arguments JSON）'
+            : '';
+          throw new Error(`缺少必需参数: ${required}${hint}`);
         }
       }
     }
