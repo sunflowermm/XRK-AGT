@@ -83,11 +83,48 @@ export const aiWorkflowConfig = {
                   retryOn: {
                     type: 'array',
                     label: '重试条件',
-                    description: 'timeout（超时）、network（网络错误）、5xx（服务器错误）、all（所有错误）',
+                    description: 'timeout / network / 5xx / rate_limit（429+Retry-After）/ empty（空响应）/ all',
                     itemType: 'string',
-                    enum: ['timeout', 'network', '5xx', 'all'],
-                    default: ['timeout', 'network', '5xx'],
+                    enum: ['timeout', 'network', '5xx', 'rate_limit', 'empty', 'all'],
+                    default: ['timeout', 'network', '5xx', 'rate_limit', 'empty'],
                     component: 'MultiSelect'
+                  }
+                }
+              },
+              aux: {
+                type: 'object',
+                label: '辅模型（weak / fast）',
+                description:
+                  '对齐 goose GOOSE_FAST_MODEL / aider weak_model：摘要、命名、压缩等轻量任务。业务经 resolveAuxLLMConfig() 读取；未配则不用',
+                component: 'SubForm',
+                fields: {
+                  Provider: {
+                    type: 'string',
+                    label: '辅模型 Provider key',
+                    description: '任一工厂 providers[].key；留空=不启用辅模型',
+                    default: '',
+                    component: 'Input'
+                  },
+                  model: {
+                    type: 'string',
+                    label: '覆盖 model（可选）',
+                    description: '不填则用该 Provider 条目自带 model',
+                    component: 'Input'
+                  },
+                  temperature: {
+                    type: 'number',
+                    label: 'temperature',
+                    default: 0.3,
+                    min: 0,
+                    max: 2,
+                    component: 'InputNumber'
+                  },
+                  maxTokens: {
+                    type: 'number',
+                    label: 'maxTokens',
+                    default: 2048,
+                    min: 256,
+                    component: 'InputNumber'
                   }
                 }
               },
@@ -204,6 +241,7 @@ export const aiWorkflowConfig = {
                 description: '留空=代码内置默认（tools、web）；填写则覆盖 ai-workflow-config 内置默认',
                 itemType: 'string',
                 default: [],
+                enum: ['tools', 'web', 'chat', 'desktop'],
                 component: 'MultiSelect'
               },
               defaultRemoteMcp: {
@@ -212,7 +250,7 @@ export const aiWorkflowConfig = {
                 description: '留空=代码内置默认（tools + web）；填写则覆盖。用户自增 MCP 在 remote.mcpServers',
                 itemType: 'string',
                 default: [],
-                component: 'MultiSelect'
+                component: 'Tags'
               },
               toolMergeStrategy: {
                 type: 'string',
@@ -324,9 +362,10 @@ export const aiWorkflowConfig = {
                 type: 'array',
                 label: '仅对这些工作流/入口注入',
                 description:
-                  '留空=全部生效。填工作流 name（chat、web、desktop、tools…）；填 v3 表示仅对 POST /api/v3/chat/completions 合并 system',
+                  '留空=全部生效。常用：chat、web、desktop、tools、v3（POST /api/v3/chat/completions）',
                 itemType: 'string',
                 default: [],
+                enum: ['chat', 'web', 'desktop', 'tools', 'v3'],
                 component: 'MultiSelect'
               },
               includeRules: {
@@ -349,6 +388,28 @@ export const aiWorkflowConfig = {
                 description: '注入 agents/subagents.yaml（或工作区同名文件）；条目为 prompt 路由提示，非隔离子会话',
                 default: true,
                 component: 'Switch'
+              },
+              includeMicroagents: {
+                type: 'boolean',
+                label: '触发式 microagents',
+                description: '扫描 agents/microagents、.openhands/microagents、带 triggers 的 SKILL.md；用户文本命中则整段注入',
+                default: true,
+                component: 'Switch'
+              },
+              maxMicroagents: {
+                type: 'number',
+                label: '最多激活 microagents 数',
+                default: 5,
+                min: 1,
+                max: 20,
+                component: 'InputNumber'
+              },
+              maxMicroagentsChars: {
+                type: 'number',
+                label: 'microagents 注入字符上限',
+                default: 12000,
+                min: 500,
+                component: 'InputNumber'
               },
               includeDiagnostics: {
                 type: 'boolean',
@@ -380,7 +441,7 @@ export const aiWorkflowConfig = {
                 description: '相对工作区根的路径列表（如 docs/NOTE.md），安全读入后追加到 prose',
                 itemType: 'string',
                 default: [],
-                component: 'ArrayForm'
+                component: 'Tags'
               },
               maxCandidatesPerRoot: {
                 type: 'number',
@@ -429,7 +490,7 @@ export const aiWorkflowConfig = {
                   '可填相对项目根或绝对路径；为空则回退 agents/skills/standard（示例：`agents/skills/standard/core`）',
                 itemType: 'string',
                 default: [],
-                component: 'ArrayForm'
+                component: 'Tags'
               },
               maxRulesChars: {
                 type: 'number',
@@ -457,16 +518,154 @@ export const aiWorkflowConfig = {
               }
             }
           },
+          policies: {
+            type: 'array',
+            label: '运行时策略',
+            description:
+              'opencode Policy：{ effect, action, resource }。action=provider.use|tool.call|mcp.connect；effect=allow|deny|ask（ask 依赖 security.approval，默认未开则拒绝）；最后匹配生效；空=全允许',
+            itemType: 'object',
+            default: [],
+            component: 'ArrayForm',
+            fields: {
+              effect: {
+                type: 'string',
+                label: 'effect',
+                description: 'allow | deny | ask',
+                enum: ['allow', 'deny', 'ask'],
+                default: 'deny',
+                component: 'Select'
+              },
+              action: {
+                type: 'string',
+                label: 'action',
+                description: 'provider.use / tool.call / mcp.connect',
+                enum: ['provider.use', 'tool.call', 'mcp.connect'],
+                default: 'tool.call',
+                component: 'Select'
+              },
+              resource: {
+                type: 'string',
+                label: 'resource',
+                description: '厂商 key、工具名或远程 MCP 服务器名；支持 * ?',
+                default: '*',
+                component: 'Input'
+              }
+            }
+          },
+          security: {
+            type: 'object',
+            label: '安全（扫描 / 危险指令审批）',
+            description:
+              'MCP 执行前：toolScan 扫危险命令；approval 默认关，仅危险 ask 时可开主人私聊审批（#批准 / #批准id）',
+            component: 'SubForm',
+            fields: {
+              toolScan: {
+                type: 'object',
+                label: '工具威胁扫描',
+                description: 'goose 式模式匹配；默认开启。处置：deny / ask / allow',
+                component: 'SubForm',
+                fields: {
+                  enabled: {
+                    type: 'boolean',
+                    label: '启用扫描',
+                    description: '关闭后不再拦截危险 command 等参数',
+                    default: true,
+                    component: 'Switch'
+                  },
+                  onCritical: {
+                    type: 'string',
+                    label: 'critical 处置',
+                    description: 'deny | ask（删盘、curl|bash 等）',
+                    enum: ['deny', 'ask'],
+                    default: 'deny',
+                    component: 'Select'
+                  },
+                  onHigh: {
+                    type: 'string',
+                    label: 'high 处置',
+                    description: 'deny | ask | allow',
+                    enum: ['deny', 'ask', 'allow'],
+                    default: 'ask',
+                    component: 'Select'
+                  },
+                  onMedium: {
+                    type: 'string',
+                    label: 'medium 处置',
+                    description: 'deny | ask | allow',
+                    enum: ['deny', 'ask', 'allow'],
+                    default: 'allow',
+                    component: 'Select'
+                  },
+                  argKeys: {
+                    type: 'array',
+                    label: '优先扫描的参数键',
+                    description: '默认 command/cmd/script/code/shell/powershell；可增补业务字段名',
+                    itemType: 'string',
+                    default: ['command', 'cmd', 'script', 'code', 'shell', 'powershell'],
+                    component: 'Tags'
+                  },
+                  masterBypassAsk: {
+                    type: 'boolean',
+                    label: '主人调用直接放行 ask',
+                    description: 'e.isMaster 时对 ask 放行并记日志（与 approval 开关无关）',
+                    default: true,
+                    component: 'Switch'
+                  }
+                }
+              },
+              approval: {
+                type: 'object',
+                label: '危险指令交互审批',
+                description:
+                  '默认关闭。开启后：非主人触发的 ask 会私聊主人；#批准 / #批准id / #批准 id（空格可选）；仅一条时可只发 #批准；关闭则 ask=拒绝',
+                component: 'SubForm',
+                fields: {
+                  enabled: {
+                    type: 'boolean',
+                    label: '启用审批',
+                    description: '默认 false。日常保持关闭；需要审批危险指令时再开',
+                    default: false,
+                    component: 'Switch'
+                  },
+                  timeoutMs: {
+                    type: 'number',
+                    label: '超时毫秒',
+                    description: '等待主人 #批准/#拒绝；超时按拒绝',
+                    default: 120000,
+                    min: 5000,
+                    component: 'InputNumber'
+                  }
+                }
+              }
+            }
+          },
+          recipes: {
+            type: 'object',
+            label: '配方 Recipes',
+            description:
+              'agents/recipes/*.yaml；聊天 /recipes、/recipe <id> [k=v]；可选 cron（scheduleEnabled）',
+            component: 'SubForm',
+            fields: {
+              scheduleEnabled: {
+                type: 'boolean',
+                label: '启用配方 cron',
+                description: '默认 false。true 时注册配方 cron 字段（插件默认仅打日志，不自动跑 LLM）',
+                default: false,
+                component: 'Switch'
+              }
+            }
+          },
           embedding: {
             type: 'object',
-            label: 'RAG / 记忆增强',
-            description: '全局合并到各 AiWorkflow.embeddingConfig；开启后 MemoryManager 短期召回 + memory 工作流长期记忆 + 知识库 RAG',
+            label: '上下文增强（关键词召回）',
+            description:
+              '合并到各 AiWorkflow.embeddingConfig。现行实现为 MemoryManager 关键词打分 + 知识库检索，不是向量 embedding；字段名 embedding 为历史兼容',
             component: 'SubForm',
             fields: {
               enabled: {
                 type: 'boolean',
                 label: '启用上下文增强',
-                description: '关闭则跳过 storeMessageMemory 与 retrieveKnowledgeContexts（各工作流仍可单独 enabled: false）',
+                description: '关闭则跳过短期记忆写入/召回与知识库 retrieveKnowledgeContexts',
                 default: true,
                 component: 'Switch'
               },
@@ -478,6 +677,218 @@ export const aiWorkflowConfig = {
                 max: 50,
                 default: 5,
                 component: 'InputNumber'
+              }
+            }
+          },
+          context: {
+            type: 'object',
+            label: '上下文压缩',
+            description: '超预算时用辅/主模型摘要中间段并保留近期原文（opencode/goose/aider 融合）',
+            component: 'SubForm',
+            fields: {
+              compaction: {
+                type: 'object',
+                label: '自动压缩',
+                component: 'SubForm',
+                fields: {
+                  enabled: {
+                    type: 'boolean',
+                    label: '启用',
+                    default: true,
+                    component: 'Switch'
+                  },
+                  auto: {
+                    type: 'boolean',
+                    label: '自动触发',
+                    default: true,
+                    component: 'Switch'
+                  },
+                  threshold: {
+                    type: 'number',
+                    label: '触发比例',
+                    description: '估算 tokens > budget×threshold 时压缩',
+                    default: 0.85,
+                    min: 0.5,
+                    max: 1,
+                    component: 'InputNumber'
+                  },
+                  keepRecentTokens: {
+                    type: 'number',
+                    label: '保留近期 tokens',
+                    default: 8000,
+                    min: 1000,
+                    component: 'InputNumber'
+                  },
+                  toolOutputMaxChars: {
+                    type: 'number',
+                    label: '压缩前 tool 输出截断',
+                    description: '摘要前对过长 tool 结果截断，避免辅模型吃满上下文',
+                    default: 2000,
+                    min: 200,
+                    component: 'InputNumber'
+                  },
+                  summaryMaxTokens: {
+                    type: 'number',
+                    label: '摘要 maxTokens',
+                    default: 2048,
+                    min: 256,
+                    component: 'InputNumber'
+                  },
+                  useAux: {
+                    type: 'boolean',
+                    label: '优先辅模型',
+                    description: 'true 时用 llm.aux；未配置则回退主模型',
+                    default: true,
+                    component: 'Switch'
+                  },
+                  maxMessages: {
+                    type: 'number',
+                    label: '消息条数上限触发',
+                    description: 'OpenHands condenser_max_size：>0 且条数超限也压缩；0=仅按 token 比例',
+                    default: 0,
+                    min: 0,
+                    component: 'InputNumber'
+                  },
+                  preserveLastUser: {
+                    type: 'boolean',
+                    label: '保留最后一条用户消息',
+                    default: true,
+                    component: 'Switch'
+                  },
+                  backup: {
+                    type: 'object',
+                    label: '压缩前备份',
+                    description: '对齐 agent-zero：备份完整 messages，路径写入 checkpoint',
+                    component: 'SubForm',
+                    fields: {
+                      enabled: {
+                        type: 'boolean',
+                        label: '启用备份',
+                        default: true,
+                        component: 'Switch'
+                      },
+                      dir: {
+                        type: 'string',
+                        label: '备份目录',
+                        description: '留空= ~/.xrk/compaction-backups',
+                        default: '',
+                        component: 'Input'
+                      },
+                      maxFiles: {
+                        type: 'number',
+                        label: '最多保留文件数',
+                        default: 40,
+                        min: 5,
+                        component: 'InputNumber'
+                      }
+                    }
+                  },
+                  sessionCache: {
+                    type: 'object',
+                    label: '压缩会话 sidecar',
+                    description: 'cline：前缀哈希缓存落盘，重启后同前缀可跳过辅模型摘要',
+                    component: 'SubForm',
+                    fields: {
+                      persist: {
+                        type: 'boolean',
+                        label: '落盘持久化',
+                        default: true,
+                        component: 'Switch'
+                      },
+                      dir: {
+                        type: 'string',
+                        label: '缓存目录',
+                        description: '留空= ~/.xrk/compaction-sessions',
+                        default: '',
+                        component: 'Input'
+                      },
+                      maxFiles: {
+                        type: 'number',
+                        label: '最多保留文件数',
+                        default: 80,
+                        min: 10,
+                        component: 'InputNumber'
+                      }
+                    }
+                  }
+                }
+              },
+              toolPair: {
+                type: 'object',
+                label: '旧工具结果投影',
+                description: 'goose tool_pair：出站前压缩过旧 role=tool 内容，不改持久历史',
+                component: 'SubForm',
+                fields: {
+                  enabled: {
+                    type: 'boolean',
+                    label: '启用',
+                    default: true,
+                    component: 'Switch'
+                  },
+                  protectLastN: {
+                    type: 'number',
+                    label: '保护最近 N 条 tool',
+                    default: 6,
+                    min: 1,
+                    max: 50,
+                    component: 'InputNumber'
+                  },
+                  maxResultChars: {
+                    type: 'number',
+                    label: '摘要后最大字符',
+                    default: 400,
+                    min: 80,
+                    component: 'InputNumber'
+                  },
+                  batchSize: {
+                    type: 'number',
+                    label: '每轮最多压缩条数',
+                    default: 10,
+                    min: 1,
+                    max: 30,
+                    component: 'InputNumber'
+                  },
+                  useLlm: {
+                    type: 'boolean',
+                    label: '辅模型批摘要',
+                    description: 'true 时用 llm.aux 对旧 tool 写一句话（goose）；失败回退启发式',
+                    default: false,
+                    component: 'Switch'
+                  }
+                }
+              },
+              chatHistory: {
+                type: 'object',
+                label: '群聊历史笔录',
+                description: 'ChatStream 注入 [群聊记录] 的条数策略（OpenHands keep_first）',
+                component: 'SubForm',
+                fields: {
+                  limit: {
+                    type: 'number',
+                    label: '普通触发条数',
+                    default: 15,
+                    min: 5,
+                    max: 80,
+                    component: 'InputNumber'
+                  },
+                  globalLimit: {
+                    type: 'number',
+                    label: '旁观闲聊条数',
+                    default: 20,
+                    min: 5,
+                    max: 80,
+                    component: 'InputNumber'
+                  },
+                  keepFirst: {
+                    type: 'number',
+                    label: '保留最早锚点条数',
+                    description: '0=仅尾部；>0 时保留最早 N 条 + 尾部凑满 limit',
+                    default: 0,
+                    min: 0,
+                    max: 20,
+                    component: 'InputNumber'
+                  }
+                }
               }
             }
           },

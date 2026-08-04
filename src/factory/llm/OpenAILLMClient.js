@@ -1,5 +1,9 @@
 import { buildFetchOptionsWithProxy } from '../../utils/llm/proxy-utils.js';
 import { partitionAndExecuteToolCalls } from '../../utils/llm/tool-partition-utils.js';
+import {
+  appendToolBudgetExhaustedNudge,
+  toolBudgetFinalizeOverrides
+} from '../../utils/llm/tool-loop-finalize.js';
 import { buildOpenAIChatCompletionsBody, applyOpenAITools } from '../../utils/llm/openai-chat-utils.js';
 import { transformMessagesWithVision } from '../../utils/llm/message-transform.js';
 import { ensureMessagesImagesDataUrl } from '../../utils/llm/image-utils.js';
@@ -108,6 +112,31 @@ export default class OpenAILLMClient {
     }
 
     const lastContent = currentMessages[currentMessages.length - 1]?.content || '';
+    try {
+      const finalizeMsgs = appendToolBudgetExhaustedNudge(currentMessages);
+      const resp = await fetch(
+        this.endpoint,
+        buildFetchOptionsWithProxy(this.config, {
+          method: 'POST',
+          headers: this.buildHeaders(overrides.headers),
+          body: JSON.stringify(
+            this.buildBody(finalizeMsgs, toolBudgetFinalizeOverrides({ ...overrides }))
+          ),
+          signal: AbortSignal.timeout(this.timeout)
+        })
+      );
+      if (resp.ok) {
+        const result = await resp.json();
+        const content = result?.choices?.[0]?.message?.content || lastContent;
+        return executedToolNames.length > 0 ? { content, executedToolNames } : content;
+      }
+    } catch (err) {
+      RuntimeUtil.makeLog(
+        'warn',
+        `[OpenAILLMClient] 工具轮次收尾失败: ${Error.isError(err) ? err.message : String(err)}`,
+        'LLMFactory'
+      );
+    }
     return executedToolNames.length > 0 ? { content: lastContent, executedToolNames } : lastContent;
   }
 
@@ -169,6 +198,30 @@ export default class OpenAILLMClient {
         round++;
         if (round >= maxToolRounds) {
           RuntimeUtil.makeLog('warn', `[OpenAILLMClient] 达到最大工具调用轮数: ${maxToolRounds}`, 'LLMFactory');
+          try {
+            const finalizeMsgs = appendToolBudgetExhaustedNudge(currentMessages);
+            const finalResp = await fetch(
+              this.endpoint,
+              buildFetchOptionsWithProxy(this.config, {
+                method: 'POST',
+                headers: this.buildHeaders(overrides.headers),
+                body: JSON.stringify(
+                  this.buildBody(finalizeMsgs, toolBudgetFinalizeOverrides({ ...overrides, stream: true }))
+                ),
+                signal: AbortSignal.timeout(this.timeout)
+              })
+            );
+            if (finalResp.ok && finalResp.body) {
+              const collector = { toolCalls: [], content: '', finishReason: null };
+              await this._consumeSSEWithToolCalls(finalResp, onDelta, collector, overrides);
+            }
+          } catch (err) {
+            RuntimeUtil.makeLog(
+              'warn',
+              `[OpenAILLMClient] 流式工具轮次收尾失败: ${Error.isError(err) ? err.message : String(err)}`,
+              'LLMFactory'
+            );
+          }
           break;
         }
         continue;

@@ -13,6 +13,7 @@ import GeminiCompatibleLLMClient from './GeminiCompatibleLLMClient.js';
 import AnthropicCompatibleLLMClient from './AnthropicCompatibleLLMClient.js';
 import AzureOpenAICompatibleLLMClient from './AzureOpenAICompatibleLLMClient.js';
 import runtimeConfig from '#infrastructure/config/config.js';
+import { assertProviderAllowed } from '#utils/runtime-policy.js';
 
 const builtinClientFactories = new Map([
   // builtin：各厂商官方 SDK/文档路径，禁止与 openai_compat 混用
@@ -262,6 +263,8 @@ export default class LLMFactory {
         : '请在各工厂 providers[] 中添加端点，并在请求中指定 provider';
       throw new Error(`未指定 LLM 提供商：${hint}`);
     }
+
+    assertProviderAllowed(provider);
 
     const resolved = this.getProviderConfig(provider);
     if (!resolved) {

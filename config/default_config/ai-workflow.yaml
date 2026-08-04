@@ -26,8 +26,14 @@ llm:
   retry:
     enabled: true
     maxAttempts: 3
-    delay: 2000        # 重试间隔（毫秒）
-    retryOn: ["timeout", "network", "5xx"]
+    delay: 2000        # 重试间隔（毫秒）；429 时优先尊重 Retry-After
+    retryOn: ["timeout", "network", "5xx", "rate_limit", "empty"]
+  # 辅模型（goose fast / aider weak）：摘要等轻量任务；resolveAuxLLMConfig()
+  aux:
+    Provider: ""
+    model: ""
+    temperature: 0.3
+    maxTokens: 2048
   # Provider 提示缓存：提高前缀命中率、降低 input token 费用（OpenAI / Anthropic / DeepSeek 等）
   promptCache:
     enabled: true
@@ -83,6 +89,7 @@ agentWorkspace:
   includeRules: true
   includeAgentMd: true
   includeSubagents: true
+  includeMicroagents: true   # OpenHands：frontmatter triggers 命中则整段注入
   includeDiagnostics: false   # true 时在缺失 MEMORY.md 时追加简短诊断提示
   # 0 = 不限制 prose 总长；Skills 仍受 maxSkillsPromptChars 约束
   maxTotalChars: 0
@@ -101,11 +108,88 @@ agentWorkspace:
   maxRulesChars: 12000
   maxAgentMdChars: 12000
   maxSubagentsChars: 4000    # agents/subagents.yaml 注入预算（OpenCode 式 mode/when/skills 清单）
+  maxMicroagents: 5          # 单轮最多激活的 triggers microagent 数
+  maxMicroagentsChars: 12000 # microagent 注入总字符上限
 
-# RAG / 记忆增强（AiWorkflowLoader.applyEmbeddingConfig 合并到各工作流 embeddingConfig）
+# 运行时策略（opencode Policy；最后匹配生效；空=全部允许）
+# action: provider.use | tool.call | mcp.connect
+# effect: allow | deny | ask（ask：工具仍会出现在列表，执行时见 security.approval；未开审批则拒绝）
+# resource: 支持 * / ? 通配；mcp.connect 的 resource=远程 MCP 服务器名
+policies: []
+# 示例：
+# policies:
+#   - { effect: deny, action: provider.use, resource: "*" }
+#   - { effect: allow, action: provider.use, resource: "anthropic*" }
+#   - { effect: deny, action: tool.call, resource: "run" }
+#   - { effect: deny, action: mcp.connect, resource: "untrusted*" }
+
+# ----------------------------------------
+# 安全：威胁扫描 + 危险指令审批（MCP 执行前）
+# ----------------------------------------
+# toolScan：goose 式危险命令模式（curl|bash、删盘等）。enabled 默认开。
+# approval：仅针对「危险/ask」场景的主人交互审批；默认关闭，不影响日常工具。
+#   - enabled=false（默认）：ask → 直接拒绝（主人本人调用且 masterBypassAsk 仍可放行）
+#   - enabled=true：私聊主人；回复 #批准 / #批准<编号> / #批准 <编号>（空格可选）；#拒绝 同理
+#   - 仅一条待批时可只发 #批准
+security:
+  toolScan:
+    enabled: true            # 是否扫描工具参数（重点 command/cmd/script 等）
+    onCritical: deny         # critical：deny | ask
+    onHigh: ask              # high：deny | ask | allow
+    onMedium: allow          # medium：deny | ask | allow
+    # 优先扫描的参数键（可增补）；仍会附带整份 args JSON 截断扫描
+    argKeys: [command, cmd, script, code, shell, powershell]
+    masterBypassAsk: true    # 调用者 e.isMaster 时对 ask 直接放行（仍打日志）
+  approval:
+    enabled: false           # 默认关。true=危险 ask 时私聊主人等批；关则 ask=拒绝
+    timeoutMs: 120000        # 等待批准超时（毫秒）；超时按拒绝
+
+# ----------------------------------------
+# 配方 Recipes（goose）
+# ----------------------------------------
+# 文件：agents/recipes/*.yaml（及工作区 recipes/）
+# 斜杠：/recipes 列表；/recipe <id> [k=v] 注入 instructions+prompt
+recipes:
+  scheduleEnabled: false     # true=注册配方内 cron 字段（recipe-schedule 插件；默认仅打日志）
+
+# 上下文增强（历史字段名 embedding；现行为关键词打分召回，非向量）
+# AiWorkflowLoader.applyEmbeddingConfig 合并到各工作流 embeddingConfig
 embedding:
   enabled: true
   maxContexts: 5
+
+# 上下文压缩（opencode checkpoint + goose 阈值 + aider 摘要；需 contextWindow 或显式预算）
+context:
+  compaction:
+    enabled: true
+    auto: true
+    threshold: 0.85          # est > budget * threshold 才摘要
+    keepRecentTokens: 8000
+    toolOutputMaxChars: 2000
+    summaryMaxTokens: 2048
+    preserveLastUser: true
+    useAux: true             # 优先 llm.aux；无辅模型则回退主模型
+    maxMessages: 0           # OpenHands 式：>0 且消息条数超限也触发压缩；0=仅按 token
+    backup:
+      enabled: true          # 压缩前备份到 ~/.xrk/compaction-backups
+      dir: ""                # 留空=默认目录
+      maxFiles: 40
+    sessionCache:
+      persist: true          # cline sidecar：压缩前缀缓存落盘，重启可复用
+      dir: ""                # 留空= ~/.xrk/compaction-sessions
+      maxFiles: 80
+  # goose 式旧 tool 结果投影压缩（不改持久历史，只改出站 View）
+  toolPair:
+    enabled: true
+    protectLastN: 6
+    maxResultChars: 400
+    batchSize: 10
+    useLlm: false            # true=用 llm.aux 批摘要旧 tool（goose）；默认启发式零成本
+  # 群聊/设备历史注入笔录（chat.mergeMessageHistory）
+  chatHistory:
+    limit: 15                # 普通触发取最近 N 条
+    globalLimit: 20          # 闲聊旁观
+    keepFirst: 0             # OpenHands：>0 时保留最早 N 条锚点 + 尾部
 
 # crawl：web_fetch / web_search / browser（browser 启动参数另合并 renderer/playwright）
 crawl:

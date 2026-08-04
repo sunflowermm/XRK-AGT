@@ -3,6 +3,7 @@ import { buildFetchOptionsWithProxy } from '../../utils/llm/proxy-utils.js';
 import { fetchAsBase64 } from '../../utils/llm/image-utils.js';
 import { iterateSSE } from '../../utils/llm/sse-utils.js';
 import { ensureAnthropicMaxTokens, normalizeAnthropicMessages } from '../../utils/llm/anthropic-chat-utils.js';
+import { applyAnthropicThinking } from '../../utils/llm/reasoning-budget.js';
 import { logPromptCacheUsage } from '../../utils/llm/prompt-cache-policy.js';
 
 /**
@@ -178,6 +179,8 @@ export default class AnthropicLLMClient {
         body.system = systemTexts.join('\n');
       }
     }
+
+    applyAnthropicThinking(body, this.config, overrides);
 
     if (this.config.extraBody && typeof this.config.extraBody === 'object') {
       Object.assign(body, this.config.extraBody);

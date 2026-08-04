@@ -1,10 +1,13 @@
 import RuntimeUtil from '#utils/runtime-util.js';
 import { countVisionInContent } from '#utils/llm/vision-content.js';
+import { resolveSlashCommand } from '#utils/slash-commands.js';
+import { getWorkflowRequestContext } from '#infrastructure/ai-workflow/workflow-request-context.js';
 
 /**
  * LLM 消息组装（工作流 / HTTP 共用）。
  *
  * 稳定分层（内容语义对齐 Yunzai，实现仍走本仓库 Loader / AiWorkflow）：
+ * 0. 斜杠命令展开（/recipe · /skill）
  * 1. `buildChatContext` — `system`（人设+协议+工作区）+ 当前用户消息骨架
  * 2. `mergeMessageHistory` — 群/会话笔录为 user 块（【我】/【我·工具】/他人），当前轮 `[当前消息]`
  * 3. `buildEnhancedContext` — 易变切片（时间/会话/主人）插入 system 后，勿塞进 system 以免搅乱前缀缓存
@@ -14,15 +17,77 @@ import { countVisionInContent } from '#utils/llm/vision-content.js';
  *
  * 工具调用轨迹：用户可见靠 reply MCP；下一轮延续靠 `recordToolCallResult`，不往用户气泡贴「使用了」。
  */
-export async function assembleChatLlmMessages(stream, e, question) {
-  const questionObj = question != null && typeof question === 'object' && !Array.isArray(question)
-    ? question
-    : null;
-  const enhancedQuestion = questionObj ?? (Array.isArray(question) ? undefined : question);
 
-  let messages = Array.isArray(question)
-    ? question
-    : await stream.buildChatContext(e, questionObj ?? question);
+/**
+ * @param {unknown} question
+ * @returns {{ question: unknown, systemExtra: string, replyOnly: string|null }}
+ */
+function applySlashToQuestion(question) {
+  let text = '';
+  if (typeof question === 'string') text = question;
+  else if (question && typeof question === 'object' && !Array.isArray(question)) {
+    text = String(question.content ?? question.text ?? '');
+  }
+  if (!text.trim().startsWith('/')) {
+    return { question, systemExtra: '', replyOnly: null };
+  }
+  const resolved = resolveSlashCommand(text);
+  if (!resolved.handled) return { question, systemExtra: '', replyOnly: null };
+  if (resolved.replyOnly) {
+    return { question, systemExtra: '', replyOnly: resolved.replyOnly };
+  }
+  if (typeof question === 'string') {
+    return { question: resolved.text || question, systemExtra: resolved.systemExtra || '', replyOnly: null };
+  }
+  if (question && typeof question === 'object' && !Array.isArray(question)) {
+    const next = { ...question };
+    if (next.content != null) next.content = resolved.text || next.content;
+    else next.text = resolved.text || next.text;
+    return { question: next, systemExtra: resolved.systemExtra || '', replyOnly: null };
+  }
+  return { question, systemExtra: resolved.systemExtra || '', replyOnly: null };
+}
+
+function injectSystemExtra(messages, systemExtra) {
+  if (!systemExtra || !Array.isArray(messages) || !messages.length) return messages;
+  const first = messages[0];
+  if (first?.role === 'system' && typeof first.content === 'string') {
+    return [
+      { ...first, content: `${first.content}\n\n${systemExtra}` },
+      ...messages.slice(1)
+    ];
+  }
+  return [{ role: 'system', content: systemExtra }, ...messages];
+}
+
+export async function assembleChatLlmMessages(stream, e, question) {
+  const slash = applySlashToQuestion(question);
+  if (slash.replyOnly) {
+    if (e?.reply) {
+      try {
+        await e.reply(slash.replyOnly);
+      } catch {
+        /* ignore */
+      }
+    }
+    const turn = getWorkflowRequestContext()?.turnState;
+    if (turn) {
+      turn.replyFlushed = true;
+      turn.slashShortCircuit = true;
+      turn.lastOutboundSummary = slash.replyOnly;
+    }
+    return [];
+  }
+
+  const q = slash.question;
+  const questionObj = q != null && typeof q === 'object' && !Array.isArray(q) ? q : null;
+  const enhancedQuestion = questionObj ?? (Array.isArray(q) ? undefined : q);
+
+  let messages = Array.isArray(q)
+    ? q
+    : await stream.buildChatContext(e, questionObj ?? q);
+
+  messages = injectSystemExtra(messages, slash.systemExtra);
 
   if (e && typeof stream.mergeMessageHistory === 'function') {
     messages = await stream.mergeMessageHistory(messages, e);

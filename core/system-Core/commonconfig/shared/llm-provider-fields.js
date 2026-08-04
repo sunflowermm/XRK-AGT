@@ -43,11 +43,11 @@ const EXTRA_BODY_FIELD = {
   fields: {}
 };
 
-const RUNTIME_FIELDS = ['timeout', 'enableStream', 'headers', 'extraBody', 'proxy'];
+const RUNTIME_FIELDS = ['timeout', 'enableStream', 'variant', 'variants', 'headers', 'extraBody', 'proxy'];
 const IDENTITY_FIELDS = ['key', 'label'];
 const ENDPOINT_FIELDS = ['baseUrl', 'path', 'apiKey'];
 const AUTH_FIELDS = ['authMode', 'authHeaderName'];
-const MODEL_FIELD = ['model'];
+const MODEL_FIELD = ['model', 'contextWindow'];
 const OPENAI_SAMPLING = ['temperature', 'maxTokens', 'tokenField', 'topP', 'presencePenalty', 'frequencyPenalty', 'stop'];
 const OPENAI_OFFICIAL_EXTRA = ['serviceTier', 'promptCacheKey', 'promptCacheRetention', 'safetyIdentifier', 'reasoningEffort'];
 const TOOL_FIELDS = ['enableTools', 'toolChoice', 'parallelToolCalls', 'maxToolRounds'];
@@ -200,6 +200,13 @@ function baseProviderEntryFields(options = {}) {
       min: 1,
       component: 'InputNumber'
     },
+    contextWindow: {
+      type: 'number',
+      label: 'contextWindow',
+      description: '模型上下文窗口（token）。填写后 AiWorkflow.callAI 按预算裁剪历史（保留 system + 尾部）',
+      min: 1000,
+      component: 'InputNumber'
+    },
     maxOutputTokens: {
       type: 'number',
       label: 'max_output_tokens',
@@ -248,7 +255,7 @@ function baseProviderEntryFields(options = {}) {
     thinkingType: {
       type: 'string',
       label: 'thinking.type',
-      description: '火山豆包：enabled/disabled/auto；MiMo 官方仅 enabled/disabled',
+      description: '火山/MiMo：enabled/disabled/auto；Anthropic：enabled 时配合 reasoningEffort→budget_tokens（cline 比例）',
       enum: ['disabled', 'enabled', 'auto'],
       component: 'Select'
     },
@@ -311,7 +318,7 @@ function baseProviderEntryFields(options = {}) {
     reasoningEffort: {
       type: 'string',
       label: 'reasoning_effort',
-      description: '推理强度：none～xhigh（依模型支持）',
+      description: '推理强度 none～xhigh；Anthropic 映射为 thinking.budget_tokens（high≈80% max_tokens）',
       enum: ['none', 'minimal', 'low', 'medium', 'high', 'xhigh'],
       component: 'Select'
     },
@@ -365,6 +372,18 @@ function baseProviderEntryFields(options = {}) {
       description: 'SSE/流式输出；部分网关不支持时关闭',
       default: true,
       component: 'Switch'
+    },
+    variant: {
+      type: 'string',
+      label: '默认 variant',
+      description: '选中 variants 中的预设 id（如 high）；请求可覆盖',
+      component: 'Input'
+    },
+    variants: {
+      type: 'object',
+      label: 'variants 预设',
+      description: 'opencode 轻量版：{ high: { reasoningEffort, temperature, extraBody } }',
+      component: 'JsonEditor'
     },
     headers: HEADERS_FIELD,
     extraBody: EXTRA_BODY_FIELD,

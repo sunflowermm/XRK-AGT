@@ -14,11 +14,11 @@ description: MCP 全工具地图、参数要点、search_replace vs write、失�
 
 | 前缀 | 工作流名 | 默认 | 典型场景 |
 |------|----------|------|----------|
-| `tools.*` | tools | **开** | 读写改删、grep、run |
+| `tools.*` | tools | **开** | 读写改删、grep、run、apply_edit、verify、repo_map、todos |
 | `web.*` | web | **开** | web_search、web_fetch |
 | `desktop.*` | desktop | 关 | 打开路径、剪贴板、截图 |
 | `browser.*` | browser | 关 | JS 页、表单、多标签 |
-| `memory.*` | memory | 关 | 向量记忆 save/query |
+| `memory.*` | memory | 关 | 长期记忆 save/query（关键词，非向量） |
 | `chat.*` | chat | 视配置 | QQ 群管（办公通常不用） |
 | `remote-mcp.*` | 用户配置 | 视 yaml | 第三方 MCP |
 
@@ -56,7 +56,16 @@ description: MCP 全工具地图、参数要点、search_replace vs write、失�
 | `newText` | 替换后文本（可为 `""`） |
 | `replaceAll` | 默认 false；多处相同须 true 或加长 oldText |
 
-**流程**：`grep`（可选）→ `read` 确认片段 → `search_replace`
+**流程**：`grep`（可选）→ `read` 确认片段 → `search_replace`；多文件批量用 **apply_edit**。
+
+### apply_edit（aider SEARCH/REPLACE 批量）
+
+| 参数 | 说明 |
+|------|------|
+| `patch` | 一个或多个块：`path\\n<<<<<<< SEARCH\\n旧\\n=======\\n新\\n>>>>>>> REPLACE` |
+| `dryRun` | true=只校验不写盘 |
+
+改完用 **verify**（传 lint/test 命令）做闭环。危险 `run`/`verify` 命令会被 `security.toolScan` 拦截。
 
 **失败恢复**：
 
@@ -107,6 +116,32 @@ description: MCP 全工具地图、参数要点、search_replace vs write、失�
 - 输出超 `maxCommandOutputChars` → **truncated**；应 `write` 到 `exports/` 再 read
 
 执行前：说明命令 + 影响 + 等确认（见 **office-env-shell**）。
+
+### verify
+
+| 参数 | 说明 |
+|------|------|
+| `command` | 校验命令（如 `node --check path.js` / `pnpm test`）；需 `runEnabled` |
+
+### repo_map
+
+| 参数 | 说明 |
+|------|------|
+| `query` | 任务关键词（符号/文件名/主题），提高相关文件排序 |
+| `maxTokens` | 地图文本预算（默认约 1200） |
+
+陌生工作区：**先 repo_map 再 grep/read**，避免盲目 list_files。
+
+### update_todos
+
+| 参数 | 说明 |
+|------|------|
+| `todos` | 完整待办数组（覆盖写入） |
+| `todos[].id` | 稳定短 id |
+| `todos[].content` | 内容 |
+| `todos[].status` | `pending` / `in_progress` / `completed` / `cancelled` |
+
+多步任务：开工前列清单，完成一步立刻更新；便于自检与断点续作。
 
 ---
 
@@ -184,6 +219,8 @@ docx/xlsx/pdf **无** desktop MCP；走 `run` + office-* skills。
 | 改配置 / 草稿几行 | read → search_replace |
 | 新建纪要 / 脚本 | write |
 | 搜关键字 | grep |
+| 配方任务 | `/recipes` 列表；`/recipe <id> k=v` 注入 instructions+prompt |
+| 危险 run | 默认扫描拦截；`security.approval` 默认关（ask=拒）。开启后主人 `#批准`/`#批准id`（空格可选） |
 | 跑 Python / pandoc | tools.run |
 | 开放域搜网 | web.web_search |
 | 已知 URL 摘要 | web.web_fetch |

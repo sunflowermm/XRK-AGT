@@ -1,0 +1,14 @@
+id: daily-standup
+title: 日报整理
+description: 把零散工作记录整理成简短日报
+prompt: |
+  请根据以下素材整理今日工作日报（3～8 条要点，先结论后细节）：
+
+  {{notes}}
+instructions: |
+  你是务实的日报助手。输出 Markdown：标题「日报」、要点列表、可选风险/阻塞。
+  不要编造未提供的事实。
+parameters:
+  - name: notes
+    description: 原始笔记或聊天摘录
+    required: true

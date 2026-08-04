@@ -2565,10 +2565,16 @@ export default class ChatStream extends AiWorkflow {
       '',
       '## 工作区与 skills',
       '- 「Workspace context」含 AGENTS / rules / **skills**（按 location 用 tools.read 加载）',
+      '- triggers 命中的 microagents 会整段注入；其余 skill 按 location 用 tools.read 加载',
       '- 发文件前确认工作区路径存在',
     ];
 
-    return this.finalizeSystemPromptContent(lines.join('\n'));
+    const userText = typeof question === 'string'
+      ? question
+      : (question?.content ?? question?.text ?? e?.msg ?? '');
+    return this.finalizeSystemPromptContent(lines.join('\n'), {
+      userText: String(userText || '')
+    });
   }
 
   /** 动态轮次上下文（独立 user 消息，不污染可缓存的 system 前缀） */
@@ -2923,8 +2929,28 @@ export default class ChatStream extends AiWorkflow {
       }
 
       const sectionLabel = String(historyKey).startsWith('device_') ? '[近期对话]' : '[群聊记录]';
-      const historyLimit = isGlobalTrigger ? 20 : 15;
-      const recentMessages = uniqueHistory.slice(-historyLimit);
+      const histCfg = getAiWorkflowConfigOptional()?.context?.chatHistory ?? {};
+      const defaultLimit = isGlobalTrigger ? 20 : 15;
+      const configured = isGlobalTrigger
+        ? (typeof histCfg.globalLimit === 'number' ? histCfg.globalLimit : defaultLimit)
+        : (typeof histCfg.limit === 'number' ? histCfg.limit : defaultLimit);
+      const historyLimit = Math.min(80, Math.max(5, configured));
+      const keepFirst = typeof histCfg.keepFirst === 'number' ? Math.max(0, histCfg.keepFirst) : 0;
+      let recentMessages = uniqueHistory.slice(-historyLimit);
+      // OpenHands keep_first：条数很多时保留最早 N 条锚点 + 尾部
+      if (keepFirst > 0 && uniqueHistory.length > historyLimit) {
+        const head = uniqueHistory.slice(0, keepFirst);
+        const tailBudget = Math.max(1, historyLimit - head.length);
+        const tail = uniqueHistory.slice(-tailBudget);
+        const seen = new Set(head.map((m) => ChatStream.historyEntryId(m)).filter(Boolean));
+        recentMessages = [...head];
+        for (const m of tail) {
+          const id = ChatStream.historyEntryId(m);
+          if (id && seen.has(id)) continue;
+          if (id) seen.add(id);
+          recentMessages.push(m);
+        }
+      }
       const historyFooter = isGlobalTrigger
         ? '\n\n（闲聊旁观：想接哪句接哪句，也可不引用直接说话。勿全文总结、勿逐条点评、勿重复【我】已说过的话。）'
         : '\n\n（说明：以上从上到下由早到晚；【我·工具】= 该步已完成；【我】= 你已回复；**只回应下方 `[当前消息]`**；有 `[引用消息]` 时先认清用户在回谁。普通说话勿带 `[回复:ID]`；要挂引用气泡才写 `[回复:xxx]`。）';
@@ -3015,9 +3041,13 @@ export default class ChatStream extends AiWorkflow {
         if (e) this.recordMessage(e);
 
         const messages = await assembleChatLlmMessages(this, e, question);
+        const turn = getWorkflowRequestContext()?.turnState;
+        // /recipes 等斜杠已直接回复
+        if (turn?.slashShortCircuit) {
+          return turn.lastOutboundSummary || '';
+        }
         logLlmMessagePreview(this, messages, 'ChatStream');
 
-        const turn = getWorkflowRequestContext()?.turnState;
         const aiResult = await this.callAI(messages, config);
 
         // reply 已在工具轮内发出：即使 LLM 收尾轮被跳过/返回空，也视为成功

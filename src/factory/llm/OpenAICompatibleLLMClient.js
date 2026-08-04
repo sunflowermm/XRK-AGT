@@ -7,6 +7,11 @@ import { cleanupMessages } from '../../utils/llm/message-cleanup.js';
 import RuntimeUtil from '../../utils/runtime-util.js';
 import { iterateSSE } from '../../utils/llm/sse-utils.js';
 import { logPromptCacheUsage } from '../../utils/llm/prompt-cache-policy.js';
+import {
+  appendToolBudgetExhaustedNudge,
+  toolBudgetFinalizeOverrides
+} from '../../utils/llm/tool-loop-finalize.js';
+import { createLlmHttpError } from '../../utils/llm/llm-http-error.js';
 
 /**
  * OpenAI 兼容第三方网关客户端（NewAPI / CherryIN / 自建反代等）。
@@ -145,7 +150,10 @@ export default class OpenAICompatibleLLMClient {
     if (!resp.ok) {
       const text = await resp.text().catch(() => '');
       const tag = stream ? '流式请求失败' : '请求失败';
-      throw new Error(`openai_compat ${tag}: ${resp.status} ${resp.statusText}${text ? ` | ${text}` : ''}`);
+      throw createLlmHttpError(
+        `openai_compat ${tag}: ${resp.status} ${resp.statusText}${text ? ` | ${text}` : ''}`,
+        { status: resp.status, headers: resp.headers }
+      );
     }
     if (stream && !resp.body) {
       RuntimeUtil.makeLog(
@@ -309,10 +317,30 @@ export default class OpenAICompatibleLLMClient {
     }
 
     RuntimeUtil.makeLog('warn', `[OpenAICompatibleLLMClient] 达到最大工具调用轮数: ${maxToolRounds}`, 'LLMFactory');
-    return {
-      content: state.messages[state.messages.length - 1]?.content || '',
-      executedToolNames: Array.from(state.toolNameSet)
-    };
+    try {
+      const finalizeMsgs = appendToolBudgetExhaustedNudge(
+        cleanupMessages(state.messages, { ensureUserFirst: false })
+      );
+      const roundResult = await handlers.requestRound(
+        finalizeMsgs,
+        toolBudgetFinalizeOverrides(overrides),
+        state
+      );
+      return {
+        content: roundResult?.content || '',
+        executedToolNames: Array.from(state.toolNameSet)
+      };
+    } catch (err) {
+      RuntimeUtil.makeLog(
+        'warn',
+        `[OpenAICompatibleLLMClient] 工具轮次收尾失败: ${Error.isError(err) ? err.message : String(err)}`,
+        'LLMFactory'
+      );
+      return {
+        content: '',
+        executedToolNames: Array.from(state.toolNameSet)
+      };
+    }
   }
 
   async chat(messages, overrides = {}) {

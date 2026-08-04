@@ -5,6 +5,8 @@ import { ensureMessagesImagesDataUrl } from '../../utils/llm/image-utils.js';
 import { iterateSSE } from '../../utils/llm/sse-utils.js';
 import { partitionAndExecuteToolCalls } from '../../utils/llm/tool-partition-utils.js';
 import { MCPToolAdapter } from '../../utils/llm/mcp-tool-adapter.js';
+import { appendToolBudgetExhaustedNudge } from '../../utils/llm/tool-loop-finalize.js';
+import { createLlmHttpError } from '../../utils/llm/llm-http-error.js';
 import RuntimeUtil from '../../utils/runtime-util.js';
 
 function isOpenAIResponsesBuiltInTool(tool) {
@@ -258,7 +260,10 @@ export default class OpenAIResponsesCompatibleLLMClient {
 
     if (!resp.ok) {
       const text = await resp.text().catch(() => '');
-      throw new Error(`openai_responses_compat 请求失败: ${resp.status} ${resp.statusText}${text ? ` | ${text}` : ''}`);
+      throw createLlmHttpError(
+        `openai_responses_compat 请求失败: ${resp.status} ${resp.statusText}${text ? ` | ${text}` : ''}`,
+        { status: resp.status, headers: resp.headers }
+      );
     }
 
     return resp;
@@ -296,7 +301,24 @@ export default class OpenAIResponsesCompatibleLLMClient {
     }
 
     RuntimeUtil.makeLog('warn', `[OpenAIResponsesCompatibleLLMClient] 达到最大工具调用轮数: ${maxToolRounds}`, 'LLMFactory');
-    return executedToolNames.length ? { content: '', executedToolNames } : '';
+    try {
+      const finalizeInput = toResponsesInput(appendToolBudgetExhaustedNudge([]));
+      const resp = await this.requestResponses(
+        finalizeInput,
+        { ...overrides, tools: [], tool_choice: 'none' },
+        { stream: false, previousResponseId }
+      );
+      const json = await resp.json();
+      const text = extractResponsesText(json);
+      return executedToolNames.length ? { content: text || '', executedToolNames } : (text || '');
+    } catch (err) {
+      RuntimeUtil.makeLog(
+        'warn',
+        `[OpenAIResponsesCompatibleLLMClient] 工具轮次收尾失败: ${Error.isError(err) ? err.message : String(err)}`,
+        'LLMFactory'
+      );
+      return executedToolNames.length ? { content: '', executedToolNames } : '';
+    }
   }
 
   /**
@@ -386,5 +408,20 @@ export default class OpenAIResponsesCompatibleLLMClient {
     }
 
     RuntimeUtil.makeLog('warn', `[OpenAIResponsesCompatibleLLMClient] 达到最大工具调用轮数: ${maxToolRounds}`, 'LLMFactory');
+    try {
+      const finalizeInput = toResponsesInput(appendToolBudgetExhaustedNudge([]));
+      const resp = await this.requestResponses(
+        finalizeInput,
+        { ...overrides, tools: [], tool_choice: 'none' },
+        { stream: true, previousResponseId }
+      );
+      await this.consumeResponsesStream(resp, onDelta, overrides);
+    } catch (err) {
+      RuntimeUtil.makeLog(
+        'warn',
+        `[OpenAIResponsesCompatibleLLMClient] 流式工具轮次收尾失败: ${Error.isError(err) ? err.message : String(err)}`,
+        'LLMFactory'
+      );
+    }
   }
 }

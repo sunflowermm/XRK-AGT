@@ -9,6 +9,13 @@ import { estimateTokensMixed } from '#utils/token-estimate.js';
 import { applyPromptCachePolicy } from '#utils/llm/prompt-cache-policy.js';
 import { resolveStreamLLMConfig } from '#utils/llm/llm-config-resolve.js';
 import { runWithLlmRetry } from '#utils/llm/llm-retry.js';
+import { createLlmHttpError } from '#utils/llm/llm-http-error.js';
+import {
+  resolveInputTokenBudget,
+  trimMessagesToTokenBudget
+} from '#utils/llm/message-token-budget.js';
+import { compactMessagesIfNeeded } from '#utils/llm/context-compaction.js';
+import { projectToolPairViewAsync } from '#utils/llm/tool-pair-compact.js';
 import {
   getWorkflowRequestContext,
   runWithWorkflowRequestContext
@@ -21,6 +28,7 @@ import {
 } from '#infrastructure/ai-workflow/chat-tool-streams.js';
 import { normalizeStringArray } from '#utils/string-array-utils.js';
 import { unpackFactoryChatRaw } from '#utils/llm/llm-nonstream-reply.js';
+import { createUserVisibleTurnState } from '#utils/chat-user-visible-ack.js';
 import { assembleChatLlmMessages, logLlmMessagePreview } from '#infrastructure/ai-workflow/chat-pipeline.js';
 
 export default class AiWorkflow {
@@ -151,7 +159,7 @@ export default class AiWorkflow {
       const memories = await MemoryManager.searchShortTermMemories(userId, query, 5);
       return memories.map((m) => ({
         message: m.content,
-        similarity: 0.8,
+        similarity: typeof m.score === 'number' ? m.score : 0.5,
         time: m.timestamp,
         userId,
         nickname: m.metadata?.nickname || ''
@@ -334,12 +342,12 @@ export default class AiWorkflow {
    * @param {string} text
    * @returns {Promise<string>}
    */
-  async finalizeSystemPromptContent(text) {
+  async finalizeSystemPromptContent(text, opts = {}) {
     if (text == null || text === '') text = '';
     const streamKey = String(this.name || '').replace(/-merged$/, '') || this.name;
     const aux = collectAuxiliaryStreamPrompts(this);
     const merged = aux ? `${text}${aux}` : text;
-    return appendAgentWorkspaceToPrompt(merged, getAiWorkflowConfigOptional(), streamKey);
+    return appendAgentWorkspaceToPrompt(merged, getAiWorkflowConfigOptional(), streamKey, opts);
   }
 
   /**
@@ -354,7 +362,12 @@ export default class AiWorkflow {
   async buildChatContext(e, question) {
     const systemPrompt = await this.buildSystemPrompt({ e, question });
     if (!systemPrompt) return [];
-    const content = await this.finalizeSystemPromptContent(systemPrompt);
+    const userText = typeof question === 'string'
+      ? question
+      : (question?.text ?? question?.content ?? e?.msg ?? '');
+    const content = await this.finalizeSystemPromptContent(systemPrompt, {
+      userText: String(userText || '')
+    });
     return [{ role: 'system', content }];
   }
 
@@ -380,7 +393,9 @@ export default class AiWorkflow {
       e: getWorkflowRequestContext()?.e ?? null,
     });
 
-    const inputTokens = messages.reduce((sum, m) => {
+    const outbound = await this.prepareOutboundMessages(messages, config);
+
+    const inputTokens = outbound.reduce((sum, m) => {
       const content = typeof m.content === 'string' ? m.content : (m.content?.text || '');
       return sum + this.estimateTokens(content);
     }, 0);
@@ -390,10 +405,10 @@ export default class AiWorkflow {
     return runWithLlmRetry({
       label: this.name,
       kind: 'AI调用',
-      run: async () => {
+      run: async (_attempt) => {
         const client = LLMFactory.createClient(config);
         const overrides = this.buildCallOverrides(config, apiConfig, { stream: false });
-        const raw = await client.chat(messages, overrides);
+        const raw = await client.chat(outbound, overrides);
         const { text, usedReplyTool, toolRoundsExhausted, executedToolNames } = unpackFactoryChatRaw(raw);
         const content = text != null ? String(text) : '';
         MonitorService.recordTokens(traceId, { output: this.estimateTokens(content) });
@@ -407,8 +422,15 @@ export default class AiWorkflow {
         if (usedReplyTool || executedToolNames.length > 0) {
           return { content: '', executedToolNames, usedReplyTool };
         }
+        // 对齐 cline empty-turn：无文本且无工具时抛错以触发重试
+        throw createLlmHttpError('empty LLM response', { code: 'empty_turn' });
+      }
+    }).catch((err) => {
+      if (err?.code === 'empty_turn' || /empty llm response/i.test(String(err?.message || ''))) {
+        RuntimeUtil.makeLog('warn', `[${this.name}] AI 连续空响应，放弃本轮`, 'AiWorkflow');
         return null;
       }
+      throw err;
     });
   }
 
@@ -445,9 +467,10 @@ export default class AiWorkflow {
         kind: 'AI流式调用',
         run: async () => {
           fullText = '';
+          const outbound = await this.prepareOutboundMessages(messages, config);
           const client = LLMFactory.createClient(config);
           const overrides = this.buildCallOverrides(config, apiConfig, { stream: true });
-          await client.chatStream(messages, wrapDelta, overrides);
+          await client.chatStream(outbound, wrapDelta, overrides);
           return fullText;
         }
       });
@@ -461,6 +484,44 @@ export default class AiWorkflow {
   resolveLLMConfig(apiConfig = {}) {
     const merged = resolveStreamLLMConfig(this, apiConfig);
     return this.patchLLMConfig(merged, apiConfig);
+  }
+
+  /**
+   * 出站消息准备：aux 摘要压缩（可选）→ contextWindow 尾部裁剪。
+   * @param {Array<Object>} messages
+   * @param {object} config - resolveLLMConfig 结果
+   * @returns {Promise<Array<Object>>}
+   */
+  async prepareOutboundMessages(messages, config = {}) {
+    // OpenHands 式：不改原历史，只投影出站 View
+    let outbound = Array.isArray(messages) ? messages : [];
+    const { messages: toolView } = await projectToolPairViewAsync(outbound, {
+      contextWindow: config.contextWindow,
+      threshold: getAiWorkflowConfigOptional()?.context?.compaction?.threshold,
+      fallbackConfig: config
+    });
+    outbound = toolView;
+
+    const budget = resolveInputTokenBudget(config);
+    if (budget > 0) {
+      const { messages: compacted, compacted: did } = await compactMessagesIfNeeded(outbound, {
+        budgetTokens: budget,
+        estimate: (t) => this.estimateTokens(t),
+        label: this.name,
+        fallbackConfig: config
+      });
+      outbound = compacted;
+      const trimmed = trimMessagesToTokenBudget(outbound, budget, (t) => this.estimateTokens(t));
+      if (trimmed.length < outbound.length) {
+        RuntimeUtil.makeLog(
+          'info',
+          `[${this.name}] 按 contextWindow 裁剪消息 ${outbound.length}→${trimmed.length}（budget≈${budget}${did ? ', post-compact' : ''}）`,
+          'AiWorkflow'
+        );
+      }
+      outbound = trimmed;
+    }
+    return outbound;
   }
 
   /**
@@ -506,6 +567,11 @@ export default class AiWorkflow {
 
       try {
         const messages = await assembleChatLlmMessages(this, e, question);
+        const turnEarly = getWorkflowRequestContext()?.turnState;
+        if (turnEarly?.slashShortCircuit) {
+          MonitorService.endTrace(traceId, { success: true, response: turnEarly.lastOutboundSummary || '' });
+          return turnEarly.lastOutboundSummary || '';
+        }
         MonitorService.addStep(traceId, { step: 'build_context', messages: messages.length });
         logLlmMessagePreview(this, messages, 'AiWorkflow');
 
@@ -549,7 +615,7 @@ export default class AiWorkflow {
     };
 
     if (getWorkflowRequestContext()) return run();
-    return runWithWorkflowRequestContext({ e, turnState: null }, run);
+    return runWithWorkflowRequestContext({ e, turnState: createUserVisibleTurnState() }, run);
   }
 
   /**

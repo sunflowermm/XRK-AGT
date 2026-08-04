@@ -107,7 +107,16 @@ export function applyAnthropicTools(body, config = {}, overrides = {}, toolNameM
   if (mcpTools.length) {
     body.tools = toolNameMapper
       ? mcpTools.map((t) => ({ ...t, name: toolNameMapper.normalize(t.name) }))
-      : mcpTools;
+      : mcpTools.slice();
+    const useCache = overrides.anthropic_prompt_cache === true
+      || config.anthropic_prompt_cache === true;
+    if (useCache && body.tools.length > 0) {
+      const last = body.tools[body.tools.length - 1];
+      body.tools[body.tools.length - 1] = {
+        ...last,
+        cache_control: { type: 'ephemeral' }
+      };
+    }
     const choice = overrides.tool_choice ?? overrides.toolChoice ?? config.toolChoice;
     body.tool_choice = mapToolChoice(choice, toolNameMapper);
     RuntimeUtil.makeLog(

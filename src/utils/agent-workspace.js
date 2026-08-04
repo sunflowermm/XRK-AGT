@@ -16,6 +16,12 @@ import { readTextFileUnderWorkspaceRoot } from '#utils/safe-workspace-read.js';
 import { buildSkillsPromptFromWorkspace } from '#utils/agent-workspace-skills.js';
 import { DEFAULT_SKILL_LIMITS } from '#utils/skills/defaults.js';
 import {
+  buildTriggeredMicroagentsSection,
+  extractLastUserText
+} from '#utils/skills/trigger-microagents.js';
+import { createHash } from 'node:crypto';
+import { reconcileSystemContext } from '#utils/llm/system-context.js';
+import {
   AGENTS_MD,
   WORKSPACE_TEMPLATE_RELS,
   LONG_TERM_MEMORY_REL,
@@ -228,7 +234,7 @@ function injectWorkspaceAssistant(workspaceRoot, maxChars, pushProse, { isMainSe
   }
 }
 
-export async function buildAgentWorkspaceSection(agentWorkspaceCfg = {}, streamName = '') {
+export async function buildAgentWorkspaceSection(agentWorkspaceCfg = {}, streamName = '', opts = {}) {
   const runtimeConfig = {
     enabled: true,
     root: '',
@@ -236,11 +242,14 @@ export async function buildAgentWorkspaceSection(agentWorkspaceCfg = {}, streamN
     includeRules: true,
     includeAgentMd: true,
     includeSubagents: true,
+    includeMicroagents: true,
     includeDiagnostics: false,
     maxTotalChars: 0,
     maxRulesChars: 12_000,
     maxAgentMdChars: 12_000,
     maxSubagentsChars: 4_000,
+    maxMicroagentsChars: 12_000,
+    maxMicroagents: 5,
     maxDiagnosticsChars: 2_000,
     maxCandidatesPerRoot: DEFAULT_SKILL_LIMITS.maxCandidatesPerRoot,
     maxSkillsLoadedPerSource: DEFAULT_SKILL_LIMITS.maxSkillsLoadedPerSource,
@@ -360,20 +369,57 @@ export async function buildAgentWorkspaceSection(agentWorkspaceCfg = {}, streamN
     }
   }
 
+  // --- 6. OpenHands 式 triggers microagents（命中则注入全文）---
+  if (runtimeConfig.includeMicroagents !== false) {
+    const userText = typeof opts.userText === 'string' ? opts.userText : '';
+    if (userText.trim()) {
+      const { section } = buildTriggeredMicroagentsSection({
+        userText,
+        maxAgents: runtimeConfig.maxMicroagents,
+        maxChars: runtimeConfig.maxMicroagentsChars,
+        extraRoots: runtimeConfig.customSkillRoots
+      });
+      if (section) parts.push(section);
+    }
+  }
+
   if (!parts.length) return '';
-  return `\n\n---\n\n# Workspace context\n\n${parts.join('\n\n')}\n`;
+
+  // opencode SystemContext：分源指纹；未变则复用已渲染文本（稳定 prefix cache）
+  const proseText = proseSections.join('\n\n');
+  const restParts = parts.slice(proseSections.length);
+  const sources = [];
+  if (proseText) {
+    sources.push({
+      key: 'workspace/prose',
+      fingerprint: createHash('sha256').update(proseText).digest('hex'),
+      text: proseText
+    });
+  }
+  for (let i = 0; i < restParts.length; i++) {
+    const t = restParts[i];
+    sources.push({
+      key: `workspace/part/${i}`,
+      fingerprint: createHash('sha256').update(t).digest('hex'),
+      text: t
+    });
+  }
+  const sessionKey = `ws:${streamName || 'default'}:${workspaceRoot}`;
+  const { text: body } = reconcileSystemContext(sessionKey, sources);
+  return `\n\n---\n\n# Workspace context\n\n${body}\n`;
 }
 
-export async function appendAgentWorkspaceToPrompt(basePrompt, aiWorkflowCfg = {}, streamName = '') {
+export async function appendAgentWorkspaceToPrompt(basePrompt, aiWorkflowCfg = {}, streamName = '', opts = {}) {
   if (basePrompt == null) return basePrompt;
-  const extra = await buildAgentWorkspaceSection(sliceWorkspaceCfg(aiWorkflowCfg), streamName);
+  const extra = await buildAgentWorkspaceSection(sliceWorkspaceCfg(aiWorkflowCfg), streamName, opts);
   if (!extra) return String(basePrompt);
   return `${basePrompt}${extra}`;
 }
 
 export async function mergeAgentWorkspaceIntoMessages(messages, aiWorkflowCfg = {}, streamName = '') {
   if (!Array.isArray(messages)) return messages;
-  const extra = await buildAgentWorkspaceSection(sliceWorkspaceCfg(aiWorkflowCfg), streamName);
+  const userText = extractLastUserText(messages);
+  const extra = await buildAgentWorkspaceSection(sliceWorkspaceCfg(aiWorkflowCfg), streamName, { userText });
   if (!extra) return messages;
   const first = messages[0];
   if (first?.role === 'system' && typeof first.content === 'string') {

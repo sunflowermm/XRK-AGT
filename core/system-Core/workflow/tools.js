@@ -5,19 +5,25 @@ import { BaseTools } from '#utils/base-tools.js';
 import { InputValidator } from '#utils/input-validator.js';
 import { resolveConfiguredWorkspace, ensureAgentWorkspaceSync, getConfiguredDefaultWorkspaceId } from '../lib/ai-workspace-runtime.js';
 import { exec } from '#utils/exec-async.js';
+import { buildRepoMapLite } from '#utils/workspace/repo-map-lite.js';
+import { applyEditBlocks } from '#utils/workspace/apply-edit-blocks.js';
 const IS_WINDOWS = process.platform === 'win32';
 
 /**
  * 基础工具工作流（配置：ai-workflow.tools.file）
  *
- * MCP：read / grep / search_replace / write / delete_file / list_files / run
+ * MCP：read / grep / search_replace / write / delete_file / list_files / run /
+ *      apply_edit / verify / repo_map / update_todos
  */
 export default class ToolsStream extends AiWorkflow {
+  /** 工作区级会话待办（对齐 OpenCode todowrite / Cline plan） */
+  sessionTodos = new Map();
+
   constructor() {
     super({
       name: 'tools',
-      description: '基础工具：read/grep/search_replace/write/delete_file/list_files/run',
-      version: '1.0.6',
+      description: '基础工具：read/grep/search_replace/write/apply_edit/verify/delete_file/list_files/run/repo_map/update_todos',
+      version: '1.0.7',
       author: 'XRK',
       priority: 200, // 高优先级，基础工具
       config: {
@@ -44,7 +50,8 @@ export default class ToolsStream extends AiWorkflow {
         typeof fileCfg.grepMaxResults === 'number' && Number.isFinite(fileCfg.grepMaxResults)
           ? Math.min(500, Math.max(1, Math.floor(fileCfg.grepMaxResults)))
           : 100,
-      runEnabled: fileCfg.runEnabled !== false,
+      // 与 schema / 默认 yaml / auth 强制 Key 一致：须显式 true 才开 shell
+      runEnabled: fileCfg.runEnabled === true,
       runTimeoutMs:
         typeof fileCfg.runTimeoutMs === 'number' && Number.isFinite(fileCfg.runTimeoutMs)
           ? Math.max(1000, Math.floor(fileCfg.runTimeoutMs))
@@ -315,7 +322,7 @@ export default class ToolsStream extends AiWorkflow {
 
     this.registerMCPTool('run', {
       description:
-        '在工作区目录下执行 shell 命令。Windows：CMD 或 PowerShell（Get-/Set- 等前缀走 PowerShell）；Linux/macOS：/bin/sh -lc。受 ai-workflow.tools.file.runEnabled / runTimeoutMs 约束。',
+        '在工作区目录下执行 shell 命令。Windows：CMD 或 PowerShell（Get-/Set- 等前缀走 PowerShell）；Linux/macOS：/bin/sh -lc。受 ai-workflow.tools.file.runEnabled / runTimeoutMs 约束；危险命令经 security.toolScan 拦截。',
       inputSchema: {
         type: 'object',
         properties: {
@@ -360,6 +367,180 @@ export default class ToolsStream extends AiWorkflow {
         } catch (err) {
           return { success: false, error: err.message, stderr: err.stderr || '' };
         }
+      },
+      enabled: true
+    });
+
+    this.registerMCPTool('apply_edit', {
+      description:
+        '批量应用 aider 式 SEARCH/REPLACE 块（一次改多文件/多处）。格式：`path\\n<<<<<<< SEARCH\\n旧\\n=======\\n新\\n>>>>>>> REPLACE`。改后建议 verify。',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          patch: {
+            type: 'string',
+            description: '含一个或多个 SEARCH/REPLACE 块的文本'
+          },
+          dryRun: {
+            type: 'boolean',
+            description: '只校验不写盘',
+            default: false
+          }
+        },
+        required: ['patch']
+      },
+      handler: async (args = {}) => {
+        const patch = String(args.patch || '');
+        if (!patch.trim()) return { success: false, error: 'patch 不能为空' };
+        const result = await applyEditBlocks(this.workspace, patch, { dryRun: !!args.dryRun });
+        if (result.success) {
+          return {
+            success: true,
+            raw: `已应用 ${result.applied.length} 块${result.dryRun ? '（dryRun）' : ''}`,
+            data: result
+          };
+        }
+        return {
+          success: false,
+          error: result.error || '部分块失败',
+          data: result
+        };
+      },
+      enabled: true
+    });
+
+    this.registerMCPTool('verify', {
+      description:
+        '改码后校验闭环（aider lint/test 思路）：在工作区执行检查命令（如 pnpm test / node --check file.js）。依赖 runEnabled。',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          command: {
+            type: 'string',
+            description: '校验命令（默认：若未传则尝试 node --check 无意义；请显式传入）'
+          }
+        },
+        required: ['command']
+      },
+      handler: async (args = {}) => {
+        if (!this.fileToolsCfg.runEnabled) {
+          return { success: false, error: 'verify 需要 tools.file.runEnabled=true' };
+        }
+        const command = String(args.command || '').trim();
+        if (!command) return { success: false, error: 'command 不能为空' };
+        try {
+          const { output, stderr } = await this.executeCommand(command);
+          const maxOut = this.fileToolsCfg.maxCommandOutputChars ?? 200_000;
+          return {
+            success: true,
+            data: {
+              command,
+              ok: true,
+              output: String(output || '').slice(0, maxOut),
+              stderr: String(stderr || '').slice(0, maxOut)
+            }
+          };
+        } catch (err) {
+          return {
+            success: false,
+            error: err.message,
+            data: {
+              command,
+              ok: false,
+              stdout: err.stdout || '',
+              stderr: err.stderr || ''
+            }
+          };
+        }
+      },
+      enabled: true
+    });
+
+    this.registerMCPTool('repo_map', {
+      description:
+        '生成工作区轻量代码地图（路径 + 符号骨架，按 query 加权）。大仓定位优先于盲目 list_files；对齐 aider repo map 最小集。',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          query: {
+            type: 'string',
+            description: '当前任务关键词（文件名/符号/主题），用于提高相关文件排序'
+          },
+          maxTokens: {
+            type: 'number',
+            description: '地图文本 token 预算（默认约 1200）'
+          }
+        },
+        required: []
+      },
+      handler: async (args = {}) => {
+        try {
+          const map = await buildRepoMapLite(this.workspace, {
+            query: args.query || '',
+            maxTokens: typeof args.maxTokens === 'number' ? args.maxTokens : 1200
+          });
+          return {
+            success: true,
+            raw: map.text,
+            data: { files: map.files, count: map.files.length }
+          };
+        } catch (err) {
+          return { success: false, error: Error.isError(err) ? err.message : String(err) };
+        }
+      },
+      enabled: true
+    });
+
+    this.registerMCPTool('update_todos', {
+      description:
+        '更新当前工作区会话的待办清单（多步任务时用）。传入完整 todos 数组覆盖；status: pending|in_progress|completed|cancelled。完成关键步骤后立刻更新，便于自检与续作。',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          todos: {
+            type: 'array',
+            description: '完整待办列表（覆盖写入）',
+            items: {
+              type: 'object',
+              properties: {
+                id: { type: 'string', description: '稳定 id（短英文或数字）' },
+                content: { type: 'string', description: '待办内容' },
+                status: {
+                  type: 'string',
+                  enum: ['pending', 'in_progress', 'completed', 'cancelled'],
+                  description: '状态'
+                }
+              },
+              required: ['id', 'content', 'status']
+            }
+          }
+        },
+        required: ['todos']
+      },
+      handler: async (args = {}) => {
+        const todos = Array.isArray(args.todos) ? args.todos : null;
+        if (!todos) return { success: false, error: 'todos 必须为数组' };
+        const normalized = [];
+        for (const item of todos) {
+          if (!item || typeof item !== 'object') continue;
+          const id = String(item.id || '').trim();
+          const content = String(item.content || '').trim();
+          const status = String(item.status || 'pending').trim();
+          if (!id || !content) continue;
+          if (!['pending', 'in_progress', 'completed', 'cancelled'].includes(status)) {
+            return { success: false, error: `非法 status: ${status}` };
+          }
+          normalized.push({ id, content, status });
+        }
+        const key = String(this.workspace || 'default');
+        this.sessionTodos.set(key, normalized);
+        const open = normalized.filter((t) => t.status === 'pending' || t.status === 'in_progress').length;
+        const done = normalized.filter((t) => t.status === 'completed').length;
+        return {
+          success: true,
+          raw: `待办已更新：共 ${normalized.length} 项（进行中/待办 ${open}，完成 ${done}）`,
+          data: { todos: normalized, open, done }
+        };
       },
       enabled: true
     });
@@ -412,9 +593,10 @@ export default class ToolsStream extends AiWorkflow {
 
   buildSystemPrompt() {
     const ws = this.workspace;
-    return `【基础工具】read / grep / search_replace / write / delete_file / list_files / run
+    return `【基础工具】read / grep / search_replace / write / delete_file / list_files / run / repo_map / update_todos
 工作区 cwd: ${ws}
-改已有文件：grep → read → search_replace（oldText/newText）。write 仅新建；已存在须 overwrite=true 才整文件覆盖。已移除 modify_file。run 受超时约束，勿伪造输出。`;
+陌生仓库先 repo_map(query=任务关键词) 再 grep/read。改已有文件：grep → read → search_replace。write 仅新建；已存在须 overwrite=true。
+多步任务用 update_todos。run 默认关闭（runEnabled=true 才开）。`;
   }
 }
 

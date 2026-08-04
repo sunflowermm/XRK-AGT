@@ -1,5 +1,6 @@
 import AiWorkflowLoader from '#infrastructure/ai-workflow/loader.js';
 import RuntimeUtil from '#utils/runtime-util.js';
+import { filterToolsByPolicy } from '#utils/runtime-policy.js';
 
 /**
  * MCP 工具适配器
@@ -8,6 +9,7 @@ import RuntimeUtil from '#utils/runtime-util.js';
  * - 将 AiWorkflowLoader 暴露的 MCP 工具转换为 OpenAI tools 数组格式，供各 LLM 工厂在构造请求体时注入
  * - 在收到 OpenAI style tool_calls 时，实际调用 MCP 工具，并返回 role=tool 的消息列表
  * - 基于 workflows/allowedTools 做工具白名单过滤：保证"未通过接口声明的工具"不会被调用
+ * - 安全/策略门禁在 MCPServer.handleToolCall 统一执行（覆盖 LLM / HTTP / WS / JSON-RPC）
  */
 export class MCPToolAdapter {
   /**
@@ -53,22 +55,27 @@ export class MCPToolAdapter {
   }
 
   static convertMCPToolsToOpenAI(options = {}) {
-    return this.listMcpTools(options).map((tool) => ({
-      type: 'function',
-      function: {
-        name: tool.name,
-        description: tool.description || '',
-        parameters: this.convertSchemaToOpenAI(tool.inputSchema || {})
-      }
-    }));
+    const tools = filterToolsByPolicy(
+      this.listMcpTools(options).map((tool) => ({
+        type: 'function',
+        function: {
+          name: tool.name,
+          description: tool.description || '',
+          parameters: this.convertSchemaToOpenAI(tool.inputSchema || {})
+        }
+      }))
+    );
+    return tools;
   }
 
   static convertMCPToolsToAnthropic(options = {}) {
-    return this.listMcpTools(options).map((tool) => ({
-      name: tool.name,
-      description: tool.description || '',
-      input_schema: this.convertSchemaToOpenAI(tool.inputSchema || {})
-    }));
+    return filterToolsByPolicy(
+      this.listMcpTools(options).map((tool) => ({
+        name: tool.name,
+        description: tool.description || '',
+        input_schema: this.convertSchemaToOpenAI(tool.inputSchema || {})
+      }))
+    );
   }
 
   /**

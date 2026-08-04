@@ -1,5 +1,6 @@
 import RuntimeUtil from '#utils/runtime-util.js';
 import { summarizeToolResultText } from '#utils/mcp-tool-result-text.js';
+import { inspectToolCallSecurity } from '#utils/security/tool-security-inspect.js';
 import os from 'os';
 
 /**
@@ -133,6 +134,7 @@ export class MCPServer {
 
     const tool = this.tools.get(name);
     const isRemote = name.startsWith('remote-mcp.');
+    const callArgs = args || {};
 
     RuntimeUtil.makeLog(
       'info',
@@ -141,13 +143,35 @@ export class MCPServer {
     );
 
     try {
+      const security = await inspectToolCallSecurity(name, callArgs);
+      if (!security.ok) {
+        RuntimeUtil.makeLog(
+          'warn',
+          `MCP 工具调用被安全/策略拦截: ${name}`,
+          'MCPServer'
+        );
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify({
+                success: false,
+                error: security.error,
+                findings: security.findings
+              }, null, 2)
+            }
+          ],
+          isError: true
+        };
+      }
+
       // 验证参数schema（如果提供）
       if (tool.inputSchema && tool.inputSchema.properties) {
-        this.validateArguments(args || {}, tool.inputSchema);
+        this.validateArguments(callArgs, tool.inputSchema);
       }
 
       // 调用工具handler
-      const result = await tool.handler(args || {});
+      const result = await tool.handler(callArgs);
       
       // 格式化响应（符合MCP标准）
       // 如果result已经是MCP标准格式（有content数组），直接返回

@@ -2,6 +2,7 @@ import RuntimeUtil from '#utils/runtime-util.js';
 import { getAiWorkflowConfigOptional } from '#utils/ai-workflow-config.js';
 import LLMFactory from '#factory/llm/LLMFactory.js';
 import { pickFirstDefined, pickTrimmed, pickNonEmptyUrl, shallowMergePlain } from '#utils/coerce-pick.js';
+import { resolveProviderVariantPatch } from '#utils/llm/provider-variant.js';
 
 /**
  * 工作流运行时 LLM 配置分层合并（非 request body 组装）。
@@ -62,10 +63,12 @@ export function resolveStreamLLMConfig(stream, apiConfig = {}) {
   const proxy = shallowMergePlain(providerConfig.proxy, runtimeConfig.proxy, apiConfig.proxy);
 
   // 先 spread 保留 providers[] 中的厂商扩展字段（thinkingType、region、deployment 等）
+  const variantPatch = resolveProviderVariantPatch(providerConfig, apiConfig);
   const merged = {
     ...providerConfig,
     ...runtimeConfig,
-    ...apiConfig
+    ...apiConfig,
+    ...variantPatch
   };
 
   assignDefined(merged, {
@@ -99,6 +102,16 @@ export function resolveStreamLLMConfig(stream, apiConfig = {}) {
       providerConfig.max_tokens,
       llm.maxTokens,
       llm.max_tokens
+    ),
+    contextWindow: pick(
+      apiConfig.contextWindow,
+      apiConfig.context_window,
+      runtimeConfig.contextWindow,
+      runtimeConfig.context_window,
+      providerConfig.contextWindow,
+      providerConfig.context_window,
+      llm.contextWindow,
+      llm.context_window
     ),
     topP: pick(
       apiConfig.topP,
@@ -223,3 +236,32 @@ export function resolveStreamLLMConfig(stream, apiConfig = {}) {
   const { _clientClass, factoryType, ...out } = merged;
   return out;
 }
+
+/**
+ * 弱/辅模型配置（对齐 goose fast_model / aider weak_model）。
+ * 用于摘要、命名、压缩等轻量任务；未配置则返回 null。
+ * @param {object} [apiConfig]
+ * @returns {object|null}
+ */
+export function resolveAuxLLMConfig(apiConfig = {}) {
+  const ai = getAiWorkflowConfigOptional();
+  const aux = ai.llm?.aux || {};
+  const providerRaw = String(
+    apiConfig.provider || aux.Provider || aux.provider || ''
+  ).toLowerCase().trim();
+  if (!providerRaw || !LLMFactory.hasProvider(providerRaw)) return null;
+
+  const base = resolveStreamLLMConfig(
+    { config: {}, name: 'aux' },
+    {
+      ...apiConfig,
+      provider: providerRaw,
+      model: apiConfig.model ?? aux.model,
+      temperature: apiConfig.temperature ?? aux.temperature ?? 0.3,
+      maxTokens: apiConfig.maxTokens ?? aux.maxTokens ?? 2048,
+      enableTools: false
+    }
+  );
+  return { ...base, provider: providerRaw, _aux: true };
+}
+

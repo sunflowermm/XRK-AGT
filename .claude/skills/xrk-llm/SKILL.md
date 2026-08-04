@@ -7,17 +7,31 @@ description: 当你需要配置/新增/排查 LLM 提供商（OpenAI/Azure/Gemin
 
 `docs/factory.md`、`src/factory/llm/LLMFactory.js`、`core/system-Core/http/ai.js`
 
-## 约定
+## 出站链
 
-- v3 请求 `model` = **provider key**；真实模型在 YAML 的 `model`/`chatModel`（Azure 用 `deployment`）。
-- 配置：`data/server_bots/{port}/<provider>_llm.yaml` 或 `*_compat_llm.yaml`（`providers[].key`）。
-- Schema：`core/system-Core/commonconfig/*.js` 与 YAML 字段一致。
-- **HTTP**：LLM 客户端使用**全局 `fetch`** + `buildFetchOptionsWithProxy`（`#utils/llm/proxy-utils.js`）。**禁止** `node-fetch`、`https-proxy-agent`。
-- 超时：`AbortSignal.timeout`；完整清单见 skill **`xrk-node-runtime`**。
+```
+slash/recipe → messages → toolPair → compaction(+sidecar) → trim → LLM
+```
 
-## 排障顺序
+并行：`policies` + `security.toolScan`（可选 `approval`）+ SystemContext 指纹。
 
-1. provider 是否在 `LLMFactory.listProviders()` / `GET /api/v3/models`
-2. `model` 是否为 provider key
-3. `baseUrl` + `path` 拼接与 `authMode`
-4. `enableStream`、`enableTools` 与 `workflow.workflows` 白名单
+## 体系级吸收
+
+| 子系统 | 来源 | AGT 落点 |
+|--------|------|----------|
+| Policy / 威胁扫描 / 交互审批（默认关） | opencode/goose | `security.toolScan` · `security.approval.enabled=false` · `#批准`/`#批准id` |
+| Recipe + slash | goose | `recipes/` · `slash-commands.js` · `/recipe` |
+| 配方 cron（轻量） | goose scheduler | `recipe-schedule` 插件 · `recipes.scheduleEnabled` |
+| Compaction 事件 | OpenHands/cline | `MonitorService` `context:compaction` |
+| prefix sidecar / SystemContext | cline/opencode | 既有模块 |
+| apply_edit / verify / repo_map | aider | tools MCP |
+| triggers microagents | OpenHands | `trigger-microagents.js` |
+
+## 仍未吸收
+
+真沙箱/Docker、向量记忆、多 agent critic、完整 Condensation 事件流、tree-sitter 官方 tags、Recipe 无人值守自动跑 LLM。
+
+## 关键配置
+
+- `security.toolScan` · `security.approval` · `recipes.scheduleEnabled`
+- `policies[]` · `context.compaction.sessionCache` · `llm.aux`

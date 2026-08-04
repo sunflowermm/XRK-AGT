@@ -3,6 +3,10 @@ import { buildFetchOptionsWithProxy } from '../../utils/llm/proxy-utils.js';
 import { iterateSSE } from '../../utils/llm/sse-utils.js';
 import { partitionAndExecuteToolCalls } from '../../utils/llm/tool-partition-utils.js';
 import {
+  appendToolBudgetExhaustedNudge,
+  toolBudgetFinalizeOverrides
+} from '../../utils/llm/tool-loop-finalize.js';
+import {
   applyAnthropicTools,
   ensureAnthropicMaxTokens,
   normalizeAnthropicMessages,
@@ -246,6 +250,25 @@ export default class AnthropicCompatibleLLMClient extends AnthropicLLMClient {
 
     RuntimeUtil.makeLog('warn', `[AnthropicCompatibleLLMClient] 达到最大工具轮数: ${maxRounds}`, 'LLMFactory');
     if (typeof overrides.onTruncated === 'function') overrides.onTruncated();
+    try {
+      const finalizeMsgs = appendToolBudgetExhaustedNudge(currentMessages);
+      const body = this.buildBody(finalizeMsgs, toolBudgetFinalizeOverrides({ ...overrides }));
+      body.stream = false;
+      body.tool_choice = { type: 'none' };
+      const resp = await this._postMessages(body, overrides);
+      const json = await resp.json();
+      const parsed = this._parseMessageToolUses(json);
+      if (parsed.text) {
+        if (stream && typeof onDelta === 'function') onDelta(parsed.text);
+        return parsed.text;
+      }
+    } catch (err) {
+      RuntimeUtil.makeLog(
+        'warn',
+        `[AnthropicCompatibleLLMClient] 工具轮次收尾失败: ${Error.isError(err) ? err.message : String(err)}`,
+        'LLMFactory'
+      );
+    }
     return lastText;
   }
 

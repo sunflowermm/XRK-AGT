@@ -2,6 +2,7 @@ import { spawn } from 'node:child_process';
 import RuntimeUtil from '#utils/runtime-util.js';
 import { resolveCommandSpawn } from '#utils/command-spawn.js';
 import { getAiWorkflowConfigOptional } from '#utils/ai-workflow-config.js';
+import { checkMcpConnectAllowed } from '#utils/runtime-policy.js';
 
 /**
  * 远程 MCP 客户端宿主：stdio / HTTP / WebSocket transport，
@@ -285,6 +286,12 @@ export class RemoteMcpController {
    * 创建远程MCP客户端并注册工具
    */
   async _createRemoteMCPClient(serverName, config) {
+    const connectGate = checkMcpConnectAllowed(serverName);
+    if (!connectGate.ok) {
+      this._makeLog('warn', connectGate.error);
+      return;
+    }
+
     const runtimeConfig = config && typeof config === 'object' ? config : {};
     this._disposeRemoteMCPServer(serverName);
 
