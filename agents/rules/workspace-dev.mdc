@@ -1,0 +1,37 @@
+---
+description: 读写硬边界——只写工作区；可读项目根以了解框架；写 Core 走 agent-core-dev
+alwaysApply: true
+---
+
+# 读写硬边界（必须遵守）
+
+## 一句话
+
+**写 = 只在本工作区；读 = 工作区 + 项目根（了解框架）。**  
+工具层也会拒绝写出工作区；不要用 `run` 绕过。
+
+## 写（write / search_replace / delete / apply_edit）
+
+| 允许 | 禁止 |
+|------|------|
+| 本工作区内任意用户文件（文稿、`skills/`、`memory/`…） | 任何 `../../../` 落到工作区外的路径 |
+| **项目业务代码**仅：`core/workspace-Core/**`（或用户点名的本工作区 `core/<名>/`） | 写 `src/`、`.cursor/`、仓库 `core/system-Core`、其它产品 Core、`package.json` |
+
+用户若要求「改框架 / 改仓库 core」：说明你办不到，请用 Cursor / 维护者；你最多 **read** 后给方案。
+
+## 读（充分了解项目 —— 鼓励）
+
+相对工作区根，项目根 = `../../../`。写码或答架构前按需 read，**不要凭印象**：
+
+| 目的 | 路径（相对工作区） |
+|------|-------------------|
+| 技能索引 | `../../../.cursor/skills/SKILL_INDEX.md` |
+| 架构总览 | `../../../.cursor/skills/xrk-project-overview/SKILL.md` |
+| 运行时裸名 / 挂载 | `../../../docs/runtime-surface.md` |
+| 扩展点 / 放码 | `../../../docs/框架可扩展性指南.md` · `../../../docs/base-classes.md` |
+| 编码 / Node26 | `../../../.cursor/skills/xrk-coding-style/SKILL.md` · `xrk-node-runtime` |
+| 插件 / HTTP | `../../../.cursor/skills/xrk-plugins/SKILL.md` · `xrk-http-api` |
+| `#` 别名真源 | `../../../package.json`（`imports` 字段） |
+| 官方示例（只读对照） | `../../../core/system-Core/plugin/` 等 |
+
+写 Core 业务：先 **agent-core-dev**，再按上表补读。办公任务用 office-*，不必读 xrk-*。

@@ -32,6 +32,9 @@ description: 办事 Agent 总控：工作循环、完整技能路由、降级、
 |--------|------|------|
 | 0 | 任何任务开始前环境不明 | **office-env-setup**（扫 ENV.md） |
 | 1 | 要用 MCP / 改文件 / run | **agent-tools** |
+| 1b | 装技能 / 同步种子 / CLI | **agent-skillhub** |
+| 1c | 写新 skill / 改 SKILL 结构 | **agent-build-skill** |
+| 1d | 写工作区 Core / 问架构扩展 | **agent-core-dev**（再按表只读 `../../../.cursor/skills` · `docs`） |
 | 2 | 开放域搜网、无具体 URL | **agent-search** |
 | 3 | JS 页、表单、多步点击 | **agent-browser** + **office-env-web** |
 | 4 | 跨会话偏好、「记住」 | **agent-memory** |
@@ -45,6 +48,9 @@ description: 办事 Agent 总控：工作循环、完整技能路由、降级、
 
 | 用户说 | 加载顺序 |
 |--------|----------|
+| 「帮我装一个日历技能」 | agent-skillhub → agent-tools |
+| 「加个 #签到 插件」 | agent-core-dev →（按需）../../../.cursor/skills/xrk-plugins → agent-tools |
+| 「这项目业务放哪 / 怎么扩展」 | agent-core-dev → xrk-project-overview · docs/runtime-surface |
 | 「把这份 md 转成 Word」 | office-env-setup → office-docx → agent-tools |
 | 「搜一下某政策最新规定」 | agent-search → office-research → answer-format |
 | 「合并目录里 5 个 csv」 | office-env-setup → office-csv → office-env-workspace |
@@ -61,6 +67,9 @@ description: 办事 Agent 总控：工作循环、完整技能路由、降级、
 |------|------|
 | 总控 / 路由 | **agent-core**（本文件） |
 | MCP、改文件约定 | **agent-tools** |
+| 安装 / 更新 / 自建技能 | **agent-skillhub** |
+| 编写 / 改进 SKILL.md | **agent-build-skill** |
+| 工作区 Core 业务层（plugin/http/…） | **agent-core-dev**（导航 `.cursor` 真源） |
 | 中文检索 / 联网 | **agent-search** |
 | 受控浏览器交互 | **agent-browser** |
 | 记忆 | **agent-memory** |
@@ -182,7 +191,8 @@ description: 办事 Agent 总控：工作循环、完整技能路由、降级、
 
 ## 禁止
 
-- 不写 / 不改 `core/*/plugin`、`src/infrastructure`（非本 Agent 职责）
-- 不把 `.cursor/skills/xrk-*` 当办事技能加载
+- **写盘**：仅本工作区；业务 JS 仅 `core/workspace-Core/`（或用户点名的本工作区 `core/<名>/`）
+- **只读**：项目根 `.cursor/`、`docs/`、`src/`、仓库 `core/`——可 read 了解，禁止改；用户要改框架则说明请维护者 / Cursor
+- 不把 `.cursor/skills/xrk-*` 当 office 技能；写 Core 时按 **agent-core-dev** 去 read
 - 不因 skill 列表长而跳过 ENV 与工具契约
-- 不伪造工具成功或文件路径
+- 不伪造工具成功或文件路径；不假装已改仓库文件

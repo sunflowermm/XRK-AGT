@@ -116,9 +116,10 @@ runChatAgent
 
 | 磁盘 | 角色 |
 |------|------|
-| `data/ai-workspace/{id}/` | 运行时工作区（首次从 `agents/workspace` 种子复制） |
-| `agents/rules/` | 行为规则**全文**注入 |
-| `agents/skills/standard/` + 工作区 `skills/` | 技能**目录**（name + location）；细则靠 `tools.read` |
+| `data/ai-workspace/{id}/` | 运行时工作区（首次从 `agents/workspace` 种子复制；含 `skills/`、`rules/`、`core/`） |
+| `agents/rules/` ∪ 工作区 `rules/` | 共享护栏直接读 `agents/rules/`；工作区仅为用户加法（同名才覆盖） |
+| `agents/skills/standard/` + 工作区 `skills/` | 技能目录（name + location）；细则靠 `tools.read`；安装见 agent-skillhub |
+| 工作区 `core/<Core>/plugin/` 等 | 业务插件/API（与仓库/子服 core 一并扫描；写法 **agent-core-dev**，编码真源只读 `.cursor/skills/xrk-*`） |
 | `agents/subagents.yaml`（工作区可覆盖） | 路由提示清单；**不**起隔离子会话 |
 
 ### 注入顺序（固定）
@@ -127,7 +128,7 @@ runChatAgent
 1. assistant     — AGENTS.md · SOUL/USER/IDENTITY/TOOLS/ENV/HEARTBEAT
                    · memory/今天.md、昨天.md · MEMORY.md（主会话）
 2. contextFiles  — 配置额外 md
-3. rules         — agents/rules/**/*.{md,mdc}（maxRulesChars）
+3. rules         — agents/rules（共享）∪ 工作区 rules/（用户加法；同路径覆盖）
 4. Skills        — <available_skills> 目录（maxSkillsPromptChars；可 compact）
 5. Agents        — subagents Primary / Subagents 清单
 ```
@@ -196,9 +197,10 @@ slash 展开（/recipe · /recipes …）
 | 配方 cron | `recipes.scheduleEnabled` · `agents/recipes/` |
 | 语气 / 红线 | 工作区 `AGENTS.md` |
 | 称呼 / 偏好 | `USER.md` · `memory/MEMORY.md` |
-| 行为规则全文 | `agents/rules/` |
-| 技能细则（产品 Agent） | `agents/skills/standard/` 或工作区 `skills/` |
+| 行为规则全文 | `agents/rules/`（共享直接注入）∪ 工作区 `rules/`（用户加法） |
+| 技能细则（产品 Agent） | `agents/skills/standard/` 或工作区 `skills/`（装技能：agent-skillhub） |
 | Coding Agent 技能 | `.cursor/skills/xrk-*`（**不**注入办事助手） |
+| 托管技能同步 | 主人 `#skills更新`（指纹安全，改过的跳过）· `#skills更新 强制`；锁文件 `.xrk/managed-skills-lock.json` |
 | 角色路由提示 | `subagents.yaml` |
 | 消息组装顺序 | `assembleChatLlmMessages` |
 | 工具合并 | `AiWorkflowLoader.mergeWorkflows` |

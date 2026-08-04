@@ -11,6 +11,9 @@ async function validateEnvironment() {
     throw new Error(`Node.js 需 >= v26.0.0，当前: ${process.version}`);
   }
   await paths.ensureBaseDirs();
+  // 先种子默认工作区 core/，再 warmup，PluginLoader 才能扫到工作区插件
+  const { resolveAgentWorkspaceAbs } = await import('#utils/agent-workspace-paths.js');
+  resolveAgentWorkspaceAbs();
   await paths.warmupCoreLayout();
 }
 

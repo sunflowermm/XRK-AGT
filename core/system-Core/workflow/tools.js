@@ -266,6 +266,8 @@ export default class ToolsStream extends AiWorkflow {
         if (!filePath) return { success: false, error: '文件路径不能为空' };
 
         const fullPath = this.tools.resolvePath(filePath);
+        const gate = this.tools.assertWritablePath(fullPath);
+        if (!gate.ok) return { success: false, error: gate.error };
         try {
           const fs = await import('fs/promises');
           await fs.unlink(fullPath);
@@ -602,6 +604,7 @@ export default class ToolsStream extends AiWorkflow {
     return `【基础工具】read / grep / search_replace / write / delete_file / list_files / run / apply_edit / verify / repo_map / update_todos
 工作区 cwd: ${ws}
 陌生仓库先 repo_map(query=任务关键词) 再 grep/read。改已有：grep → read → search_replace；多文件/多处用 apply_edit（可 dryRun），改后 verify(command=…)。write 仅新建；已存在须 overwrite=true。
+托管技能（对应 agents/skills/standard）可改，但改后 #skills更新 会跳过该包（除非主人 #skills更新 强制）。用户自建 skills/ 目录不受托管更新影响。装技能见 agent-skillhub。
 多步任务用 update_todos。run / verify 需 tools.file.runEnabled=true（默认关）；危险命令经 security.toolScan（可选 approval）。`;
   }
 }

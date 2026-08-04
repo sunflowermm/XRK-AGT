@@ -22,7 +22,7 @@ Python、pandoc、本机命令是否可用。缺依赖时助手会降级（例�
 
 | 类别 | 技能 |
 |------|------|
-| 基础 | agent-core, agent-tools, agent-search, agent-browser, agent-memory, answer-format |
+| 基础 | agent-core, agent-tools, agent-core-dev, agent-skillhub, agent-search, agent-browser, agent-memory, answer-format |
 | 沟通 | office-email, office-outreach, office-internal, office-meeting, office-meeting-prep, office-transcribe |
 | 文稿 | office-doc, office-docx, office-copy, office-proofread, office-research, office-plan, office-briefing |
 | 对外 | office-press, office-changelog, office-repurpose, office-faq |
@@ -34,7 +34,10 @@ Python、pandoc、本机命令是否可用。缺依赖时助手会降级（例�
 
 完整列表以对话里的 `<available_skills>` 为准；新技能从仓库 `agents/skills/standard` 同步，**工作区已有同名技能时保留工作区版本**。
 
-## 工作区里改文件（助手怎么用）
+## 工作区与项目根
+
+- 助手**只写**本工作区；业务代码：`core/workspace-Core/`
+- **可读**项目根（相对本目录 `../../../`）：`.cursor/skills`、`docs`、仓库示例——见技能 **agent-core-dev**
 
 | 你想让助手… | 对应做法 |
 |-------------|----------|

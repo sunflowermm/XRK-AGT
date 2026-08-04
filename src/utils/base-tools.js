@@ -2,6 +2,7 @@ import fs from 'fs/promises';
 import path from 'path';
 import { exec } from './exec-async.js';
 import { getDefaultDesktopDirSync } from '#utils/user-dirs.js';
+import { isPathInside, realpathSyncOrResolve } from '#utils/path-guards.js';
 const IS_WINDOWS = process.platform === 'win32';
 
 /** @param {string} haystack @param {string} needle */
@@ -55,6 +56,8 @@ export class BaseTools {
       return { success: false, error: 'newText 不能省略（可传空字符串）' };
     }
     const fullPath = this.resolvePath(filePath);
+    const gate = this.assertWritablePath(fullPath);
+    if (!gate.ok) return { success: false, error: gate.error, path: fullPath };
     try {
       const existing = await fs.readFile(fullPath, 'utf8');
       const count = countOccurrences(existing, oldText);
@@ -94,6 +97,8 @@ export class BaseTools {
   async writeFile(filePath, content, encoding = 'utf8', options = {}) {
     const { overwrite = false } = options;
     const fullPath = this.resolvePath(filePath);
+    const gate = this.assertWritablePath(fullPath);
+    if (!gate.ok) return { success: false, error: gate.error, path: fullPath };
     try {
       let exists = false;
       try {
@@ -258,6 +263,24 @@ export class BaseTools {
       return filePath;
     }
     return path.join(this.workspace, filePath);
+  }
+
+  /**
+   * 写入类操作必须落在工作区内（可读项目根 .cursor/docs；不可改框架）
+   * @param {string} fullPath
+   * @returns {{ ok: true } | { ok: false, error: string }}
+   */
+  assertWritablePath(fullPath) {
+    const root = realpathSyncOrResolve(this.workspace);
+    const target = realpathSyncOrResolve(fullPath);
+    if (!isPathInside(root, target)) {
+      return {
+        ok: false,
+        error:
+          '只能写入当前工作区（业务代码：core/workspace-Core/）。了解框架请 read ../../../.cursor/skills/ 或 ../../../docs/，禁止改 .cursor / src / 仓库 core',
+      };
+    }
+    return { ok: true };
   }
 
   /**

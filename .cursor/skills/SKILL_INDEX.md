@@ -4,8 +4,8 @@
 
 | 读者 | 放哪 | 写什么 | 不写什么 |
 |------|------|--------|----------|
-| **Coding Agent**（Cursor / 改 `src`·`core`） | `.cursor/skills/xrk-*` · 根 `AGENTS.md` | 放码、Loader、配置归属、工厂、Node 26 | 办事语气、办公 skill 细则 |
-| **产品 / 办事助手模型** | `agents/skills/standard/**` · 工作区 `skills/` | 工具怎么用、场景流程、失败恢复 | 工厂路径、三准则吸收、`.cursor` |
+| **Coding Agent**（Cursor / 改 `src`·仓库 `core`） | `.cursor/skills/xrk-*` · 根 `AGENTS.md` | 放码、Loader、配置归属、工厂、Node 26 | 办事语气、办公 skill 细则 |
+| **产品 / 办事助手模型** | `agents/skills/standard/**` · 工作区 `skills/` | 工具、场景、**agent-core-dev**（导航写工作区 Core） | 勿**改** `.cursor` / `src`；写 Core 时可 **read** `.cursor/skills/xrk-*` |
 | **人读契约** | `docs/*` | 现行行为与配置真源 | 过程日记、迁移叙事 |
 
 全局工程师技能：本机 `~/.cursor/AGENTS.md` · `~/.agents/skills/`。  
@@ -56,4 +56,5 @@
 ## 产品 Agent 技能（勿与上表混用）
 
 路径：`agents/skills/standard/`（`core/agent-*` · `office-*`）。  
-索引与用法：[docs/agents.md](../../docs/agents.md)；工具地图：`core/agent-tools`。
+索引与用法：[docs/agents.md](../../docs/agents.md)；工具地图：`core/agent-tools`。  
+写工作区 Core：`agent-core-dev` → 按表 **只读** 本目录 `xrk-*`（相对工作区 `../../../.cursor/skills/...`）。Coding Agent 仍以本索引为主，产品 Agent **不**改本树。

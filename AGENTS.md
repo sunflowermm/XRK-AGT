@@ -43,7 +43,7 @@
 | 读者 | 技能树 |
 |------|--------|
 | **Coding Agent**（本对话改代码） | `.cursor/skills/xrk-*` |
-| **产品 / 办事助手模型** | `agents/skills/standard/**`（注入目录卡，细则 `tools.read`） |
+| **产品 / 办事助手模型** | `agents/skills/standard/**`（目录卡）；写工作区 Core 时按 **agent-core-dev** **只读** `.cursor/skills/xrk-*` |
 | **人读契约** | `docs/*`（勿把 coding skill 写进产品 skill） |
 
 | 你在做什么 | 先读 |

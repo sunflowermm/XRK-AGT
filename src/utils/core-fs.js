@@ -96,7 +96,7 @@ function mergeCoreSubDirMaps(repoMap, extraMap, subDirNames) {
   return merged;
 }
 
-/** 合并 repo core 与子服 apis 下 core 目录的 Loader 扫描结果 */
+/** 合并 repo core、子服 apis core、办事工作区 core 的 Loader 扫描结果 */
 export async function discoverAllCoreSubDirs(
   repoRoot,
   coreRoot,
@@ -105,11 +105,64 @@ export async function discoverAllCoreSubDirs(
 ) {
   const repo = await discoverCoreSubDirs(coreRoot, subDirNames);
   const subserver = await discoverSubserverPluginCoreSubDirs(repoRoot, subserverSubDirNames);
-  return mergeCoreSubDirMaps(repo, subserver, subDirNames);
+  const workspace = await discoverWorkspaceAgentCoreSubDirs(repoRoot, subDirNames);
+  return mergeCoreSubDirMaps(
+    mergeCoreSubDirMaps(repo, subserver, subDirNames),
+    workspace,
+    subDirNames
+  );
 }
 
 const SUBSERVER_PLUGIN_CORE_SKIP = new Set(['system']);
 
+/**
+ * 办事工作区业务 Core：`data/ai-workspace/{id}/core/<Core名>/{plugin,http,…}`
+ * 供 Agent 在工作区内写插件；与仓库 `core/`、子服 apis core 一并被 Loader 扫描。
+ */
+export async function discoverWorkspaceAgentCoreSubDirs(repoRoot, subDirNames) {
+  const result = Object.fromEntries(subDirNames.map((name) => [name, []]));
+  const wsRoot = path.join(repoRoot, 'data', 'ai-workspace');
+
+  let wsEntries;
+  try {
+    wsEntries = await fsPromises.readdir(wsRoot, { withFileTypes: true });
+  } catch {
+    return result;
+  }
+
+  const candidates = [];
+  for (const wsEntry of wsEntries) {
+    if (!wsEntry.isDirectory() || wsEntry.name.startsWith('.')) continue;
+    const coreRoot = path.join(wsRoot, wsEntry.name, 'core');
+    let coreEntries;
+    try {
+      coreEntries = await fsPromises.readdir(coreRoot, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+    for (const coreEntry of coreEntries) {
+      if (!coreEntry.isDirectory() || coreEntry.name.startsWith('.')) continue;
+      for (const subName of subDirNames) {
+        candidates.push({
+          subName,
+          fullPath: path.join(coreRoot, coreEntry.name, subName),
+        });
+      }
+    }
+  }
+
+  if (candidates.length === 0) return result;
+
+  const exists = statDirs(candidates.map((c) => c.fullPath));
+  candidates.forEach((c, i) => {
+    if (exists[i]) result[c.subName].push(path.resolve(c.fullPath));
+  });
+
+  for (const subName of subDirNames) {
+    result[subName].sort();
+  }
+  return result;
+}
 /** @param {string} repoRoot @param {string[]} subDirNames */
 export async function discoverSubserverPluginCoreSubDirs(repoRoot, subDirNames) {
   const result = Object.fromEntries(subDirNames.map((name) => [name, []]));

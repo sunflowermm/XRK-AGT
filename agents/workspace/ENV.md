@@ -43,6 +43,7 @@
 
 - 工作区：`data/ai-workspace/{id}/`
 - 技能种子：`agents/skills/standard/`（含 `core/` 基础 + `office-*` 扩展）→ 同步到工作区 `skills/`
+- 业务插件种子：`agents/workspace/core/` → 工作区 `core/`（Loader 扫描；见 agent-core-dev）
 - 项目规则：`agents/rules/` → 注入 system prompt
 - run 开关：`config/default_config/ai-workflow.yaml` → `tools.file.runEnabled`
 - 技能注入：`agentWorkspace.customSkillRoots`（默认 `agents/skills/standard/core` + `agents/skills/standard`）

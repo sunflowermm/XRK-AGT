@@ -3,7 +3,7 @@
  *
  * - 根目录 AGENTS.md：IDE 开发规则，不参与运行时
  * - agents/：仓库内 Agent 面（模板 / 规则 / 技能种子 / subagents）
- * - data/ai-workspace/{id}/*：运行时工作区（AGENTS.md、SOUL.md、memory/…）
+ * - data/ai-workspace/{id}/*：运行时工作区（AGENTS.md、SOUL.md、rules/、skills/、core/、memory/…）
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -29,8 +29,11 @@ export const LONG_TERM_MEMORY_REL = 'memory/MEMORY.md';
 /** 仓库内首次引导用的模板目录（只读，运行时不从此处注入） */
 export const WORKSPACE_BUNDLE_DIR_REL = 'agents/workspace';
 
-/** 项目级规则（注入 system prompt；≠ `.cursor/rules`） */
+/** 项目级共享规则（注入；≠ `.cursor/rules`） */
 export const PROJECT_RULES_DIR_REL = 'agents/rules';
+
+/** 工作区内用户规则目录（相对 data/ai-workspace/{id}；同相对路径覆盖项目规则） */
+export const WORKSPACE_RULES_DIR = 'rules';
 
 /** 办公技能包（复制到工作区 skills/，与 ai-workflow customSkillRoots 对齐） */
 export const PROJECT_SKILLS_STANDARD_REL = 'agents/skills/standard';
@@ -40,14 +43,22 @@ export const WORKSPACE_SKILLS_DIR = 'skills';
 
 export const DEFAULT_WORKSPACE_ID = 'default';
 
-function copyTreeMissingOnly(srcDir, destDir) {
+/**
+ * 缺文件才拷；不覆盖已有（用户定制优先）。
+ * @param {string} srcDir
+ * @param {string} destDir
+ * @param {{ skipNames?: Set<string> }} [opts]
+ */
+export function copyTreeMissingOnly(srcDir, destDir, opts = {}) {
   if (!fs.existsSync(srcDir)) return;
+  const skipNames = opts.skipNames instanceof Set ? opts.skipNames : new Set();
   fs.mkdirSync(destDir, { recursive: true });
   for (const entry of fs.readdirSync(srcDir, { withFileTypes: true })) {
+    if (skipNames.has(entry.name)) continue;
     const src = path.join(srcDir, entry.name);
     const dest = path.join(destDir, entry.name);
     if (entry.isDirectory()) {
-      copyTreeMissingOnly(src, dest);
+      copyTreeMissingOnly(src, dest, opts);
       continue;
     }
     if (!entry.isFile()) continue;
@@ -94,13 +105,37 @@ export function isAgentDataWorkspaceAbs(absPath) {
   }
 }
 
-/** 从仓库 agents/workspace 复制缺失的模板到 data 工作区（不覆盖已有文件；不向项目根写入） */
+/**
+ * 技能扫描根（绝对路径，字典序稳定）。
+ * customSkillRoots 有值则用配置；否则回退项目 standard。
+ * 工作区 skills/ 若存在则追加（同名技能后写覆盖）。
+ */
+export function resolveSkillRootAbsList({ projectRoot, workspaceRoot, customSkillRoots = [] } = {}) {
+  const roots = new Set();
+  const configured = Array.isArray(customSkillRoots)
+    ? customSkillRoots.filter(Boolean).map(String)
+    : [];
+  for (const rel of configured) {
+    roots.add(path.isAbsolute(rel) ? path.normalize(rel) : path.join(projectRoot, rel));
+  }
+  if (!configured.length) {
+    roots.add(path.join(projectRoot, PROJECT_SKILLS_STANDARD_REL));
+  }
+  if (workspaceRoot) {
+    const wsSkills = path.join(workspaceRoot, WORKSPACE_SKILLS_DIR);
+    if (fs.existsSync(wsSkills)) roots.add(wsSkills);
+  }
+  return [...roots].sort((a, b) => a.localeCompare(b));
+}
+
+/** 从仓库 agents/workspace + rules/skills 种子复制缺失项到 data 工作区（不覆盖已有） */
 export function seedWorkspaceFromBundle(workspaceAbs) {
   if (!isAgentDataWorkspaceAbs(workspaceAbs)) return;
   fs.mkdirSync(workspaceAbs, { recursive: true });
   fs.mkdirSync(path.join(workspaceAbs, 'memory'), { recursive: true });
 
-  const bundleDir = path.join(getProjectRoot(), WORKSPACE_BUNDLE_DIR_REL);
+  const projectRoot = getProjectRoot();
+  const bundleDir = path.join(projectRoot, WORKSPACE_BUNDLE_DIR_REL);
   const seedNames = [AGENTS_MD, ...WORKSPACE_TEMPLATE_RELS];
 
   for (const name of seedNames) {
@@ -118,11 +153,32 @@ export function seedWorkspaceFromBundle(workspaceAbs) {
     fs.copyFileSync(bundleMemory, wsMemory);
   }
 
-  const standardSkills = path.join(getProjectRoot(), PROJECT_SKILLS_STANDARD_REL);
-  copyTreeMissingOnly(standardSkills, path.join(workspaceAbs, WORKSPACE_SKILLS_DIR));
+  const wsRules = path.join(workspaceAbs, WORKSPACE_RULES_DIR);
+  // 工作区 rules/ 仅用户自建（加法）；共享护栏运行时直接读 agents/rules，勿拷进工作区（否则同名会盖住种子更新）
+  copyTreeMissingOnly(path.join(bundleDir, WORKSPACE_RULES_DIR), wsRules, {
+    skipNames: new Set(['README.md']),
+  });
+  fs.mkdirSync(wsRules, { recursive: true });
+
+  copyTreeMissingOnly(
+    path.join(projectRoot, PROJECT_SKILLS_STANDARD_REL),
+    path.join(workspaceAbs, WORKSPACE_SKILLS_DIR)
+  );
+
+  // 工作区业务 Core（Agent 可写插件；Loader 扫描 data/ai-workspace/*/core/*/plugin）
+  const coreSrc = path.join(bundleDir, 'core');
+  const coreDest = path.join(workspaceAbs, 'core');
+  const coreWasMissing = !fs.existsSync(coreDest);
+  copyTreeMissingOnly(coreSrc, coreDest);
+  if (coreWasMissing && fs.existsSync(coreDest)) {
+    paths.invalidateCoreCache();
+  }
 
   if (!fs.existsSync(path.join(workspaceAbs, AGENTS_MD))) {
-    const label = path.basename(workspaceAbs) === DEFAULT_WORKSPACE_ID ? '默认工作区' : path.basename(workspaceAbs);
+    const label =
+      path.basename(workspaceAbs) === DEFAULT_WORKSPACE_ID
+        ? '默认工作区'
+        : path.basename(workspaceAbs);
     fs.writeFileSync(
       path.join(workspaceAbs, AGENTS_MD),
       `# ${label}\n\n在此编写 Agent 规则（AGENTS.md）。\n`,
@@ -134,15 +190,17 @@ export function seedWorkspaceFromBundle(workspaceAbs) {
 /**
  * 解析 prompt 注入 / 控制台读写用的工作区绝对路径。
  * runtimeConfig.root 留空 → data/ai-workspace/{defaultId}；显式路径则相对项目根解析。
+ * 落在 data/ai-workspace 下时幂等 seed（缺啥补啥）。
  */
 export function resolveAgentWorkspaceAbs(cfgRoot = '') {
+  let abs;
   if (cfgRoot != null && String(cfgRoot).trim() !== '') {
     const raw = String(cfgRoot).trim();
-    const abs = path.isAbsolute(raw) ? path.normalize(raw) : path.resolve(getProjectRoot(), raw);
+    abs = path.isAbsolute(raw) ? path.normalize(raw) : path.resolve(getProjectRoot(), raw);
     fs.mkdirSync(abs, { recursive: true });
-    return abs;
+  } else {
+    abs = getAgentWorkspaceAbs(getConfiguredDefaultWorkspaceId());
   }
-  const abs = getAgentWorkspaceAbs(getConfiguredDefaultWorkspaceId());
   seedWorkspaceFromBundle(abs);
   return abs;
 }

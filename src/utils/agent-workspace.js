@@ -1,10 +1,10 @@
 /**
- * 工作区上下文注入：data/ai-workspace 助手文件 + agents/rules|skills|subagents。
+ * 工作区上下文注入：data/ai-workspace 助手文件 + rules|skills|subagents。
  *
  * 分区顺序固定（跨请求稳定，利于 prefix cache）：
  *   1. assistant — AGENTS.md + WORKSPACE_TEMPLATE_RELS + 日更 memory + MEMORY.md
  *   2. contextFiles — agentWorkspace.contextFiles
- *   3. rules — agents/rules
+ *   3. rules — agents/rules（共享直接注入）∪ 工作区 rules/（用户加法；同名覆盖）
  *   4. Skills — customSkillRoots / standard + 工作区 skills/
  *   5. Agents — agents/subagents.yaml|yml|json（或工作区同名；OpenCode 式 mode 清单，非隔离执行）
  */
@@ -26,10 +26,10 @@ import {
   WORKSPACE_TEMPLATE_RELS,
   LONG_TERM_MEMORY_REL,
   PROJECT_RULES_DIR_REL,
-  PROJECT_SKILLS_STANDARD_REL,
-  WORKSPACE_SKILLS_DIR,
+  WORKSPACE_RULES_DIR,
   getProjectRoot,
   resolveAgentWorkspaceAbs,
+  resolveSkillRootAbsList,
 } from '#utils/agent-workspace-paths.js';
 
 /** 工作区优先，再项目根 agents/ */
@@ -146,6 +146,46 @@ function listFilesRecursive(dir, predicate) {
   return out;
 }
 
+/** @param {string} rulesDir @returns {Map<string, string>} rel → abs */
+function indexRuleFiles(rulesDir) {
+  const map = new Map();
+  if (!rulesDir || !fs.existsSync(rulesDir)) return map;
+  const absFiles = listFilesRecursive(
+    rulesDir,
+    (_fp, name) => name.endsWith('.md') || name.endsWith('.mdc')
+  );
+  for (const fp of absFiles) {
+    const rel = path.relative(rulesDir, fp).replace(/\\/g, '/');
+    if (!rel || rel === 'README.md') continue;
+    map.set(rel, fp);
+  }
+  return map;
+}
+
+/**
+ * 项目 agents/rules ∪ 工作区 rules/；工作区同名覆盖共享（工作区仅用户加法，共享不 seed 进工作区）。
+ * @returns {string}
+ */
+function collectMergedRulesText(projectRoot, workspaceRoot, maxChars, readCached) {
+  const byRel = new Map();
+  for (const [rel, abs] of indexRuleFiles(path.join(projectRoot, PROJECT_RULES_DIR_REL))) {
+    byRel.set(rel, { abs, root: projectRoot });
+  }
+  for (const [rel, abs] of indexRuleFiles(path.join(workspaceRoot, WORKSPACE_RULES_DIR))) {
+    byRel.set(rel, { abs, root: workspaceRoot });
+  }
+  const rels = [...byRel.keys()].sort((a, b) => a.localeCompare(b));
+  let acc = '';
+  for (const rel of rels) {
+    const { abs, root } = byRel.get(rel);
+    const got = readCached(root, abs, maxChars * 4);
+    if (!got.ok) continue;
+    acc += `\n### ${rel}\n\n${got.content}\n`;
+    if (acc.length >= maxChars) break;
+  }
+  return acc.trim();
+}
+
 function sliceWorkspaceCfg(aiWorkflowCfg) {
   return aiWorkflowCfg?.agentWorkspace ?? {};
 }
@@ -248,7 +288,7 @@ export async function buildAgentWorkspaceSection(agentWorkspaceCfg = {}, streamN
     maxRulesChars: 12_000,
     maxAgentMdChars: 12_000,
     maxSubagentsChars: 4_000,
-    maxMicroagentsChars: 12_000,
+    maxMicroagentsChars: 8_000,
     maxMicroagents: 5,
     maxDiagnosticsChars: 2_000,
     maxCandidatesPerRoot: DEFAULT_SKILL_LIMITS.maxCandidatesPerRoot,
@@ -313,47 +353,32 @@ export async function buildAgentWorkspaceSection(agentWorkspaceCfg = {}, streamN
     pushProse(safeRel, got.content);
   }
 
-  // --- 3. rules ---
+  // --- 3. rules（项目共享 ∪ 工作区覆盖）---
   if (runtimeConfig.includeRules) {
-    const rulesDir = path.join(projectRoot, PROJECT_RULES_DIR_REL);
-    try {
-      const absFiles = listFilesRecursive(rulesDir, (_fp, name) => name.endsWith('.md') || name.endsWith('.mdc'));
-      const relFiles = absFiles
-        .map((fp) => path.relative(rulesDir, fp).replace(/\\/g, '/'))
-        .sort((a, b) => a.localeCompare(b));
-
-      let acc = '';
-      for (const rel of relFiles) {
-        const fp = path.join(rulesDir, ...rel.split('/'));
-        const got = readTextFileUnderWorkspaceRootCached(projectRoot, fp, runtimeConfig.maxRulesChars * 4);
-        if (!got.ok) continue;
-        acc += `\n### ${rel}\n\n${got.content}\n`;
-        if (acc.length >= runtimeConfig.maxRulesChars) break;
-      }
-      pushProse('rules', truncate(acc.trim(), runtimeConfig.maxRulesChars, 'rules'));
-    } catch {
-      /* no rules dir */
+    const rulesText = collectMergedRulesText(
+      projectRoot,
+      workspaceRoot,
+      runtimeConfig.maxRulesChars,
+      readTextFileUnderWorkspaceRootCached
+    );
+    if (rulesText) {
+      pushProse('rules', truncate(rulesText, runtimeConfig.maxRulesChars, 'rules'));
     }
   }
 
   const parts = [...proseSections];
 
-  // --- 4. Skills（根路径字典序，保证稳定）---
-  const configuredRoots = Array.isArray(runtimeConfig.customSkillRoots) ? runtimeConfig.customSkillRoots.filter(Boolean).map(String) : [];
-  const skillRootAbs = new Set();
-  for (const rel of configuredRoots) {
-    skillRootAbs.add(path.isAbsolute(rel) ? rel : path.join(projectRoot, rel));
-  }
-  if (!configuredRoots.length) {
-    skillRootAbs.add(path.join(projectRoot, PROJECT_SKILLS_STANDARD_REL));
-  }
-  const wsSkillsDir = path.join(workspaceRoot, WORKSPACE_SKILLS_DIR);
-  if (fs.existsSync(wsSkillsDir)) {
-    skillRootAbs.add(wsSkillsDir);
-  }
-  if (skillRootAbs.size > 0) {
-    const roots = [...skillRootAbs].sort((a, b) => a.localeCompare(b));
-    const skillsPrompt = buildSkillsPromptFromWorkspace(projectRoot, { ...runtimeConfig, customSkillRoots: roots });
+  // --- 4. Skills ---
+  const skillRoots = resolveSkillRootAbsList({
+    projectRoot,
+    workspaceRoot,
+    customSkillRoots: runtimeConfig.customSkillRoots,
+  });
+  if (skillRoots.length > 0) {
+    const skillsPrompt = buildSkillsPromptFromWorkspace(projectRoot, {
+      ...runtimeConfig,
+      customSkillRoots: skillRoots,
+    });
     if (skillsPrompt) parts.push(`## Skills\n\n${skillsPrompt}`);
   }
 

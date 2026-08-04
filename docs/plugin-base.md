@@ -4,7 +4,7 @@
 |----|------|
 | **源码** | `src/infrastructure/plugins/plugin-base.js` |
 | **加载器** | `src/infrastructure/plugins/loader.js` → [plugins-loader.md](plugins-loader.md) |
-| **放置位置** | `core/<core名>/plugin/*.js`（自动扫描，零配置） |
+| **放置位置** | `core/<core名>/plugin/*.js`；办事工作区另有 `data/ai-workspace/{id}/core/<名>/plugin/*.js`（一并扫描） |
 | **扩展总览** | [框架可扩展性指南](框架可扩展性指南.md) |
 | **基类契约** | [base-classes.md](base-classes.md)（最小导出；本篇为插件专题） |
 | **Loader 模式** | [infrastructure-shared.md](infrastructure-shared.md) |

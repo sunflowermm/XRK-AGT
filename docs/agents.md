@@ -29,8 +29,8 @@
 |----------------|------|--------|
 | 人设 / MCP 说话纪律 | chat 工作流 | `ai_config.persona` · chat 协议文案 |
 | 工作区人格与记忆 | `data/ai-workspace/{id}/` | AGENTS / USER / MEMORY… |
-| 行为规则全文 | `agents/rules/` | 回复结构、安全、群聊 |
-| 技能目录 | `agents/skills/standard/` + 工作区 `skills/` | 细则靠 `tools.read`，非全文常驻 |
+| 行为规则全文 | `agents/rules/`（直接注入）∪ 工作区 `rules/`（用户加法；同路径才覆盖） | 共享改 `agents/rules/`；定制只写工作区 |
+| 技能目录 | `agents/skills/standard/` + 工作区 `skills/` | 细则靠 `tools.read`；安装见 **agent-skillhub** |
 | 角色路由提示 | `subagents.yaml` | 不启隔离子会话 |
 
 工具并集：`ai_config.mergeWorkflows`（+ 框架自动并入的 web/browser/remote-mcp）。
@@ -66,6 +66,8 @@
 - `/recipe <id> [k=v …]`：注入该配方的 instructions + prompt（种子在 `agents/recipes/`）  
 - 需已触发助手（@ / 前缀等）；配方 cron 见配置 `recipes.scheduleEnabled`（默认关，开启后插件默认只打日志）
 
+主人命令：`#skills更新`（安全：改过的托管包跳过）· `#skills更新 强制`（托管全覆盖）。用户自建 `skills/` 目录两种都不会动。
+
 ### 危险命令审批（可选）
 
 默认：`security.approval.enabled=false`，危险/策略 ask 直接拒绝（主人调用可放行）。  
@@ -85,6 +87,8 @@
 | `HEARTBEAT.md` | 心跳任务清单 |
 | `memory/` | 当天流水 + 长期偏好（`MEMORY.md`） |
 | `skills/` | 技能副本（种子同步；工作区已有同名技能时保留工作区版本） |
+| `core/` | 工作区业务 Core（`workspace-Core/…`；Loader 扫描；见 **agent-core-dev**） |
+| `rules/` | 用户自建护栏（加法；与 `agents/rules/` 合并，同名才覆盖） |
 | `docs/` 等 | 文稿与数据（按需自建） |
 | `subagents.yaml`（可选） | 覆盖种子角色清单 |
 
@@ -97,8 +101,10 @@
 | 语气、红线、群聊习惯 | 工作区 `AGENTS.md` |
 | 称呼、偏好 | `USER.md`、`memory/MEMORY.md` |
 | 本机路径、邮箱、依赖 | `TOOLS.md`、`ENV.md` |
-| 注入用行为规则 | `agents/rules/` |
+| 注入用行为规则 | 共享改 `agents/rules/`；本工作区加法写 `rules/`（同名可覆盖共享） |
 | 技能细则 | 工作区 `skills/`，或 `agents/skills/standard/` |
+| 安装 / 同步技能 | **agent-skillhub**；主人 `#skills更新`（安全）/ `#skills更新 强制`；自建永不碰 |
+| 工作区 Core 业务 | 工作区 `core/workspace-Core/`（**agent-core-dev**；可读项目根 `.cursor/skills/xrk-*`）；种子 `agents/workspace/core/` |
 | 主助手 / 专项角色 | 工作区 `subagents.yaml`（优先）或 `agents/subagents.yaml` |
 | 注入开关与字符预算 | `ai-workflow.yaml` → `agentWorkspace` |
 
@@ -110,7 +116,7 @@
 
 | 类别 | 做什么 | 代表技能 |
 |------|--------|----------|
-| **基础** | 路由、工具、回答格式、记忆、浏览器 | agent-core、agent-tools、answer-format、agent-search、agent-memory、agent-browser |
+| **基础** | 路由、工具、装技能、写 Core、回答格式、记忆、浏览器 | agent-core、agent-tools、agent-skillhub、agent-build-skill、agent-core-dev、answer-format、agent-search、agent-memory、agent-browser |
 | **沟通** | 邮件、外联、内部通知、会议与纪要 | office-email、office-outreach、office-internal、office-meeting、office-meeting-prep、office-transcribe |
 | **文稿** | 文档、润色、调研、计划、简报 | office-doc、office-docx、office-copy、office-proofread、office-research、office-plan、office-briefing |
 | **对外发布** | 通稿、更新说明、FAQ、改写 | office-press、office-changelog、office-faq、office-repurpose |
@@ -119,7 +125,7 @@
 | **环境与工作区** | 依赖、工作区文件、Shell/Web/桌面 | office-env-setup、office-env-workspace、office-env-shell、office-env-web、office-env-desktop |
 | **长文与专业写作** | 长文档、技术写作 | office-long-doc、office-tech-writing |
 
-完整名单以运行时 `<available_skills>` 为准。新技能放 `agents/skills/standard/`，再同步到工作区。路由表：`agents/skills/standard/core/agent-core/SKILL.md`。
+自建/商店装到 **`data/ai-workspace/{id}/skills/`**（SkillHub：`skillhub install <名> --dir <该目录>`，见 [skillhub 安装说明](https://skillhub.cn/install/skillhub.md) · **agent-skillhub**）。SKILL 写法见 **agent-build-skill**；工作区 Core 业务见 **agent-core-dev**（`core/workspace-Core/`，可导航读 `.cursor/skills/xrk-*`）。路由表：`agents/skills/standard/core/agent-core/SKILL.md`。
 
 ---
 
@@ -178,8 +184,9 @@
 | Schema | `core/system-Core/commonconfig/system/system-ai-workflow.js` |
 | 文件工具 | `core/system-Core/workflow/tools.js`、`src/utils/base-tools.js` |
 | Agents 清单种子 | `agents/subagents.yaml` |
-| 技能种子 | `agents/skills/standard/` |
-| 规则种子 | `agents/rules/` |
+| 技能种子 | `agents/skills/standard/`（含 agent-skillhub） |
+| 共享行为规则 | `agents/rules/`（运行时直接注入，不拷进工作区） |
+| 工作区规则（用户加法） | `data/ai-workspace/{id}/rules/` |
 | MCP | [mcp-guide.md](mcp-guide.md)、[mcp-config-guide.md](mcp-config-guide.md) |
 | 工作流基类 | [ai-workflow.md](ai-workflow.md) |
 | 框架开发 | 根 [AGENTS.md](../AGENTS.md) · `.cursor/skills/xrk-*` |

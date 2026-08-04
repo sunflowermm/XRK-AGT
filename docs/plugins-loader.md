@@ -10,14 +10,13 @@
 
 `PluginLoader` 是 XRK-AGT 的 **插件调度核心**，负责：
 
-- 扫描并加载所有 `core/*/plugin` 目录中的插件
-- 扫描 `core/*/plugin` 与 `subserver/*/apis/*/core/*`（含 commonconfig）
+- 扫描并加载所有 `core/*/plugin`、办事工作区 `data/ai-workspace/*/core/*/plugin`、以及子服 `apis/*/core/plugin`
 - 配置全在主服 CommonConfig；子服只读 `data/`，见 [subserver-commonconfig.md](subserver-commonconfig.md)
 - 管理插件规则匹配、权限检查、上下文处理、冷却与节流
 - 处理多种事件源（普通消息、设备事件、STDIN/API 事件）
 - 维护定时任务、事件订阅与全局事件历史
 
-> **注意**：框架支持多 core 模块架构。`PluginLoader` 会自动扫描所有 `core/*/plugin` 目录，以及子服插件下的 `subserver/*/apis/*/core/plugin`。
+> **注意**：框架支持多 core 模块架构。`PluginLoader` 经 `discoverAllCoreSubDirs`（`src/utils/core-fs.js`）合并三类目录：仓库 `core/*/plugin`、子服 `subserver/*/apis/*/core/plugin`、办事工作区 `data/ai-workspace/{id}/core/*/plugin`。工作区种子见 `agents/workspace/core/`；写法技能 **agent-core-dev**。
 
 事件链路导读见 [plugin-base.md § 事件链路](plugin-base.md#事件链路)；Loader 扫描与热重载见 [infrastructure-shared.md](infrastructure-shared.md)。
 

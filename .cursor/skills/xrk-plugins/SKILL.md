@@ -11,9 +11,10 @@ description: 当你需要理解/开发插件（plugin 基类）、插件加载�
 
 ## 约定
 
-- 路径：`core/*/plugin/*.js`；入口 `PluginLoader.deal(e)`。
+- 路径：`core/*/plugin/*.js`（含办事工作区 `data/ai-workspace/*/core/*/plugin`）；入口 `PluginLoader.deal(e)`。
 - 基类：`import PluginBase from '#infrastructure/plugins/plugin-base.js'`；`extends PluginBase`。
 - 裸名 **`msgSegment`**、**`AgentRuntime`**；勿 `global.msgSegment` / `global.AgentRuntime`。
 - constructor 不建缓存/Map；`rule[].fnc(e)` 用 `e.msg`。
 - 调 AI：`this.getWorkflow('chat'|...)` + `stream.process(e, e.msg, options)`。
 - 错误：`Error.isError` / `normalizeError`（skill **`xrk-node-runtime`**）。
+- 产品 / 办事助手写工作区 Core：导航 skill **`agent-core-dev`**（只读本 skill，不改本树）。

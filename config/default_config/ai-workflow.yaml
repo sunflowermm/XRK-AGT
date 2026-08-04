@@ -102,9 +102,9 @@ agentWorkspace:
   maxSkillsPromptChars: 18000
   maxSkillFileBytes: 256000
   customSkillRoots:
-    - "agents/skills/standard/core"  # Agent 基础：agent-core / agent-tools / agent-search / agent-memory / answer-format
-    - "agents/skills/standard"       # 办公扩展：office-*（docx/xlsx/pdf 等走 skills+tools.run，不依赖 desktop doc MCP）
-  # 另自动合并 data/ai-workspace/{id}/skills（种子自 agents/skills/standard，缺啥补啥不覆盖）
+    - "agents/skills/standard/core"  # agent-core / tools / core-dev / skillhub / build-skill / memory…
+    - "agents/skills/standard"       # office-* 等；工作区 data/ai-workspace/{id}/skills 另自动并入
+  # 另自动合并 data/ai-workspace/{id}/skills（种子缺啥补啥；托管更新见 #skills更新）
   maxRulesChars: 12000
   maxAgentMdChars: 12000
   maxSubagentsChars: 4000    # agents/subagents.yaml 注入预算（OpenCode 式 mode/when/skills 清单）
