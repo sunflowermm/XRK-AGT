@@ -98,8 +98,8 @@ agentWorkspace:
   # Skills 预算与目录结构（formatSkillsForPrompt）
   maxCandidatesPerRoot: 300
   maxSkillsLoadedPerSource: 200
-  maxSkillsInPrompt: 150
-  maxSkillsPromptChars: 30000
+  maxSkillsInPrompt: 60      # 目录卡条数；细则仍靠 tools.read，避免技能名刷屏
+  maxSkillsPromptChars: 18000
   maxSkillFileBytes: 256000
   customSkillRoots:
     - "agents/skills/standard/core"  # Agent 基础：agent-core / agent-tools / agent-search / agent-memory / answer-format
@@ -109,7 +109,7 @@ agentWorkspace:
   maxAgentMdChars: 12000
   maxSubagentsChars: 4000    # agents/subagents.yaml 注入预算（OpenCode 式 mode/when/skills 清单）
   maxMicroagents: 5          # 单轮最多激活的 triggers microagent 数
-  maxMicroagentsChars: 12000 # microagent 注入总字符上限
+  maxMicroagentsChars: 8000  # microagent 注入总字符上限
 
 # 运行时策略（opencode Policy；最后匹配生效；空=全部允许）
 # action: provider.use | tool.call | mcp.connect
@@ -135,14 +135,15 @@ security:
   toolScan:
     enabled: true            # 是否扫描工具参数（重点 command/cmd/script 等）
     onCritical: deny         # critical：deny | ask
-    onHigh: ask              # high：deny | ask | allow
+    onHigh: ask              # high：deny | ask | allow（未开 approval 时 ask=拒绝；主人可旁路）
     onMedium: allow          # medium：deny | ask | allow
-    # 优先扫描的参数键（可增补）；仍会附带整份 args JSON 截断扫描
+    # 默认只扫这些键，避免 write/apply_edit 正文里的示例代码误拦
     argKeys: [command, cmd, script, code, shell, powershell]
+    scanFullArgs: false      # true=再附带整份 args JSON 截断扫描（更严、易误报）
     masterBypassAsk: true    # 调用者 e.isMaster 时对 ask 直接放行（仍打日志）
   approval:
     enabled: false           # 默认关。true=危险 ask 时私聊主人等批；关则 ask=拒绝
-    timeoutMs: 120000        # 等待批准超时（毫秒）；超时按拒绝
+    timeoutMs: 180000        # 等待批准超时（毫秒）；超时按拒绝
 
 # ----------------------------------------
 # 配方 Recipes（goose）
@@ -163,13 +164,13 @@ context:
   compaction:
     enabled: true
     auto: true
-    threshold: 0.85          # est > budget * threshold 才摘要
-    keepRecentTokens: 8000
-    toolOutputMaxChars: 2000
-    summaryMaxTokens: 2048
+    threshold: 0.9           # 略晚触发，少抢近期原文、少打贵摘要
+    keepRecentTokens: 12000  # 多留近期工具/对话原文
+    toolOutputMaxChars: 3500 # 摘要前对单条 tool 截断上限
+    summaryMaxTokens: 1024   # 摘要够用即可，控制辅/主模型成本
     preserveLastUser: true
-    useAux: true             # 优先 llm.aux；无辅模型则回退主模型
-    maxMessages: 0           # OpenHands 式：>0 且消息条数超限也触发压缩；0=仅按 token
+    useAux: true             # 优先 llm.aux；未配辅模型则回退主模型（仍无模型则跳过）
+    maxMessages: 48          # 长工具环按条数软触发；0=仅按 token
     backup:
       enabled: true          # 压缩前备份到 ~/.xrk/compaction-backups
       dir: ""                # 留空=默认目录
@@ -181,15 +182,15 @@ context:
   # goose 式旧 tool 结果投影压缩（不改持久历史，只改出站 View）
   toolPair:
     enabled: true
-    protectLastN: 6
-    maxResultChars: 400
-    batchSize: 10
+    protectLastN: 8          # 多保护最近几轮工具结果（排障/改码更稳）
+    maxResultChars: 800      # 旧 tool 投影保留更多路径/报错片段
+    batchSize: 8
     useLlm: false            # true=用 llm.aux 批摘要旧 tool（goose）；默认启发式零成本
   # 群聊/设备历史注入笔录（chat.mergeMessageHistory）
   chatHistory:
-    limit: 15                # 普通触发取最近 N 条
-    globalLimit: 20          # 闲聊旁观
-    keepFirst: 0             # OpenHands：>0 时保留最早 N 条锚点 + 尾部
+    limit: 20                # 普通触发：最近笔录
+    globalLimit: 10          # 闲聊旁观：更短，少抢窗、少串台
+    keepFirst: 2             # 保留最早任务锚点 + 尾部凑满 limit
 
 # crawl：web_fetch / web_search / browser（browser 启动参数另合并 renderer/playwright）
 crawl:
@@ -277,11 +278,11 @@ tools:
   # tools 工作流：文件/命令工作区（core/system-Core/workflow/tools.js）
   file:
     workspace: ""              # 空=data/ai-workspace/{workspace.defaultId}；agent:xxx；project；~/；绝对/相对路径
-    maxReadChars: 500000       # read 返回正文最大字符，超出截断并标注
-    grepMaxResults: 100
-    runEnabled: false            # 默认关闭 shell run；开启后 loopback 也强制 API Key
+    maxReadChars: 120000       # 单次 read 上限；过大易一次灌爆窗口，需要再分段读
+    grepMaxResults: 80
+    runEnabled: false          # 默认关闭 shell run；开启后 loopback 也强制 API Key
     runTimeoutMs: 120000
-    maxCommandOutputChars: 200000
+    maxCommandOutputChars: 80000
 
 # 多语言子服务端（CommonConfig → AiWorkflow → 子服务端）
 subserver:

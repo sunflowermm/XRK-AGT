@@ -2930,12 +2930,12 @@ export default class ChatStream extends AiWorkflow {
 
       const sectionLabel = String(historyKey).startsWith('device_') ? '[近期对话]' : '[群聊记录]';
       const histCfg = getAiWorkflowConfigOptional()?.context?.chatHistory ?? {};
-      const defaultLimit = isGlobalTrigger ? 20 : 15;
+      const defaultLimit = isGlobalTrigger ? 10 : 20;
       const configured = isGlobalTrigger
         ? (typeof histCfg.globalLimit === 'number' ? histCfg.globalLimit : defaultLimit)
         : (typeof histCfg.limit === 'number' ? histCfg.limit : defaultLimit);
       const historyLimit = Math.min(80, Math.max(5, configured));
-      const keepFirst = typeof histCfg.keepFirst === 'number' ? Math.max(0, histCfg.keepFirst) : 0;
+      const keepFirst = typeof histCfg.keepFirst === 'number' ? Math.max(0, histCfg.keepFirst) : 2;
       let recentMessages = uniqueHistory.slice(-historyLimit);
       // OpenHands keep_first：条数很多时保留最早 N 条锚点 + 尾部
       if (keepFirst > 0 && uniqueHistory.length > historyLimit) {

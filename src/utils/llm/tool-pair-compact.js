@@ -12,14 +12,14 @@ import { redactSecrets } from '#utils/llm/secret-redact.js';
  * 默认启发式；useLlm=true 时用 aux 对一批旧 tool 各写一句话（不改持久历史）。
  */
 
-const BATCH = 10;
+const BATCH = 8;
 
 function getToolPairCfg() {
   const raw = getAiWorkflowConfigOptional().context?.toolPair ?? {};
   return {
     enabled: raw.enabled !== false,
-    protectLastN: typeof raw.protectLastN === 'number' ? raw.protectLastN : 6,
-    maxResultChars: typeof raw.maxResultChars === 'number' ? raw.maxResultChars : 400,
+    protectLastN: typeof raw.protectLastN === 'number' ? raw.protectLastN : 8,
+    maxResultChars: typeof raw.maxResultChars === 'number' ? raw.maxResultChars : 800,
     batchSize: typeof raw.batchSize === 'number' ? Math.min(30, Math.max(1, raw.batchSize)) : BATCH,
     useLlm: raw.useLlm === true
   };

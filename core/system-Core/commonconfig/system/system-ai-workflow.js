@@ -407,7 +407,7 @@ export const aiWorkflowConfig = {
               maxMicroagentsChars: {
                 type: 'number',
                 label: 'microagents 注入字符上限',
-                default: 12000,
+                default: 8000,
                 min: 500,
                 component: 'InputNumber'
               },
@@ -462,17 +462,17 @@ export const aiWorkflowConfig = {
               maxSkillsInPrompt: {
                 type: 'number',
                 label: '写入 prompt 的技能条数上限',
-                description: '对齐 OpenClaw skills.limits.maxSkillsInPrompt',
+                description: '目录卡条数；细则靠 tools.read。默认 60，避免技能名刷屏',
                 min: 1,
-                default: 150,
+                default: 60,
                 component: 'InputNumber'
               },
               maxSkillsPromptChars: {
                 type: 'number',
                 label: '技能 XML  catalog 最大字符',
-                description: '对齐 OpenClaw skills.limits.maxSkillsPromptChars；超出则 compact 或截断',
+                description: '超出则 compact 或截断；默认 18000 给任务与历史留窗',
                 min: 500,
-                default: 30000,
+                default: 18000,
                 component: 'InputNumber'
               },
               maxSkillFileBytes: {
@@ -604,6 +604,14 @@ export const aiWorkflowConfig = {
                     default: ['command', 'cmd', 'script', 'code', 'shell', 'powershell'],
                     component: 'Tags'
                   },
+                  scanFullArgs: {
+                    type: 'boolean',
+                    label: '附带扫描整份 args JSON',
+                    description:
+                      '默认关：只扫 argKeys，避免 write/apply_edit 正文示例误拦。开=更严、易误报',
+                    default: false,
+                    component: 'Switch'
+                  },
                   masterBypassAsk: {
                     type: 'boolean',
                     label: '主人调用直接放行 ask',
@@ -631,7 +639,7 @@ export const aiWorkflowConfig = {
                     type: 'number',
                     label: '超时毫秒',
                     description: '等待主人 #批准/#拒绝；超时按拒绝',
-                    default: 120000,
+                    default: 180000,
                     min: 5000,
                     component: 'InputNumber'
                   }
@@ -706,8 +714,8 @@ export const aiWorkflowConfig = {
                   threshold: {
                     type: 'number',
                     label: '触发比例',
-                    description: '估算 tokens > budget×threshold 时压缩',
-                    default: 0.85,
+                    description: '估算 tokens > budget×threshold 时压缩；默认 0.9 略晚触发',
+                    default: 0.9,
                     min: 0.5,
                     max: 1,
                     component: 'InputNumber'
@@ -715,7 +723,7 @@ export const aiWorkflowConfig = {
                   keepRecentTokens: {
                     type: 'number',
                     label: '保留近期 tokens',
-                    default: 8000,
+                    default: 12000,
                     min: 1000,
                     component: 'InputNumber'
                   },
@@ -723,14 +731,15 @@ export const aiWorkflowConfig = {
                     type: 'number',
                     label: '压缩前 tool 输出截断',
                     description: '摘要前对过长 tool 结果截断，避免辅模型吃满上下文',
-                    default: 2000,
+                    default: 3500,
                     min: 200,
                     component: 'InputNumber'
                   },
                   summaryMaxTokens: {
                     type: 'number',
                     label: '摘要 maxTokens',
-                    default: 2048,
+                    description: '默认 1024：够连续即可，控制辅/主模型成本',
+                    default: 1024,
                     min: 256,
                     component: 'InputNumber'
                   },
@@ -744,8 +753,8 @@ export const aiWorkflowConfig = {
                   maxMessages: {
                     type: 'number',
                     label: '消息条数上限触发',
-                    description: 'OpenHands condenser_max_size：>0 且条数超限也压缩；0=仅按 token 比例',
-                    default: 0,
+                    description: '长工具环按条数软触发；0=仅按 token。默认 48',
+                    default: 48,
                     min: 0,
                     component: 'InputNumber'
                   },
@@ -828,7 +837,8 @@ export const aiWorkflowConfig = {
                   protectLastN: {
                     type: 'number',
                     label: '保护最近 N 条 tool',
-                    default: 6,
+                    description: '默认 8：多留近期工具原文给改码/排障',
+                    default: 8,
                     min: 1,
                     max: 50,
                     component: 'InputNumber'
@@ -836,14 +846,15 @@ export const aiWorkflowConfig = {
                   maxResultChars: {
                     type: 'number',
                     label: '摘要后最大字符',
-                    default: 400,
+                    description: '旧 tool 投影保留路径/报错片段；默认 800',
+                    default: 800,
                     min: 80,
                     component: 'InputNumber'
                   },
                   batchSize: {
                     type: 'number',
                     label: '每轮最多压缩条数',
-                    default: 10,
+                    default: 8,
                     min: 1,
                     max: 30,
                     component: 'InputNumber'
@@ -866,7 +877,8 @@ export const aiWorkflowConfig = {
                   limit: {
                     type: 'number',
                     label: '普通触发条数',
-                    default: 15,
+                    description: '直接 @/前缀触发时取最近笔录；默认 20',
+                    default: 20,
                     min: 5,
                     max: 80,
                     component: 'InputNumber'
@@ -874,7 +886,8 @@ export const aiWorkflowConfig = {
                   globalLimit: {
                     type: 'number',
                     label: '旁观闲聊条数',
-                    default: 20,
+                    description: '闲聊旁观宜短于普通触发，少串台；默认 10',
+                    default: 10,
                     min: 5,
                     max: 80,
                     component: 'InputNumber'
@@ -882,8 +895,8 @@ export const aiWorkflowConfig = {
                   keepFirst: {
                     type: 'number',
                     label: '保留最早锚点条数',
-                    description: '0=仅尾部；>0 时保留最早 N 条 + 尾部凑满 limit',
-                    default: 0,
+                    description: '0=仅尾部；默认 2=保留任务开头 + 尾部凑满 limit',
+                    default: 2,
                     min: 0,
                     max: 20,
                     component: 'InputNumber'
@@ -1394,9 +1407,9 @@ export const aiWorkflowConfig = {
                   maxReadChars: {
                     type: 'number',
                     label: 'read 最大返回字符',
-                    description: 'file_read 工具单次返回的内容截断上限',
+                    description: '单次 read 上限；默认 120000，避免一次灌爆窗口',
                     min: 1000,
-                    default: 500000,
+                    default: 120000,
                     component: 'InputNumber'
                   },
                   grepMaxResults: {
@@ -1405,7 +1418,7 @@ export const aiWorkflowConfig = {
                     description: 'file_grep 工具返回的匹配行数上限',
                     min: 1,
                     max: 500,
-                    default: 100,
+                    default: 80,
                     component: 'InputNumber'
                   },
                   runEnabled: {
@@ -1426,9 +1439,9 @@ export const aiWorkflowConfig = {
                   maxCommandOutputChars: {
                     type: 'number',
                     label: 'run 标准输出最大字符',
-                    description: 'run  stdout/stderr 合并后的截断上限',
+                    description: 'run stdout/stderr 合并截断；默认 80000',
                     min: 1000,
-                    default: 200000,
+                    default: 80000,
                     component: 'InputNumber'
                   }
                 }

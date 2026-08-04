@@ -20,6 +20,7 @@ function getSecurityCfg() {
     onMedium: ['deny', 'ask', 'allow'].includes(raw.onMedium) ? raw.onMedium : 'allow',
     masterBypassAsk: raw.masterBypassAsk !== false,
     interactiveApproval: approval.enabled === true,
+    scanFullArgs: raw.scanFullArgs === true,
     argKeys: Array.isArray(raw.argKeys) && raw.argKeys.length
       ? raw.argKeys.map(String)
       : ['command', 'cmd', 'script', 'code', 'shell', 'powershell']
@@ -39,11 +40,13 @@ function collectScanText(args) {
   for (const k of cfg.argKeys) {
     if (args[k] != null) parts.push(String(args[k]));
   }
-  try {
-    const json = JSON.stringify(args);
-    parts.push(json.length > 4000 ? json.slice(0, 4000) : json);
-  } catch {
-    /* ignore */
+  if (cfg.scanFullArgs) {
+    try {
+      const json = JSON.stringify(args);
+      parts.push(json.length > 4000 ? json.slice(0, 4000) : json);
+    } catch {
+      /* ignore */
+    }
   }
   return parts.join('\n');
 }

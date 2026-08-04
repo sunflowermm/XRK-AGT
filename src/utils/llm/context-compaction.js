@@ -31,19 +31,19 @@ function getCompactionCfg() {
     ?? {};
   return {
     enabled: raw.enabled !== false && raw.auto !== false,
-    threshold: typeof raw.threshold === 'number' ? raw.threshold : 0.85,
-    keepRecentTokens: typeof raw.keepRecentTokens === 'number' ? raw.keepRecentTokens : 8000,
-    toolOutputMaxChars: typeof raw.toolOutputMaxChars === 'number' ? raw.toolOutputMaxChars : 2000,
-    summaryMaxTokens: typeof raw.summaryMaxTokens === 'number' ? raw.summaryMaxTokens : 2048,
+    threshold: typeof raw.threshold === 'number' ? raw.threshold : 0.9,
+    keepRecentTokens: typeof raw.keepRecentTokens === 'number' ? raw.keepRecentTokens : 12000,
+    toolOutputMaxChars: typeof raw.toolOutputMaxChars === 'number' ? raw.toolOutputMaxChars : 3500,
+    summaryMaxTokens: typeof raw.summaryMaxTokens === 'number' ? raw.summaryMaxTokens : 1024,
     preserveLastUser: raw.preserveLastUser !== false,
     useAux: raw.useAux !== false,
     // OpenHands condenser_max_size：按消息条数触发
-    maxMessages: typeof raw.maxMessages === 'number' ? raw.maxMessages : 0
+    maxMessages: typeof raw.maxMessages === 'number' ? raw.maxMessages : 48
   };
 }
 
 /** @param {unknown} content */
-function contentToText(content, toolMax = 2000) {
+function contentToText(content, toolMax = 3500) {
   if (content == null) return '';
   if (typeof content === 'string') return content;
   if (Array.isArray(content)) {
@@ -70,7 +70,7 @@ function contentToText(content, toolMax = 2000) {
  * @param {Array<Object>} messages
  * @param {number} toolMax
  */
-export function serializeMessagesForCompaction(messages, toolMax = 2000) {
+export function serializeMessagesForCompaction(messages, toolMax = 3500) {
   const lines = [];
   for (const m of messages || []) {
     const role = String(m?.role || 'unknown').toUpperCase();

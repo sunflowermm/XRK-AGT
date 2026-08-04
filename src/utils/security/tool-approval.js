@@ -16,7 +16,7 @@ function cfg() {
   const raw = getAiWorkflowConfigOptional()?.security?.approval ?? {};
   return {
     enabled: raw.enabled === true,
-    timeoutMs: typeof raw.timeoutMs === 'number' ? Math.max(5000, raw.timeoutMs) : 120_000
+    timeoutMs: typeof raw.timeoutMs === 'number' ? Math.max(5000, raw.timeoutMs) : 180_000
   };
 }
 

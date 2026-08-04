@@ -51,11 +51,11 @@ export default class ToolsStream extends AiWorkflow {
       maxReadChars:
         typeof fileCfg.maxReadChars === 'number' && Number.isFinite(fileCfg.maxReadChars)
           ? Math.max(1000, Math.floor(fileCfg.maxReadChars))
-          : 500_000,
+          : 120_000,
       grepMaxResults:
         typeof fileCfg.grepMaxResults === 'number' && Number.isFinite(fileCfg.grepMaxResults)
           ? Math.min(500, Math.max(1, Math.floor(fileCfg.grepMaxResults)))
-          : 100,
+          : 80,
       // 与 schema / 默认 yaml / auth 强制 Key 一致：须显式 true 才开 shell
       runEnabled: fileCfg.runEnabled === true,
       runTimeoutMs:
@@ -66,7 +66,7 @@ export default class ToolsStream extends AiWorkflow {
         typeof fileCfg.maxCommandOutputChars === 'number' &&
         Number.isFinite(fileCfg.maxCommandOutputChars)
           ? Math.max(1000, Math.floor(fileCfg.maxCommandOutputChars))
-          : 200_000
+          : 80_000
     };
     this.workspace = resolveConfiguredWorkspace(fileCfg.workspace);
     this.tools = new BaseTools(this.workspace);
@@ -102,7 +102,7 @@ export default class ToolsStream extends AiWorkflow {
         }
 
         if (result.success) {
-          const maxChars = this.fileToolsCfg.maxReadChars ?? 500_000;
+          const maxChars = this.fileToolsCfg.maxReadChars ?? 120_000;
           let content = result.content;
           let truncated = false;
           if (typeof content === 'string' && content.length > maxChars) {
