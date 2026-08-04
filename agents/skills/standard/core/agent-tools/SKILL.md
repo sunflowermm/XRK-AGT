@@ -37,9 +37,10 @@ description: MCP 全工具地图、参数要点、search_replace vs write、失�
 | `browser.*` | browser | 关 | JS 页、表单、多标签 |
 | `memory.*` | memory | 关 | 长期记忆 save/query（关键词，非向量） |
 | `chat.*` | chat | 视配置 | QQ 群管（办公通常不用） |
-| `remote-mcp.*` | 用户配置 | 视 yaml | 第三方 MCP |
+| `remote-mcp.*` | 远程 MCP | 视挂载 | 第三方工具；来源：`getMcpServers`（工作区 workflow）或 yaml `mcp.remote` |
 
 在 v3 请求 `workflow[]` 或控制台勾选追加；未列出时仅 **tools + web**。  
+挂远程优先让办事助手写 **`getMcpServers`**（见 **agent-core-dev** §3.5），勿改系统 yaml。  
 群聊助手默认合并 `tools`（及 memory/database）时，下列 `tools.*` 可直接调用。
 
 斜杠（用户消息）：`/recipes` 列表；`/recipe <id> k=v` 注入配方说明与提示。

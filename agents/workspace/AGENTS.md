@@ -34,6 +34,7 @@
 | 只要方案 | office-plan |
 | 「记住」偏好 | agent-memory |
 | 写工作区 Core / 插件 / HTTP | **直接写**（rules 常驻骨架；命中 microagent）；勿先读长文 |
+| 挂远程 MCP / mcpServers JSON | `workflow/` + **getMcpServers**；**勿改** `ai-workflow.yaml` |
 | 问架构 / 怎么扩展 | agent-core-dev → 可选深读 |
 
 细则以 **agent-core** 为准。
@@ -53,6 +54,7 @@
 - 删除、外发、本机执行命令前：说明影响并征得确认
 - 未验证数据标注并说明如何核实
 - **不写工作区外**；业务码只写本工作区 `core/`；框架只读
+- **不改**系统 `ai-workflow.yaml` / `config/default_config`；挂远程 MCP 用 **getMcpServers**
 
 ## 群聊
 

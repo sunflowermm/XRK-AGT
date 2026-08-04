@@ -34,7 +34,7 @@ description: 办事 Agent 总控：工作循环、完整技能路由、降级、
 | 1 | 要用 MCP / 改文件 / run | **agent-tools** |
 | 1b | 装技能 / 同步种子 / CLI | **agent-skillhub** |
 | 1c | 写新 skill / 改 SKILL 结构 | **agent-build-skill** |
-| 1d | 写工作区插件 / HTTP / Core 扩展 | **直接写**（rules + microagent plugin-write）；不够才 read **agent-core-dev** |
+| 1d | 写工作区插件 / HTTP / workflow / 挂 MCP | **直接写**（rules + plugin-write）；MCP JSON → **getMcpServers**；不够才 read **agent-core-dev** |
 | 2 | 开放域搜网、无具体 URL | **agent-search** |
 | 3 | JS 页、表单、多步点击 | **agent-browser** + **office-env-web** |
 | 4 | 跨会话偏好、「记住」 | **agent-memory** |
@@ -51,6 +51,7 @@ description: 办事 Agent 总控：工作循环、完整技能路由、降级、
 | 「帮我装一个日历技能」 | agent-skillhub → agent-tools |
 | 「加个 #签到 插件」 | 直接 write（rules / plugin-write） |
 | 「加个通知类插件 / 写个 HTTP」 | 直接 write；选型见表，细则 agent-core-dev |
+| 「挂这个 MCP」+ mcpServers JSON | 直接 write `workflow/*-mcp.js` + **getMcpServers**；**勿改** ai-workflow.yaml |
 | 「这项目业务放哪 / 怎么扩展」 | agent-core-dev → 可选深读 xrk-project-overview |
 | 「把这份 md 转成 Word」 | office-env-setup → office-docx → agent-tools |
 | 「搜一下某政策最新规定」 | agent-search → office-research → answer-format |
@@ -71,7 +72,8 @@ description: 办事 Agent 总控：工作循环、完整技能路由、降级、
 | 安装 / 更新 / 自建技能 | **agent-skillhub** |
 | 编写 / 改进 SKILL.md | **agent-build-skill** |
 | 工作区业务插件（PluginBase） | **agent-core-dev**（完整字段清单；常见任务靠 rules/microagent 直接写） |
-| 工作区 HTTP / workflow / 配置 / 事件 | **agent-core-dev** 对应节 |
+| 工作区 HTTP / workflow / 配置 / 事件 | **agent-core-dev**（workflow+MCP §0.1 / §3） |
+| 挂远程 MCP / mcpServers JSON | **getMcpServers**（优先）；细则 agent-core-dev §3.5；**勿改**系统 yaml |
 | 中文检索 / 联网 | **agent-search** |
 | 受控浏览器交互 | **agent-browser** |
 | 记忆 | **agent-memory** |
@@ -194,7 +196,8 @@ description: 办事 Agent 总控：工作循环、完整技能路由、降级、
 ## 禁止
 
 - **写盘**：仅本工作区；业务 JS 仅 `core/workspace-Core/`（或用户点名的本工作区 `core/<名>/`）
-- **只读**：项目根 `.cursor/`、`docs/`、`src/`、仓库 `core/`——可 read 了解，禁止改；用户要改框架则说明请维护者 / Cursor
-- 不把 `.cursor/skills/xrk-*` 当 office 技能；写 Core 时按 **agent-core-dev** 去 read
+- **勿改系统配置**：`ai-workflow.yaml`、`config/default_config/`、`data/server_bots/`；挂远程 MCP 用 **getMcpServers**
+- **读底层**：允许。配方不够时可读 `.cursor/skills/xrk-*`、`docs/`、`src/`、仓库 `core/`；**禁止改**
+- 不把 `.cursor/skills/xrk-*` 当 office 技能；写 Core 优先 **agent-core-dev**
 - 不因 skill 列表长而跳过 ENV 与工具契约
 - 不伪造工具成功或文件路径；不假装已改仓库文件

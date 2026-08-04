@@ -1,5 +1,5 @@
 ---
-description: 工作区写 Core——边界 + 最短通用骨架（每轮注入；细则读 agent-core-dev）
+description: 工作区写 Core——边界 + 场景选型 + message/MCP 骨架（细则 agent-core-dev）
 alwaysApply: true
 ---
 
@@ -7,14 +7,15 @@ alwaysApply: true
 
 ## 边界
 
-- **写**：仅本工作区 `core/workspace-Core/`（plugin / http / workflow / …）。
-- **读**：可读 `../../../.cursor` / `docs` / 仓库示例；禁止写回去。
-- 用户已说「写/加一个」→ **直接 write**；说「继续」后禁止重读同一批文档。
-- **禁止**为常见需求去翻 `src/`、Tasker；字段/其它扩展点 read **一次** **agent-core-dev**。
+- **写**：仅 `core/workspace-Core/`（plugin / http / workflow / events / commonconfig / www）。
+- **读**：工作区 + 项目根均可（`.cursor` / `docs` / `system-Core` / `src`…）——只读学写法；禁止写回框架。
+- **勿改**系统配置：`ai-workflow.yaml`、`config/default_config/`、`data/server_bots/`（写沙箱也进不去）；挂远程 MCP 用 JS。
+- 用户已说「写/加」→ **直接 write**；「继续」后禁止空转重读。
+- 常见需求：先对本表；不够 read **agent-core-dev**；仍不会再读底层（按需）。
 
-## 最短骨架（message）
+## message 骨架
 
-路径：`core/workspace-Core/plugin/<名>.js`
+`core/workspace-Core/plugin/<名>.js`
 
 ```js
 export class MyCmd extends PluginBase {
@@ -28,15 +29,38 @@ export class MyCmd extends PluginBase {
 }
 ```
 
-## 选型（勿偏一种玩法）
+## 远程 MCP 骨架（用户给 mcpServers JSON 时）
 
-| 需求类型 | 落点 | 要点 |
-|----------|------|------|
-| `#命令` / 聊天关键词 | `plugin` + `event: 'message'` + `rule` | 上表骨架 |
-| 通知类（进群、戳一戳、名片赞等） | `plugin` + `event: 'notice…'` | 逻辑多在 **`accept()`**；`rule` 可空（notice 常无 `e.msg`） |
-| HTTP 接口 | `http/*.js` | `HttpResponse`；见 agent-core-dev §2 |
-| 自定义 MCP 工具面 | `workflow/*.js` | AiWorkflow；少用 |
-| 配置面板字段 | `commonconfig/*.js` | ConfigBase |
+`core/workspace-Core/workflow/<短名>-mcp.js` —— **优先这条，勿改 yaml**
 
-导入：裸名 `PluginBase` / `msgSegment`；HTTP → `#utils/http-utils.js`。  
-**完整基类字段清单**：read **agent-core-dev**（Plugin / HTTP / workflow / events / config），勿翻 `src/`。
+```js
+import AiWorkflow from '#infrastructure/ai-workflow/ai-workflow.js';
+export default class RemoteMcpMount extends AiWorkflow {
+  constructor() {
+    super({ name: 'example-mcp', description: '挂载远程 MCP', version: '1.0.0', priority: 5000, capabilities: ['tools'] });
+  }
+  async init() { await super.init(); }
+}
+export function getMcpServers() {
+  return { '服务器名': { url: 'https://…' } }; // 或 command+args；原样映射用户 JSON
+}
+```
+
+验收日志：`检测到 MCP 插件服务器`；工具前缀 `remote-mcp.<服务器名>.*`。新建 `workflow/` 需重启。
+
+## 场景选型
+
+| 需求 | 落点 | 模式 |
+|------|------|------|
+| 命令 / 关键词 | `plugin` + `message` + `rule` | 上表 |
+| 仅群/私 / 主人 | `event` 或 `permission:'master'` | agent-core-dev §1 |
+| 多轮 | `setContext` / `finish` | §1.6 |
+| 定时 | `task` + cron | §1.7 |
+| 通知/请求 | `notice…` / `request…` + **`accept()`** | §1.8 |
+| 调 AI | `getWorkflow('chat').process` | §1.9 / §3.4 |
+| HTTP | `http/` + `HttpResponse` | §2 |
+| 自研 MCP 工具 | `workflow/` + `registerMCPTool` | §3.2 |
+| 挂远程 MCP | `workflow/` + **`getMcpServers`** | §0.1 / §3.5 |
+| 配置项 | `commonconfig/` | §4 |
+
+导入：裸名 `PluginBase` / `msgSegment`；HTTP → `#utils/http-utils.js`。

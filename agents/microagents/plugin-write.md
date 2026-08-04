@@ -1,6 +1,6 @@
 ---
 name: plugin-write
-description: 用户要写工作区插件/HTTP/Core 扩展时注入通用写法；直接 write，勿翻底层
+description: 用户要写工作区插件/HTTP/workflow/MCP 时注入选型；直接 write；远程 MCP 用 getMcpServers；不会写再只读底层
 triggers:
   - 写插件
   - 加个插件
@@ -10,27 +10,61 @@ triggers:
   - Core 插件
   - 写 HTTP
   - 写接口
+  - 写工作流
+  - 写 workflow
+  - MCP
+  - mcpServers
+  - getMcpServers
+  - registerMCPTool
+  - 远程 MCP
+  - 挂载 MCP
+  - 挂个 MCP
+  - 定时任务
+  - 多轮
   - workspace-Core
   - #命令
   - plugin
 ---
 
-# 写工作区 Core（本段已注入）
+# 写工作区 Core（已注入）
 
-- 落盘：`core/workspace-Core/{plugin|http|…}/`（仅本工作区）
-- 用户已要求写 → **立刻 write**；禁止先翻 `src/` / Tasker / 整份长文档
-- 「继续/确认」→ 接着写，禁止把同一批文档重读一遍
+- 落盘：`core/workspace-Core/{plugin|http|workflow|…}/`
+- 已要求写 → **立刻 write**（选型够用时）
+- 「继续/确认」→ 接着写，禁止空转重读
+- **不会写** → 只读：`agent-core-dev` → `xrk-*` / `docs` / 示例 / 必要时 `src/`；仍只写工作区
+- **禁止**改 `ai-workflow.yaml` / 系统配置；挂远程 MCP 用下面 JS
 
-## 按类型选骨架
+## 对号入座
 
-| 类型 | 目录 | 入口 |
+| 类型 | 目录 | 模式 |
 |------|------|------|
-| 聊天命令 | `plugin/` | `event: 'message'` + `rule[].reg/fnc` |
-| 通知事件 | `plugin/` | `event: 'notice…'` + 多在 **`accept()`**（`rule` 可 `[]`） |
-| HTTP | `http/` | `export default { routes }` + `HttpResponse` |
-| 其它 | workflow / events / commonconfig | 字段表 → read **agent-core-dev** 对应节 |
+| 聊天命令 | `plugin/` | `message` + `rule` |
+| 通知/请求 | `plugin/` | `notice…`/`request…` + 多在 **`accept()`** |
+| 多轮 | `plugin/` | `setContext` / `finish` |
+| 定时 | `plugin/` | `task:[{ cron, fnc }]` |
+| HTTP | `http/` | `routes` + `HttpResponse` |
+| 自研 MCP 工具 | `workflow/` | `registerMCPTool` |
+| 用户给 `{ "mcpServers": … }` / 挂远程 | `workflow/` | **`export function getMcpServers()`** + 占位 `export default` AiWorkflow |
+| 配置 schema | `commonconfig/` | `ConfigBase` |
 
-## message 示例
+## 远程 MCP 最小例（优先）
+
+```js
+import AiWorkflow from '#infrastructure/ai-workflow/ai-workflow.js';
+export default class RemoteMcpMount extends AiWorkflow {
+  constructor() {
+    super({ name: 'example-mcp', description: '挂载远程 MCP', version: '1.0.0', priority: 5000, capabilities: ['tools'] });
+  }
+  async init() { await super.init(); }
+}
+export function getMcpServers() {
+  return { '服务器名': { url: 'https://…' } }; // 原样映射用户 JSON；也可用 command+args
+}
+```
+
+勿 `registerMCPTool`+`fetch` 空壳。新建 `workflow/` → 提醒重启。验收：`检测到 MCP 插件服务器` → `remote-mcp.<名>.*`。
+
+message 最小例：
 
 ```js
 export class MyCmd extends PluginBase {
@@ -44,10 +78,4 @@ export class MyCmd extends PluginBase {
 }
 ```
 
-## notice 要点（一类事件，不单指某玩法）
-
-- 事件键形如 `notice.<detail>.<sub>`，可用 `*` 段匹配（段数一致），例如 `notice.group.increase`、`notice.*.poke`。
-- **优先 `accept()`**：过滤 `sub_type` / `target_id` 等后做事，返回 `'return'` 截断或 `false` 跳过。
-- 具体字段与更多配方：read 一次 `skills/core/agent-core-dev/SKILL.md`。
-
-写完：路径 + 怎么验收。需要 `super`/`rule`/HTTP 形状/workflow·config 全表时再 read **agent-core-dev**（一次即可）。
+字段全表与其它配方 → read **一次** `agent-core-dev`。写完给路径 + 验收。

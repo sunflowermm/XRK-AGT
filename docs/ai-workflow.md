@@ -154,6 +154,7 @@ sequenceDiagram
 - **对话主表面**：`chat`（及 `mergeWorkflows` 合成实例）
 - **能力副流**：`memory`、`database`、`tools`、`desktop`、`web`、`browser` 等实体流
 - **远程 MCP 工具面**：`remote-mcp.<name>` — 仅工具白名单，不可 merge 成子流
+  - 来源：`ai-workflow.yaml` → `mcp.remote.mcpServers`，或 workflow 模块 **`export function getMcpServers()`**（返回 `{ 名: { url|command… } }`，由 `AiWorkflowLoader` 记入插件 MCP 表后连接；不依赖 `mcp.remote.enabled`）
 
 **请求上下文**：`runWithWorkflowRequestContext`（ALS）写入 `toolStreamNames`；副提示 / LLM tools / MCP handler 共用，避免单例缓存串请求。
 

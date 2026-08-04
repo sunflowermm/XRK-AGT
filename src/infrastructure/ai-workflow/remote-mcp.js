@@ -1,6 +1,7 @@
 import { spawn } from 'node:child_process';
 import RuntimeUtil from '#utils/runtime-util.js';
 import { resolveCommandSpawn } from '#utils/command-spawn.js';
+import { fetchWithPolicy } from '#utils/fetch-with-retry.js';
 import { getAiWorkflowConfigOptional } from '#utils/ai-workflow-config.js';
 import { checkMcpConnectAllowed } from '#utils/runtime-policy.js';
 
@@ -440,10 +441,11 @@ export class RemoteMcpController {
       try {
         const requestId = this._makeRemoteRequestId();
         const request = { jsonrpc: '2.0', id: requestId, method: 'tools/call', params: { name: toolName, arguments: args } };
-        const response = await RuntimeUtil.fetch(server.url, {
+        const response = await fetchWithPolicy(server.url, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', ...server.headers },
-          body: JSON.stringify(request)
+          body: JSON.stringify(request),
+          timeoutMs: 30_000,
         });
         const data = await response.json();
         return this._normalizeRemoteMCPResult(data.result);
@@ -502,14 +504,20 @@ export class RemoteMcpController {
   async _fetchRemoteTools(serverName, config) {
     try {
       const request = { jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} };
-      const response = await RuntimeUtil.fetch(config.url, {
+      const response = await fetchWithPolicy(config.url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...(config.headers || {}) },
-        body: JSON.stringify(request)
+        body: JSON.stringify(request),
+        timeoutMs: 30_000,
       });
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status} ${response.statusText || ''}`.trim());
+      }
       const data = await response.json();
       if (data.result?.tools) {
         this._registerRemoteTools(serverName, data.result.tools);
+      } else if (data.error) {
+        throw new Error(data.error?.message || JSON.stringify(data.error));
       }
     } catch (error) {
       this._makeLog('error', `获取远程MCP工具失败 ${serverName}: ${error.message}`);

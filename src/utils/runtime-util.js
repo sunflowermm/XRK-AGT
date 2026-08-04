@@ -36,8 +36,7 @@ import { inlineBinaryFromRef, isPathLike } from './media-ref.js';
  * const uuid = RuntimeUtil.uuid();
  * const randomStr = RuntimeUtil.randomString(32);
  * 
- * // 网络请求
- * const response = await RuntimeUtil.fetch('https://api.example.com');
+ * // 外联请求用全局 fetch / #utils/fetch-with-retry.js（无 RuntimeUtil.fetch）
  * 
  * // 缓存管理
  * const cache = RuntimeUtil.getMap('my-cache', { ttl: 60000 });
