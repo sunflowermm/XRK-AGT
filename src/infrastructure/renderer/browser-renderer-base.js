@@ -14,6 +14,10 @@ import Renderer from './Renderer.js';
  * - 用户优先槽 shotingUser：data.priority / userTriggered 时独占一条（与 Yunzai 对齐）
  * - 槽位 id 唯一，禁止用模板 name 入队（同名并发会误清）
  * - 排队有超时，避免无限等待
+ *
+ * 僵死恢复：
+ * - ensureBrowserHealthy / safeCloseBrowser：探测失败或 close 卡住时丢弃实例并强杀
+ * - 截图出现 timeout/disconnected 时 forceRestart，避免必须重启整个进程
  */
 export default class BrowserRendererBase extends Renderer {
   logTag = '';
@@ -30,8 +34,13 @@ export default class BrowserRendererBase extends Renderer {
   maxConcurrent = 3;
   /** 排队等待默认超时（可被 data.queueWaitTimeout / 渲染器 timeout 覆盖） */
   queueWaitTimeoutMs = 120000;
+  /** init 锁等待；超时后清锁，避免 launch 挂死导致永久唤不起来 */
+  browserInitWaitMs = 60000;
+  /** close / 健康探测超时 */
+  browserOpTimeoutMs = 8000;
   healthCheckTimer = null;
   _unregisterShutdownHook = null;
+  _restarting = false;
 
   constructor(meta, config = {}, logTag) {
     super(meta);
@@ -42,6 +51,14 @@ export default class BrowserRendererBase extends Renderer {
       Number.isFinite(config.queueWaitTimeout) && config.queueWaitTimeout > 0
         ? config.queueWaitTimeout
         : this.queueWaitTimeoutMs;
+    this.browserInitWaitMs =
+      Number.isFinite(config.browserInitWaitMax) && config.browserInitWaitMax > 0
+        ? config.browserInitWaitMax
+        : this.browserInitWaitMs;
+    this.browserOpTimeoutMs =
+      Number.isFinite(config.browserOpTimeout) && config.browserOpTimeout > 0
+        ? config.browserOpTimeout
+        : this.browserOpTimeoutMs;
     this._unregisterShutdownHook = registerShutdownHook(() => this.cleanup());
   }
 
@@ -108,17 +125,104 @@ export default class BrowserRendererBase extends Renderer {
     if (i >= 0) list.splice(i, 1);
   }
 
+  isFatalBrowserError(err) {
+    return /timeout|timed out|disconnected|Target closed|Session closed|Protocol error|Browser closed|Navigation failed|net::ERR/i.test(
+      String(err?.message || err || '')
+    );
+  }
+
+  async withTimeout(promise, ms, label = 'operation') {
+    let timer;
+    try {
+      return await Promise.race([
+        promise,
+        new Promise((_, reject) => {
+          timer = setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms);
+        }),
+      ]);
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  /**
+   * 立即丢弃 this.browser，避免后续请求继续命中僵死实例。
+   * @returns {any} 旧 browser 引用，交给 safeCloseBrowser
+   */
+  detachBrowser() {
+    const browser = this.browser;
+    this.browser = null;
+    this.clearHealthCheckTimer();
+    return browser;
+  }
+
+  /** close 卡住时 disconnect / SIGKILL，不阻塞业务线程过久 */
+  async safeCloseBrowser(browser, closeTimeoutMs = this.browserOpTimeoutMs) {
+    if (!browser) return;
+    try {
+      await this.withTimeout(
+        (async () => {
+          try {
+            if (typeof browser.pages === 'function') {
+              const pages = await browser.pages();
+              for (const page of pages) await page.close().catch(() => {});
+            } else if (typeof browser.contexts === 'function') {
+              for (const ctx of browser.contexts()) await ctx.close().catch(() => {});
+            }
+          } catch {}
+          await browser.close().catch(() => {});
+        })(),
+        closeTimeoutMs,
+        'browser close'
+      );
+    } catch {
+      try {
+        browser.disconnect?.();
+      } catch {}
+      try {
+        browser.process?.()?.kill?.('SIGKILL');
+      } catch {}
+    }
+  }
+
+  /**
+   * @param {(browser: any) => Promise<void>} ping
+   * @returns {Promise<boolean>}
+   */
+  async ensureBrowserHealthy(ping) {
+    if (!this.browser) return false;
+    try {
+      await this.withTimeout(Promise.resolve(ping(this.browser)), this.browserOpTimeoutMs, 'browser health');
+      return true;
+    } catch (e) {
+      RuntimeUtil.makeLog('warn', `Existing browser invalid: ${e.message}`, this.logTag);
+      const browser = this.detachBrowser();
+      await this.removeStoredEndpoint();
+      await this.safeCloseBrowser(browser);
+      return false;
+    }
+  }
+
   async waitForInitLock() {
     if (!this.lock) return this.browser ?? true;
 
-    let waitTime = 0;
-    while (this.lock && waitTime < 30000) {
+    const deadline = Date.now() + this.browserInitWaitMs;
+    while (this.lock && Date.now() < deadline) {
       await new Promise((r) => setTimeout(r, 100));
-      waitTime += 100;
+      if (this.browser) return this.browser;
     }
 
     if (this.browser) return this.browser;
-    return this.lock ? false : true;
+    if (this.lock) {
+      RuntimeUtil.makeLog(
+        'warn',
+        `Browser init lock wait timeout (${this.browserInitWaitMs}ms), clearing stuck lock`,
+        this.logTag
+      );
+      this.lock = false;
+      return false;
+    }
+    return true;
   }
 
   async ensureMac(redisKeyPrefix) {
@@ -208,5 +312,52 @@ export default class BrowserRendererBase extends Renderer {
   buildBrowserLaunchOptions(extra = {}) {
     const { wsEndpoint: _ws, ignoreHTTPSErrors: _https, ...rest } = { ...(this.config || {}), ...extra };
     return rest;
+  }
+
+  /**
+   * 强制关闭并丢弃浏览器。force 时忽略 lock / 计数条件，且 close 带超时。
+   * 子类可 override 做额外清理；默认实现足够 puppeteer/playwright 共用。
+   */
+  async restart(force = false) {
+    if (this._restarting) return;
+    if (!force) {
+      if (!this.browser || this.lock) return;
+      if (this.renderNum % this.restartNum !== 0 || this.activeSlotCount() > 0) return;
+    } else if (!this.browser && !this.lock) {
+      await this.removeStoredEndpoint();
+      return;
+    }
+
+    this._restarting = true;
+    RuntimeUtil.makeLog('warn', `Browser ${force ? 'forced' : 'scheduled'} restart...`, this.logTag);
+
+    let currentEndpoint = null;
+    try {
+      currentEndpoint = this.browser?.wsEndpoint?.() ?? null;
+    } catch {}
+
+    const browser = this.detachBrowser();
+    this.renderNum = 0;
+    if (force) this.lock = false;
+
+    try {
+      await this.safeCloseBrowser(browser);
+      await this.removeStoredEndpoint(currentEndpoint);
+      if (global.gc) global.gc();
+      RuntimeUtil.makeLog('info', 'Browser restart completed', this.logTag);
+    } catch (err) {
+      RuntimeUtil.makeLog('error', `Restart failed: ${err.message}`, this.logTag);
+    } finally {
+      this._restarting = false;
+    }
+
+    return true;
+  }
+
+  /** 截图致命错误：立刻 detach，后台 close，下次 screenshot 会重新 launch */
+  handleFatalScreenshotError(error) {
+    if (!this.isFatalBrowserError(error)) return;
+    RuntimeUtil.makeLog('warn', `Fatal browser error, scheduling restart: ${error.message}`, this.logTag);
+    void this.restart(true);
   }
 }

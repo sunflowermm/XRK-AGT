@@ -57,6 +57,12 @@ alwaysApply: true
 
 改 lsy-Core 底层接线看 **README + `xrk-config`**；改李诗雅「怎么干活」看 **AGENTS.md + skills/**。
 
+### 独立 git 产品 Core
+
+- 业务 Core（如 `vibe-learn-Core`）常为**单独仓库**，本地 clone 到 `core/<名>/`；主仓只白名单 `system-Core`（见 `xrk-third-party-plugins`）。
+- **产品精工 / 内容约定**写在该 Core 仓的 `.cursor/rules/*.mdc`（随产品仓提交），**不要**塞进主仓 alwaysApply。
+- 主仓若需在 monorepo 工作区触发：用 `globs: core/<名>/**` 做薄路由，正文以 Core 仓规则为准。
+
 ## 开发与扩展
 
 - **编码与全局对象**：见 `xrk-dev-requirements.mdc`、**`docs/coding-style.md`**、skill **`xrk-coding-style`** / **`xrk-node-runtime`**（Node 26 API，禁止旧写法）。**Core www**：skill **`xrk-www-compat`**。**扩展点与基类**：见 `docs/框架可扩展性指南.md` 与 skill `xrk-infrastructure`。

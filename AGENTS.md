@@ -98,6 +98,7 @@
 
 - 只写现行契约；「在哪改」给到文件 + 函数/字段；与代码冲突以代码为准。
 - 产品 Core：`README.md` 写集成；`AGENTS.md` / `skills/`（若有）写产品 Agent 工作区与工具。
+- 独立 git 产品 Core：精工 / Cursor 约定写在该 Core 的 `.cursor/rules/`；主仓不 alwaysApply 产品细则（见 `xrk-project`）。
 - 索引：[docs/README.md](docs/README.md) · 办事助手：[docs/agents.md](docs/agents.md)
 
 ## GitHub MCP（可选）

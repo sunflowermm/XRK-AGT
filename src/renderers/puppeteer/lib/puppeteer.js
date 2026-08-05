@@ -15,6 +15,9 @@ export default class PuppeteerRenderer extends BrowserRendererBase {
     super({ id: "puppeteer", type: "image", render: "screenshot" }, config, "PuppeteerRenderer");
 
     this.puppeteerTimeout = config.puppeteerTimeout ?? 120000;
+    this.healthCheckInterval = config.healthCheckInterval ?? 120000;
+    this.maxRetries = config.maxRetries ?? 3;
+    this.retryDelay = config.retryDelay ?? 2000;
 
     const vp = config.viewport ?? {};
     this.viewport = {
@@ -26,13 +29,48 @@ export default class PuppeteerRenderer extends BrowserRendererBase {
       headless: config.headless ?? "new",
       args: config.args ?? ['--disable-gpu', '--no-sandbox', '--disable-dev-shm-usage'],
       wsEndpoint: pickBrowserPath(config.wsEndpoint ?? config.puppeteerWS),
+      protocolTimeout: config.protocolTimeout ?? this.puppeteerTimeout,
+      timeout: config.launchTimeout ?? this.puppeteerTimeout,
     };
     const executablePath = resolvePlaywrightExecutable(config.chromiumPath);
     if (executablePath) this.config.executablePath = executablePath;
   }
 
+  async connectToExisting(browserWSEndpoint, retries = 0) {
+    let browser = null;
+    try {
+      browser = await puppeteer.connect({
+        browserWSEndpoint,
+        defaultViewport: null,
+        protocolTimeout: this.config.protocolTimeout,
+      });
+      const page = await browser.newPage();
+      page.setDefaultTimeout(5000);
+      await page.goto("about:blank", { timeout: 5000, waitUntil: "domcontentloaded" });
+      await page.close().catch(() => {});
+      return browser;
+    } catch (e) {
+      if (browser) await this.safeCloseBrowser(browser, 3000);
+      if (retries < this.maxRetries - 1) {
+        await new Promise((r) => setTimeout(r, this.retryDelay * Math.pow(2, retries)));
+        return this.connectToExisting(browserWSEndpoint, retries + 1);
+      }
+      RuntimeUtil.makeLog("warn", `Failed to connect to existing Chromium: ${e.message}`, this.logTag);
+      await this.removeStoredEndpoint();
+      return null;
+    }
+  }
+
   async browserInit() {
-    if (this.browser) return this.browser;
+    if (this.browser) {
+      const ok = await this.ensureBrowserHealthy(async (b) => {
+        if (typeof b.isConnected === "function" && !b.isConnected()) {
+          throw new Error("disconnected");
+        }
+        await b.version();
+      });
+      if (ok) return this.browser;
+    }
 
     const lockResult = await this.waitForInitLock();
     if (lockResult !== true && lockResult !== false) return lockResult;
@@ -46,30 +84,19 @@ export default class PuppeteerRenderer extends BrowserRendererBase {
       const browserWSEndpoint = await this.resolveWsEndpoint();
 
       if (browserWSEndpoint) {
-        try {
-          RuntimeUtil.makeLog("info", `Connecting to existing Chromium instance: ${browserWSEndpoint}`, this.logTag);
-          this.browser = await puppeteer.connect({
-            browserWSEndpoint,
-            defaultViewport: null,
-          });
-
-          const pages = await this.browser.pages().catch(() => null);
-          if (pages) {
-            RuntimeUtil.makeLog("info", "Successfully connected to existing Chromium instance", this.logTag);
-          } else {
-            RuntimeUtil.makeLog("warn", "Connected Chromium instance unavailable, launching new instance", this.logTag);
-            await this.browser.close().catch(() => {});
-            this.browser = null;
-            await this.removeStoredEndpoint();
-          }
-        } catch (e) {
-          RuntimeUtil.makeLog("warn", `Failed to connect to existing Chromium: ${e.message}`, this.logTag);
-          await this.removeStoredEndpoint();
+        RuntimeUtil.makeLog("info", `Connecting to existing Chromium instance: ${browserWSEndpoint}`, this.logTag);
+        this.browser = await this.connectToExisting(browserWSEndpoint);
+        if (this.browser) {
+          RuntimeUtil.makeLog("info", "Successfully connected to existing Chromium instance", this.logTag);
         }
       }
 
       if (!this.browser) {
-        this.browser = await puppeteer.launch(this.buildBrowserLaunchOptions()).catch((err) => {
+        this.browser = await this.withTimeout(
+          puppeteer.launch(this.buildBrowserLaunchOptions()),
+          this.puppeteerTimeout,
+          "browser launch"
+        ).catch((err) => {
           RuntimeUtil.makeLog("error", `Failed to start Chromium: ${err.message}`, this.logTag);
 
           if (
@@ -101,7 +128,7 @@ export default class PuppeteerRenderer extends BrowserRendererBase {
       this.browser.on("disconnected", () => {
         RuntimeUtil.makeLog("warn", "Chromium instance disconnected, restarting...", this.logTag);
         this.browser = null;
-        this.restart(true);
+        void this.restart(true);
       });
 
       this.startHealthCheck();
@@ -119,15 +146,18 @@ export default class PuppeteerRenderer extends BrowserRendererBase {
     if (this.healthCheckTimer) return;
 
     this.healthCheckTimer = setInterval(async () => {
-      if (!this.browser || this.activeSlotCount() > 0) return;
+      if (!this.browser || this.activeSlotCount() > 0 || this._restarting) return;
 
       try {
-        await this.browser.pages();
+        if (typeof this.browser.isConnected === "function" && !this.browser.isConnected()) {
+          throw new Error("disconnected");
+        }
+        await this.withTimeout(this.browser.version(), this.browserOpTimeoutMs, "health check");
       } catch (e) {
         RuntimeUtil.makeLog("warn", `Health check failed: ${e.message}, restarting...`, this.logTag);
         await this.restart(true);
       }
-    }, 120000);
+    }, this.healthCheckInterval);
   }
 
   async screenshot(name, data = {}) {
@@ -146,8 +176,11 @@ export default class PuppeteerRenderer extends BrowserRendererBase {
       const start = Date.now();
 
       try {
-        page = await this.browser.newPage();
+        page = await this.withTimeout(this.browser.newPage(), this.browserOpTimeoutMs, "newPage");
         if (!page) throw new Error("Failed to create page");
+
+        page.setDefaultTimeout(this.puppeteerTimeout);
+        page.setDefaultNavigationTimeout(this.puppeteerTimeout);
 
         const sysScale = Number(data.sys?.scale);
         const viewport = { ...this.viewport };
@@ -221,6 +254,7 @@ export default class PuppeteerRenderer extends BrowserRendererBase {
         }
       } catch (error) {
         RuntimeUtil.makeLog("error", `[${name}] Screenshot failed: ${error.message}`, this.logTag);
+        this.handleFatalScreenshotError(error);
         ret = [];
       } finally {
         if (page) await page.close().catch(() => {});
@@ -232,51 +266,10 @@ export default class PuppeteerRenderer extends BrowserRendererBase {
     }
   }
 
-  async restart(force = false) {
-    if (!this.browser || this.lock) return;
-    if (!force && (this.renderNum % this.restartNum !== 0 || this.activeSlotCount() > 0)) return;
-
-    RuntimeUtil.makeLog("warn", `Puppeteer Chromium ${force ? "forced" : "scheduled"} restart...`, this.logTag);
-
-    try {
-      const currentEndpoint = this.browser.wsEndpoint();
-
-      const pages = await this.browser.pages();
-      for (const page of pages) {
-        await page.close().catch(() => {});
-      }
-
-      await this.browser.close().catch(err =>
-        RuntimeUtil.makeLog("error", `Failed to close browser: ${err.message}`, this.logTag)
-      );
-      this.browser = null;
-
-      await this.removeStoredEndpoint(currentEndpoint);
-      this.renderNum = 0;
-      this.clearHealthCheckTimer();
-
-      if (global.gc) global.gc();
-
-      RuntimeUtil.makeLog("info", "Browser restart completed", this.logTag);
-    } catch (err) {
-      RuntimeUtil.makeLog("error", `Restart failed: ${err.message}`, this.logTag);
-    }
-
-    return true;
-  }
-
   async cleanup() {
     this.clearHealthCheckTimer();
-
-    if (this.browser) {
-      const pages = await this.browser.pages().catch(() => []);
-      for (const page of pages) {
-        await page.close().catch(() => {});
-      }
-      await this.browser.close().catch(() => {});
-      this.browser = null;
-    }
-
+    const browser = this.detachBrowser();
+    await this.safeCloseBrowser(browser);
     await this.removeStoredEndpoint();
     RuntimeUtil.makeLog("info", "Puppeteer resources cleaned up", this.logTag);
   }

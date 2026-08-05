@@ -221,6 +221,10 @@ export default function (config) {
 
 A: 检查文件监听是否正常工作，或手动调用 `renderer.clearCache()` 清理缓存。
 
+### Q: 截图报 `Timed out after waiting 30000ms` / 必须重启进程才能恢复？
+
+A: Chromium 僵死但仍被复用。`BrowserRendererBase` 会在 `browserInit` 做健康探测，close 带超时（失败则 disconnect/SIGKILL），并对 timeout/disconnected 强制 `restart(true)`。若仍复现，检查 Redis 里缓存的 `wsEndpoint` 是否指向僵尸进程。
+
 ### Q: 如何引用静态资源？
 
 A: 在模板中使用 `{{resPath}}` 变量，会自动设置为 `./resources/` 路径。

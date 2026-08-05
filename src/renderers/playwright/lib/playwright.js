@@ -82,13 +82,13 @@ export default class PlaywrightRenderer extends BrowserRendererBase {
 
   async browserInit() {
     if (this.browser) {
-      try {
-        this.browser.contexts();
-        return this.browser;
-      } catch (e) {
-        RuntimeUtil.makeLog("warn", `Existing browser instance invalid: ${e.message}`, this.logTag);
-        this.browser = null;
-      }
+      const ok = await this.ensureBrowserHealthy(async (b) => {
+        if (typeof b.isConnected === "function" && !b.isConnected()) {
+          throw new Error("disconnected");
+        }
+        b.contexts();
+      });
+      if (ok) return this.browser;
     }
 
     const lockResult = await this.waitForInitLock();
@@ -108,7 +108,11 @@ export default class PlaywrightRenderer extends BrowserRendererBase {
 
       if (!this.browser) {
         RuntimeUtil.makeLog("info", `Launching new ${this.browserType} instance...`, this.logTag);
-        this.browser = await launchPlaywrightBrowser(playwright, this.browserType, this.launchOptions);
+        this.browser = await this.withTimeout(
+          launchPlaywrightBrowser(playwright, this.browserType, this.launchOptions),
+          this.playwrightTimeout,
+          "browser launch"
+        );
 
         if (this.browser) {
           RuntimeUtil.makeLog("info", `Playwright ${this.browserType} started successfully`, this.logTag);
@@ -154,10 +158,13 @@ export default class PlaywrightRenderer extends BrowserRendererBase {
     if (this.healthCheckTimer) return;
 
     this.healthCheckTimer = setInterval(async () => {
-      if (!this.browser || this.activeSlotCount() > 0 || this.isClosing) return;
+      if (!this.browser || this.activeSlotCount() > 0 || this.isClosing || this._restarting) return;
 
       try {
-        this.browser.contexts();
+        if (typeof this.browser.isConnected === "function" && !this.browser.isConnected()) {
+          throw new Error("disconnected");
+        }
+        await this.withTimeout(Promise.resolve(this.browser.contexts()), this.browserOpTimeoutMs, "health check");
       } catch (e) {
         RuntimeUtil.makeLog("warn", `Health check failed: ${e.message}, restarting...`, this.logTag);
         await this.restart(true);
@@ -187,9 +194,15 @@ export default class PlaywrightRenderer extends BrowserRendererBase {
         if (Number.isFinite(sysScale) && sysScale > 0) {
           contextOptions.deviceScaleFactor = Math.min(Math.max(sysScale, 1), 4);
         }
-        context = await this.browser.newContext(contextOptions);
-        page = await context.newPage();
+        context = await this.withTimeout(
+          this.browser.newContext(contextOptions),
+          this.browserOpTimeoutMs,
+          "newContext"
+        );
+        page = await this.withTimeout(context.newPage(), this.browserOpTimeoutMs, "newPage");
         if (!page) throw new Error("Failed to create page");
+        page.setDefaultTimeout(this.playwrightTimeout);
+        page.setDefaultNavigationTimeout(this.playwrightTimeout);
 
         const gotoOpts = { timeout: this.playwrightTimeout, waitUntil: "load", ...data.pageGotoParams };
         await page.goto(Renderer.toFileUrl(filePath), gotoOpts);
@@ -266,6 +279,7 @@ export default class PlaywrightRenderer extends BrowserRendererBase {
         }
       } catch (error) {
         RuntimeUtil.makeLog("error", `[${name}] Screenshot failed: ${error.message}`, this.logTag);
+        this.handleFatalScreenshotError(error);
         ret = [];
       } finally {
         if (page) {
@@ -287,49 +301,20 @@ export default class PlaywrightRenderer extends BrowserRendererBase {
   }
 
   async restart(force = false) {
-    if (!this.browser || this.lock || this.isClosing) return;
-    if (!force && (this.renderNum % this.restartNum !== 0 || this.activeSlotCount() > 0)) return;
-
-    RuntimeUtil.makeLog("warn", `${this.browserType} ${force ? "forced" : "scheduled"} restart...`, this.logTag);
+    if (this.isClosing && !force) return;
     this.isClosing = true;
-
     try {
-      const contexts = this.browser.contexts();
-      for (const ctx of contexts) {
-        await ctx.close().catch(() => {});
-      }
-      await this.browser.close();
-      this.browser = null;
-
-      await this.removeStoredEndpoint();
-      this.renderNum = 0;
-      this.clearHealthCheckTimer();
-
-      if (global.gc) global.gc();
-
-      RuntimeUtil.makeLog("info", `${this.browserType} restart completed`, this.logTag);
-    } catch (err) {
-      RuntimeUtil.makeLog("error", `Restart failed: ${err.message}`, this.logTag);
+      return await super.restart(force);
     } finally {
       this.isClosing = false;
     }
-
-    return true;
   }
 
   async cleanup() {
     this.isClosing = true;
     this.clearHealthCheckTimer();
-
-    if (this.browser) {
-      const contexts = this.browser.contexts();
-      for (const ctx of contexts) {
-        await ctx.close().catch(() => {});
-      }
-      await this.browser.close().catch(() => {});
-      this.browser = null;
-    }
-
+    const browser = this.detachBrowser();
+    await this.safeCloseBrowser(browser);
     await this.removeStoredEndpoint();
     RuntimeUtil.makeLog("info", "Playwright resources cleaned up", this.logTag);
   }

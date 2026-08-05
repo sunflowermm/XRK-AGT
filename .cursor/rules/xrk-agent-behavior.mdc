@@ -33,6 +33,8 @@ alwaysApply: true
 | 扩展点 | `xrk-infrastructure`、`docs/base-classes.md` |
 | 办事助手 | `docs/agents.md` |
 | 品红抠图 / 短视频 | `immersive-short-video` |
+| vibe-learn 课核 / 导图 / 题库 | Core 仓 `vibe-learn-craft.mdc`（主仓仅 globs 路由；禁子代理、长 todo） |
 
 改 `core/` 前：Grep + 读对应 `xrk-*`。外部方案说明如何接入 Loader / ConfigBase。  
+独立 git 产品 Core 的精工约定见该 Core 的 `.cursor/rules/`（`xrk-project`「独立 git 产品 Core」）。  
 文档只写现行契约。
