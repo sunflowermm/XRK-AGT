@@ -267,7 +267,6 @@ export default class PuppeteerRenderer extends BrowserRendererBase {
   }
 
   async cleanup() {
-    this.clearHealthCheckTimer();
     const browser = this.detachBrowser();
     await this.safeCloseBrowser(browser);
     await this.removeStoredEndpoint();

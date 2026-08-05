@@ -14,7 +14,6 @@ export default class PlaywrightRenderer extends BrowserRendererBase {
   constructor(config = {}) {
     super({ id: "playwright", type: "image", render: "screenshot" }, config, "PlaywrightRenderer");
 
-    this.isClosing = false;
     this.browserType = config.browserType ?? config.browser ?? "chromium";
     this.playwrightTimeout = config.playwrightTimeout ?? 120000;
     this.healthCheckInterval = config.healthCheckInterval ?? 120000;
@@ -55,10 +54,11 @@ export default class PlaywrightRenderer extends BrowserRendererBase {
 
   async connectToExisting(wsEndpoint, retries = 0) {
     const delay = this.retryDelay * Math.pow(2, retries);
+    let browser = null;
     try {
       RuntimeUtil.makeLog("info", `Connecting to existing ${this.browserType} instance (attempt ${retries + 1}/${this.maxRetries})`, this.logTag);
 
-      const browser = await connectPlaywrightBrowser(playwright, this.browserType, wsEndpoint, { timeout: 10000 });
+      browser = await connectPlaywrightBrowser(playwright, this.browserType, wsEndpoint, { timeout: 10000 });
       const context = await browser.newContext();
       const page = await context.newPage();
       await page.goto("about:blank", { timeout: 5000 });
@@ -69,6 +69,7 @@ export default class PlaywrightRenderer extends BrowserRendererBase {
       return browser;
     } catch (e) {
       RuntimeUtil.makeLog("warn", `Connection failed: ${e.message}`, this.logTag);
+      if (browser) await this.safeCloseBrowser(browser, 3000);
 
       if (retries < this.maxRetries - 1) {
         await new Promise(r => setTimeout(r, delay));
@@ -128,14 +129,11 @@ export default class PlaywrightRenderer extends BrowserRendererBase {
         return false;
       }
 
-      this.browser.on("disconnected", async () => {
+      this.browser.on("disconnected", () => {
         RuntimeUtil.makeLog("warn", `${this.browserType} instance disconnected`, this.logTag);
         this.browser = null;
-        await this.removeStoredEndpoint();
-
-        if (!this.isClosing) {
-          await this.restart(true);
-        }
+        void this.removeStoredEndpoint();
+        void this.restart(true);
       });
 
       this.startHealthCheck();
@@ -158,7 +156,7 @@ export default class PlaywrightRenderer extends BrowserRendererBase {
     if (this.healthCheckTimer) return;
 
     this.healthCheckTimer = setInterval(async () => {
-      if (!this.browser || this.activeSlotCount() > 0 || this.isClosing || this._restarting) return;
+      if (!this.browser || this.activeSlotCount() > 0 || this._restarting) return;
 
       try {
         if (typeof this.browser.isConnected === "function" && !this.browser.isConnected()) {
@@ -300,19 +298,7 @@ export default class PlaywrightRenderer extends BrowserRendererBase {
     }
   }
 
-  async restart(force = false) {
-    if (this.isClosing && !force) return;
-    this.isClosing = true;
-    try {
-      return await super.restart(force);
-    } finally {
-      this.isClosing = false;
-    }
-  }
-
   async cleanup() {
-    this.isClosing = true;
-    this.clearHealthCheckTimer();
     const browser = this.detachBrowser();
     await this.safeCloseBrowser(browser);
     await this.removeStoredEndpoint();
