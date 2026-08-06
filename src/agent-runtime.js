@@ -1,15 +1,16 @@
 import './bootstrap-globals.js';
-import path from 'path';
+import path from 'node:path';
 import fs from 'node:fs/promises';
-import * as fsSync from 'fs';
-import { EventEmitter } from "events";
-import express from "express";
-import http from "node:http";
-import { WebSocketServer } from "ws";
+import { EventEmitter } from 'node:events';
+import express from 'express';
+import http from 'node:http';
+import { WebSocketServer } from 'ws';
 import multer from 'multer';
 import chalk from 'chalk';
+import { pipeline } from 'node:stream/promises';
+import { Readable } from 'node:stream';
 
-import HttpApiLoader from "#infrastructure/http/loader.js";
+import HttpApiLoader from '#infrastructure/http/loader.js';
 import RuntimeUtil from '#utils/runtime-util.js';
 import { getRuntimeGlobal } from '#utils/runtime-globals.js';
 import runtimeConfig from '#infrastructure/config/config.js';
@@ -18,16 +19,15 @@ import {
   fetchSubserverToPath as fetchSubserverToPathApi,
   formatSubserverError,
   getSubserverConfig,
-  isSubserverConnectionError
+  isSubserverConnectionError,
 } from '#utils/subserver-client.js';
 import { resolveSubserverFileUpstream } from '#utils/subserver-file-proxy.js';
 import paths from '#utils/paths.js';
 import { errorHandler, ErrorCodes } from '#utils/error-handler.js';
+import { normalizeError } from '#utils/normalize-error.js';
 import HTTPBusinessLayer from '#utils/http-business.js';
 import { HttpResponse } from '#utils/http-utils.js';
 import { InputValidator } from '#utils/input-validator.js';
-import { pipeline } from 'node:stream/promises';
-import { Readable } from 'node:stream';
 import * as runtimeAuth from '#infrastructure/http/runtime-auth.js';
 import * as runtimeWs from '#infrastructure/http/runtime-ws.js';
 import * as runtimeListen from '#infrastructure/http/runtime-listen.js';
@@ -36,7 +36,7 @@ import * as runtimeMiddleware from '#infrastructure/http/runtime-middleware.js';
 import * as runtimeBoot from '#infrastructure/http/runtime-boot.js';
 import * as runtimeNet from '#infrastructure/http/runtime-net.js';
 
-// 静态资源扩展名，用于基础放行（非鉴权）
+/** 静态资源扩展名，用于基础放行（非鉴权） */
 const AUTH_STATIC_EXT_REGEX = /\.(html|css|js|json|png|jpg|jpeg|gif|svg|webp|ico|mp4|webm|mp3|wav|pdf|zip|woff|woff2|ttf|otf)$/i;
 
 /**
@@ -62,28 +62,34 @@ export default class AgentRuntime extends EventEmitter {
   sslContexts = new Map();
   bots = {};
   tasker = [];
+  server = null;
+  httpsServer = null;
+  multipartUpload = null;
+  _wsHeartbeatInterval = null;
+  apiKey = '';
+  httpPort = null;
+  httpsPort = null;
+  actualPort = null;
+  actualHttpsPort = null;
+  proxyEnabled = false;
+  proxyApp = null;
+  proxyServer = null;
+  proxyHttpsServer = null;
+  _compiledHiddenFileMatchers = null;
+  _authWhitelistCache = { ref: null, rules: [] };
 
   /**
-   * AgentRuntime构造函数
-   * 
-   * 初始化AgentRuntime实例，设置Express应用、WebSocket服务器、配置等。
-   * 自动初始化HTTP服务器、生成API密钥、设置信号处理等。
+   * 仅入口允许 `new AgentRuntime()`（start.js / debug.js）；Core 业务用裸名。
    */
   constructor() {
     super();
-    
-    // 核心属性初始化
+
     this.stat = { start_time: Date.now() / 1000 };
     this.bot = this;
     this.uin = this._createUinManager();
-    
-    // Express应用和服务器
+
     this.express = Object.assign(express(), { skip_auth: [], quiet: [] });
-    this.server = null;
-    this.httpsServer = null;
-    this.multipartUpload = null;
-    
-    // WebSocket 服务器配置：尽量全部由 server.yaml 驱动（保留默认值）
+
     const wsConfig = runtimeConfig.server?.websocket || {};
     const perMessageDeflateCfg = wsConfig?.perMessageDeflate || {};
     const perMessageDeflateEnabled = perMessageDeflateCfg?.enabled !== false;
@@ -91,66 +97,47 @@ export default class AgentRuntime extends EventEmitter {
       zlibDeflateOptions: {
         chunkSize: Number(perMessageDeflateCfg?.zlibDeflateOptions?.chunkSize) || 1024,
         memLevel: Number(perMessageDeflateCfg?.zlibDeflateOptions?.memLevel) || 7,
-        level: Number(perMessageDeflateCfg?.zlibDeflateOptions?.level) || 3
+        level: Number(perMessageDeflateCfg?.zlibDeflateOptions?.level) || 3,
       },
       zlibInflateOptions: {
-        chunkSize: Number(perMessageDeflateCfg?.zlibInflateOptions?.chunkSize) || (10 * 1024)
+        chunkSize: Number(perMessageDeflateCfg?.zlibInflateOptions?.chunkSize) || (10 * 1024),
       },
       clientNoContextTakeover: perMessageDeflateCfg?.clientNoContextTakeover !== false,
       serverNoContextTakeover: perMessageDeflateCfg?.serverNoContextTakeover !== false,
       serverMaxWindowBits: Number(perMessageDeflateCfg?.serverMaxWindowBits) || 10,
       concurrencyLimit: Number(perMessageDeflateCfg?.concurrencyLimit) || 10,
-      threshold: Number(perMessageDeflateCfg?.threshold) || 1024
+      threshold: Number(perMessageDeflateCfg?.threshold) || 1024,
     } : false;
-    
+
     const maxPayload = Number(wsConfig?.maxPayload);
     const maxPayloadBytes = Number.isFinite(maxPayload) && maxPayload > 0
       ? maxPayload
-      : (100 * 1024 * 1024); // 100MB
-    
-    this.wss = new WebSocketServer({ 
+      : (100 * 1024 * 1024);
+
+    this.wss = new WebSocketServer({
       noServer: true,
       perMessageDeflate,
       maxPayload: maxPayloadBytes,
-      clientTracking: wsConfig?.clientTracking !== false
+      clientTracking: wsConfig?.clientTracking !== false,
     });
     this.wsf = Object.create(null);
     this.fs = Object.create(null);
-    
-    // WebSocket连接管理
-    this._wsHeartbeatInterval = null;
-    
-    // 配置属性
-    this.apiKey = '';
+
     const cacheTtl = Number(runtimeConfig.server?.misc?.cache?.ttlMs);
-    this._cache = RuntimeUtil.getMap('core_cache', { ttl: (Number.isFinite(cacheTtl) && cacheTtl > 0) ? cacheTtl : 60000, autoClean: true });
-    this._authWhitelistCache = { ref: null, rules: [] };
-    this.httpPort = null;
-    this.httpsPort = null;
-    this.actualPort = null;
-    this.actualHttpsPort = null;
+    this._cache = RuntimeUtil.getMap('core_cache', {
+      ttl: (Number.isFinite(cacheTtl) && cacheTtl > 0) ? cacheTtl : 60000,
+      autoClean: true,
+    });
     this.url = runtimeNet.getConfiguredServerUrl();
-    
-    // 反向代理相关
-    this.proxyEnabled = false;
-    this.proxyApp = null;
-    this.proxyServer = null;
-    this.proxyHttpsServer = null;
-    
-    // HTTP业务层初始化（企业级网络服务核心）
-    // 注意：此时runtimeConfig.server可能还未加载，会在run()方法中重新初始化
+
+    // runtimeConfig.server 可能尚未完全加载；run() 内会再初始化
     this.httpBusiness = new HTTPBusinessLayer(runtimeConfig.server || {});
-    
-    // 基类挂载：将HTTP业务层方法挂载到AgentRuntime实例，方便直接调用
     this._mountHttpBusinessMethods();
-    
+
     this.HttpApiLoader = HttpApiLoader;
     this._initHttpServer();
     this._initSubServer();
-    
-    // 安全规则的编译缓存（避免每个请求重复解析）
-    this._compiledHiddenFileMatchers = null;
-    
+
     return this._createProxy();
   }
 
@@ -160,18 +147,20 @@ export default class AgentRuntime extends EventEmitter {
       try {
         return await callSubserverApi(requestPath, options);
       } catch (error) {
-        const cause = error.cause ? ` cause=${error.cause?.message ?? error.cause}` : '';
-        RuntimeUtil.makeLog('debug', `子服务端调用失败 [${requestPath}]: ${error.message}${cause}`, 'AgentRuntime');
-        throw error;
+        const err = normalizeError(error);
+        const cause = err.cause ? ` cause=${err.cause?.message ?? err.cause}` : '';
+        RuntimeUtil.makeLog('debug', `子服务端调用失败 [${requestPath}]: ${err.message}${cause}`, 'AgentRuntime');
+        throw err;
       }
     };
     this.fetchSubserverToPath = async (requestPath, options = {}) => {
       try {
         return await fetchSubserverToPathApi(requestPath, options);
       } catch (error) {
-        const cause = error.cause ? ` cause=${error.cause?.message ?? error.cause}` : '';
-        RuntimeUtil.makeLog('debug', `子服务端文件拉取失败 [${requestPath}]: ${error.message}${cause}`, 'AgentRuntime');
-        throw error;
+        const err = normalizeError(error);
+        const cause = err.cause ? ` cause=${err.cause?.message ?? err.cause}` : '';
+        RuntimeUtil.makeLog('debug', `子服务端文件拉取失败 [${requestPath}]: ${err.message}${cause}`, 'AgentRuntime');
+        throw err;
       }
     };
   }
@@ -676,11 +665,7 @@ export default class AgentRuntime extends EventEmitter {
    * 按照nginx风格：先处理API 404，再处理静态文件404
    */
   _setupFinalHandlers() {
-    // API路由404处理（在HttpApiLoader.register之后，但先于全局404）
-    // 这个已经在HttpApiLoader中处理了，这里作为兜底
-    
-    // 全局404处理（最后匹配，避免基于路径做“特殊待遇”）
-    this.express.use((req, res) => {
+    this.express.use(async (req, res) => {
       if (this._checkHeadersSent(res)) return;
 
       if (req.accepts('html')) {
@@ -688,12 +673,13 @@ export default class AgentRuntime extends EventEmitter {
         const custom404Path = path.join(staticRoot, '404.html');
 
         try {
-          if (fsSync.statSync(custom404Path).isFile()) {
+          const st = await fs.stat(custom404Path);
+          if (st.isFile()) {
             res.status(404).sendFile(custom404Path);
             return;
           }
         } catch {
-          // 文件不存在，继续走默认处理
+          // 无自定义 404 页则走下方默认文案
         }
 
         res.status(404).send('404 Not Found');
@@ -701,7 +687,7 @@ export default class AgentRuntime extends EventEmitter {
         res.status(404).json({
           error: '未找到',
           path: req.originalUrl || req.path,
-          timestamp: Date.now()
+          timestamp: Date.now(),
         });
       }
     });

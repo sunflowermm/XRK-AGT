@@ -19,7 +19,7 @@ const PROXY_FIELDS = {
     url: {
       type: 'string',
       label: '代理地址',
-      description: '如 http://127.0.0.1:7890',
+      description: '如 http://127.0.0.1:<port>',
       default: '',
       component: 'Input',
     },
@@ -159,7 +159,8 @@ function baseProviderEntryFields(options = {}) {
     apiVersion: {
       type: 'string',
       label: 'api-version（Azure）',
-      description: 'Azure 资源 API 版本查询参数',
+      description:
+        '经典部署路径必填（如 2024-10-21）；Foundry `/openai/v1/...` 可留空（可选 v1/preview）',
       default: '2024-10-21',
       component: 'Input'
     },
@@ -255,8 +256,9 @@ function baseProviderEntryFields(options = {}) {
     thinkingType: {
       type: 'string',
       label: 'thinking.type',
-      description: '火山/MiMo：enabled/disabled/auto；Anthropic：enabled 时配合 reasoningEffort→budget_tokens（cline 比例）',
-      enum: ['disabled', 'enabled', 'auto'],
+      description:
+        'Anthropic：adaptive（推荐，配 reasoningEffort→output_config.effort）| enabled（旧 budget_tokens）| disabled；火山/MiMo：enabled/disabled/auto',
+      enum: ['disabled', 'enabled', 'auto', 'adaptive'],
       component: 'Select'
     },
     stripToolTraces: {
@@ -318,8 +320,16 @@ function baseProviderEntryFields(options = {}) {
     reasoningEffort: {
       type: 'string',
       label: 'reasoning_effort',
-      description: '推理强度 none～xhigh；Anthropic 映射为 thinking.budget_tokens（high≈80% max_tokens）',
-      enum: ['none', 'minimal', 'low', 'medium', 'high', 'xhigh'],
+      description:
+        'Chat：顶层 reasoning_effort；Responses：映射为 reasoning.effort。取值 none/minimal/low/medium/high/xhigh/max（依模型）',
+      enum: ['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'],
+      component: 'Select'
+    },
+    reasoningMode: {
+      type: 'string',
+      label: 'reasoning.mode',
+      description: 'OpenAI Responses：standard | pro（与 effort 独立；见官方 Reasoning mode）',
+      enum: ['standard', 'pro'],
       component: 'Select'
     },
     maxToolCalls: {
@@ -453,6 +463,7 @@ export const LLM_PROVIDER_PRESETS = {
       'maxOutputTokens',
       'topP',
       ...OPENAI_OFFICIAL_EXTRA,
+      'reasoningMode',
       'maxToolCalls',
       ...TOOL_FIELDS,
       ...RUNTIME_FIELDS
@@ -473,6 +484,8 @@ export const LLM_PROVIDER_PRESETS = {
       'topP',
       'topK',
       'stop',
+      'thinkingType',
+      'reasoningEffort',
       ...RUNTIME_FIELDS
     ],
     extraFields: {
@@ -507,6 +520,8 @@ export const LLM_PROVIDER_PRESETS = {
       'topP',
       'topK',
       'stop',
+      'thinkingType',
+      'reasoningEffort',
       ...TOOL_FIELDS,
       ...RUNTIME_FIELDS
     ],
@@ -581,6 +596,7 @@ export const LLM_PROVIDER_PRESETS = {
       'topP',
       'presencePenalty',
       'frequencyPenalty',
+      'reasoningEffort',
       ...TOOL_FIELDS,
       ...RUNTIME_FIELDS
     ]
@@ -601,6 +617,7 @@ export const LLM_PROVIDER_PRESETS = {
       'topP',
       'presencePenalty',
       'frequencyPenalty',
+      'reasoningEffort',
       ...TOOL_FIELDS,
       ...COMPAT_GATEWAY,
       ...RUNTIME_FIELDS
@@ -799,9 +816,19 @@ export const LLM_PROVIDER_PRESETS = {
       'stop',
       'presencePenalty',
       'frequencyPenalty',
+      'think',
       ...RUNTIME_FIELDS
     ],
-    extraFields: { protocol: protocolField(['ollama'], 'ollama') }
+    extraFields: {
+      protocol: protocolField(['ollama'], 'ollama'),
+      think: {
+        type: 'string',
+        label: 'think',
+        description: '思考模型：true/false，或 low|medium|high|max（见 Ollama /api/chat）',
+        enum: ['true', 'false', 'low', 'medium', 'high', 'max'],
+        component: 'Select'
+      }
+    }
   },
   newapi_compat: {
     itemLabel: 'New API 端点',

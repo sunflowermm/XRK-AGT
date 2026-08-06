@@ -1,26 +1,29 @@
-import { buildFetchOptionsWithProxy } from '../../utils/llm/proxy-utils.js';
-import { partitionAndExecuteToolCalls } from '../../utils/llm/tool-partition-utils.js';
+import { buildFetchOptionsWithProxy } from '#utils/llm/proxy-utils.js';
+import { partitionAndExecuteToolCalls } from '#utils/llm/tool-partition-utils.js';
 import {
   appendToolBudgetExhaustedNudge,
   toolBudgetFinalizeOverrides
-} from '../../utils/llm/tool-loop-finalize.js';
-import { buildOpenAIChatCompletionsBody, applyOpenAITools } from '../../utils/llm/openai-chat-utils.js';
-import { transformMessagesWithVision } from '../../utils/llm/message-transform.js';
-import { ensureMessagesImagesDataUrl } from '../../utils/llm/image-utils.js';
-import RuntimeUtil from '../../utils/runtime-util.js';
-import { iterateSSE } from '../../utils/llm/sse-utils.js';
+} from '#utils/llm/tool-loop-finalize.js';
+import { buildOpenAIChatCompletionsBody, applyOpenAITools } from '#utils/llm/openai-chat-utils.js';
+import { transformMessagesWithVision } from '#utils/llm/message-transform.js';
+import { ensureMessagesImagesDataUrl } from '#utils/llm/image-utils.js';
+import RuntimeUtil from '#utils/runtime-util.js';
+import { iterateSSE } from '#utils/llm/sse-utils.js';
+import { createLlmHttpError } from '#utils/llm/llm-http-error.js';
+import { normalizeError } from '#utils/normalize-error.js';
 
 /**
  * OpenAI 官方 LLM 客户端（Chat Completions）
+ * 文档：https://platform.openai.com/docs/api-reference/chat
  *
- * - 默认：
- *   - baseUrl: https://api.openai.com/v1
- *   - path: /chat/completions
- *   - 认证：Authorization: Bearer ${apiKey}
- * - 支持多模态：messages[].content 可以是 text + image_url（含 base64 data URL）
- * - tool calling：使用 OpenAI tools/tool_calls 协议 + MCPToolAdapter 多轮执行
+ * - baseUrl 默认 `https://api.openai.com/v1`，path `/chat/completions`
+ * - 认证：`Authorization: Bearer ${apiKey}`
+ * - 多模态：messages[].content 可为 text + image_url（含 base64 data URL）
+ * - tool calling：OpenAI tools/tool_calls + MCPToolAdapter 多轮
  */
 export default class OpenAILLMClient {
+  _timeout = 360000;
+
   constructor(config = {}) {
     this.config = config;
     this.endpoint = this.normalizeEndpoint(config);
@@ -87,7 +90,10 @@ export default class OpenAILLMClient {
 
       if (!resp.ok) {
         const text = await resp.text().catch(() => '');
-        throw new Error(`OpenAI LLM 请求失败: ${resp.status} ${resp.statusText}${text ? ` | ${text}` : ''}`);
+        throw createLlmHttpError(
+          `OpenAI LLM 请求失败: ${resp.status} ${resp.statusText}${text ? ` | ${text}` : ''}`,
+          { status: resp.status, headers: resp.headers }
+        );
       }
 
       const result = await resp.json();
@@ -133,7 +139,7 @@ export default class OpenAILLMClient {
     } catch (err) {
       RuntimeUtil.makeLog(
         'warn',
-        `[OpenAILLMClient] 工具轮次收尾失败: ${Error.isError(err) ? err.message : String(err)}`,
+        `[OpenAILLMClient] 工具轮次收尾失败: ${normalizeError(err).message}`,
         'LLMFactory'
       );
     }
@@ -162,7 +168,10 @@ export default class OpenAILLMClient {
 
     if (!resp.ok || !resp.body) {
       const text = await resp.text().catch(() => '');
-      throw new Error(`OpenAI LLM 流式请求失败: ${resp.status} ${resp.statusText}${text ? ` | ${text}` : ''}`);
+      throw createLlmHttpError(
+        `OpenAI LLM 流式请求失败: ${resp.status} ${resp.statusText}${text ? ` | ${text}` : ''}`,
+        { status: resp.status, headers: resp.headers }
+      );
     }
       
       const toolCallsCollector = {
@@ -218,7 +227,7 @@ export default class OpenAILLMClient {
           } catch (err) {
             RuntimeUtil.makeLog(
               'warn',
-              `[OpenAILLMClient] 流式工具轮次收尾失败: ${Error.isError(err) ? err.message : String(err)}`,
+              `[OpenAILLMClient] 流式工具轮次收尾失败: ${normalizeError(err).message}`,
               'LLMFactory'
             );
           }

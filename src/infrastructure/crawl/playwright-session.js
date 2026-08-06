@@ -3,7 +3,8 @@ import playwright from 'playwright';
 import {
   assertBrowserNavigationResultAllowedForPage,
   didCrossDocumentUrlChange,
-  gotoWithNavigationGuard
+  gotoWithNavigationGuard,
+  normalizePlaywrightWaitUntil
 } from './browser-navigation-guard.js';
 import {
   armObservedDialogResponseOnPage,
@@ -35,6 +36,7 @@ import { DEFAULT_DEVICE_SCALE_FACTOR } from './page-screenshot-enhance.js';
 import { connectPlaywrightBrowser, launchPlaywrightBrowser } from '#utils/playwright-puppeteer-compat.js';
 import { isPlaywrightCrashError, softClosePlaywright, softClosePlaywrightTree } from './playwright-crash.js';
 import RuntimeUtil from '#utils/runtime-util.js';
+import { normalizeError } from '#utils/normalize-error.js';
 
 const BROWSER_TYPES = /** @type {const} */ (['chromium', 'firefox', 'webkit']);
 const DEFAULT_USING_CRASH_RETRIES = 1;
@@ -231,7 +233,7 @@ export class PlaywrightAgentSession {
         if (!isPlaywrightCrashError(err) || attempt >= retries) throw err;
         RuntimeUtil.makeLog(
           'warn',
-          `Playwright ${label} 目标崩溃，重建 page 后重试 (${attempt + 1}/${retries})：${Error.isError(err) ? err.message : err}`,
+          `Playwright ${label} 目标崩溃，重建 page 后重试 (${attempt + 1}/${retries})：${normalizeError(err).message}`,
           'PlaywrightSession'
         );
         await this.recreatePage();
@@ -260,7 +262,8 @@ export class PlaywrightAgentSession {
    * @param {{ waitUntil?: string, timeoutMs?: number, skipSsrfCheck?: boolean, ssrfPolicy?: object }} [navOptions]
    */
   async #gotoOnce(url, navOptions = {}) {
-    const waitUntil = navOptions.waitUntil || 'load';
+    // 官方 Page.goto：默认 load；networkidle 为 DISCOURAGED，仍允许显式传入
+    const waitUntil = normalizePlaywrightWaitUntil(navOptions.waitUntil, 'load');
     const timeoutMs = clampInt(
       navOptions.timeoutMs ?? this.navigationTimeoutMs,
       1_000,
@@ -409,15 +412,25 @@ export class PlaywrightAgentSession {
     return this.withPageCrashRetry(async () => {
       const {
         selector = '.content',
-        waitUntil = 'load',
         timeoutMs,
         settleMs = 0,
         skipSsrfCheck = false,
         ssrfPolicy
       } = options;
+      const waitUntil = normalizePlaywrightWaitUntil(options.waitUntil, 'load');
       if (this.screenshotHelper?.prepare) await this.screenshotHelper.prepare(this.page);
       await this.#gotoOnce(url, { waitUntil, timeoutMs, skipSsrfCheck, ssrfPolicy });
-      if (settleMs > 0) await new Promise((r) => setTimeout(r, settleMs));
+      const settle = clampInt(settleMs, 0, 60_000, 0);
+      if (settle > 0) {
+        const signal = AbortSignal.timeout(settle);
+        await new Promise((resolve) => {
+          if (signal.aborted) {
+            resolve();
+            return;
+          }
+          signal.addEventListener('abort', () => resolve(), { once: true });
+        });
+      }
       return this.captureRegion(selector, { timeoutMs: options.captureTimeoutMs });
     }, { label: 'gotoAndCapture' });
   }
@@ -787,7 +800,7 @@ export class PlaywrightAgentSession {
         if (!canRetry) throw err;
         RuntimeUtil.makeLog(
           'warn',
-          `Playwright using 目标崩溃，换新浏览器重试 (${attempt + 1}/${crashRetries})：${Error.isError(err) ? err.message : err}`,
+          `Playwright using 目标崩溃，换新浏览器重试 (${attempt + 1}/${crashRetries})：${normalizeError(err).message}`,
           'PlaywrightSession'
         );
       } finally {

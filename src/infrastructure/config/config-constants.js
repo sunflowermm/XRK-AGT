@@ -29,11 +29,15 @@ export const CHATBOT_FIXED_ROOT_KEYS = [
 // 工厂配置名称模式（随端口变化）
 export const FACTORY_CONFIG_PATTERNS = [
   'volcengine_',
+  'deepseek_',
   'xiaomimimo_',
   'openai_',
   'gemini_',
   'anthropic_',
-  'azure_'
+  'azure_',
+  'ollama_',
+  'newapi_',
+  'cherryin_',
 ];
 
 /**

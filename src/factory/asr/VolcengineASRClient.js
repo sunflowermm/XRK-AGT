@@ -4,63 +4,44 @@
  */
 
 import WebSocket from 'ws';
-import zlib from 'zlib';
+import zlib from 'node:zlib';
 import { v4 as uuidv4 } from 'uuid';
 import RuntimeUtil from '#utils/runtime-util.js';
 import { buildVolcengineSpeechHeaders } from '#utils/volcengine-speech-headers.js';
 
 export default class VolcengineASRClient {
     _timeoutEmittedSet = new Set();
+    _timeoutEmittedQueue = [];
+    _timeoutEmittedMax = 64;
+    ws = null;
+    connected = false;
+    connecting = false;
+    sequence = 1;
+    currentUtterance = null;
+    _lastIntermediateText = '';
+    lastMessageAt = 0;
+    lastAudioAt = 0;
+    logId = null;
+    _idleTimer = null;
+    _pingTimer = null;
+    _pongTimer = null;
+    reconnectAttempts = 0;
+    _closingForRotate = false;
+    performanceMetrics = {
+        firstResultTime: null,
+        audioStartTime: null,
+    };
 
     /**
-     * 构造函数
-     * @param {string} deviceId - 设备ID
-     * @param {Object} config - ASR配置
-     * @param {Object} AgentRuntime - AgentRuntime实例
+     * @param {string} deviceId
+     * @param {Object} config
+     * @param {Object} AgentRuntime
      */
     constructor(deviceId, config, AgentRuntime) {
         this.deviceId = deviceId;
         this.config = config;
         this.AgentRuntime = AgentRuntime;
-        
-        // WebSocket相关
-        this.ws = null;
-        this.connected = false;
-        this.connecting = false;
         this.connectId = uuidv4();
-        
-        // 会话相关
-        this.sequence = 1;
-        this.currentUtterance = null;
-        this._lastIntermediateText = '';
-        
-        // 时间戳
-        this.lastMessageAt = 0;
-        this.lastAudioAt = 0;
-        
-        // 日志ID
-        this.logId = null;
-        
-        // 定时器
-        this._idleTimer = null;
-        this._pingTimer = null;
-        this._pongTimer = null;
-        
-        // 重连相关
-        this.reconnectAttempts = 0;
-
-        // timeout 去重（utteranceId 唯一，最多保留最近若干条）
-        this._timeoutEmittedQueue = [];
-        this._timeoutEmittedMax = 64;
-
-        // 连接轮转（每个 utterance 使用独立 WS）
-        this._closingForRotate = false;
-        
-        // 性能指标
-        this.performanceMetrics = {
-            firstResultTime: null,
-            audioStartTime: null
-        };
     }
 
     /**

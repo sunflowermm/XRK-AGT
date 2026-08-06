@@ -1,3 +1,5 @@
+import { normalizeError } from '#utils/normalize-error.js';
+
 /**
  * Playwright 目标崩溃识别与安全关闭（不降截图质量，只做恢复路径）
  */
@@ -11,8 +13,19 @@ const CRASH_RE =
  */
 export function isPlaywrightCrashError(err) {
   if (err == null) return false;
-  const msg = Error.isError(err) ? err.message : String(err);
-  return CRASH_RE.test(msg);
+  return CRASH_RE.test(normalizeError(err).message);
+}
+
+/** @param {number} ms */
+function resolveOnAbortTimeout(ms) {
+  return new Promise((resolve) => {
+    const signal = AbortSignal.timeout(ms);
+    if (signal.aborted) {
+      resolve();
+      return;
+    }
+    signal.addEventListener('abort', () => resolve(), { once: true });
+  });
 }
 
 /**
@@ -26,7 +39,7 @@ export async function softClosePlaywright(target, timeoutMs = 8000) {
   try {
     await Promise.race([
       Promise.resolve(target.close()).catch(() => {}),
-      new Promise((resolve) => setTimeout(resolve, ms)),
+      resolveOnAbortTimeout(ms),
     ]);
   } catch {
     /* ignore */

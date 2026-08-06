@@ -1,25 +1,24 @@
-import { transformMessagesWithVision } from '../../utils/llm/message-transform.js';
-import { buildFetchOptionsWithProxy } from '../../utils/llm/proxy-utils.js';
-import { fetchAsBase64 } from '../../utils/llm/image-utils.js';
-import { iterateSSE } from '../../utils/llm/sse-utils.js';
-import { ensureAnthropicMaxTokens, normalizeAnthropicMessages } from '../../utils/llm/anthropic-chat-utils.js';
-import { applyAnthropicThinking } from '../../utils/llm/reasoning-budget.js';
-import { logPromptCacheUsage } from '../../utils/llm/prompt-cache-policy.js';
+import { transformMessagesWithVision } from '#utils/llm/message-transform.js';
+import { buildFetchOptionsWithProxy } from '#utils/llm/proxy-utils.js';
+import { fetchAsBase64 } from '#utils/llm/image-utils.js';
+import { iterateSSE } from '#utils/llm/sse-utils.js';
+import { ensureAnthropicMaxTokens, normalizeAnthropicMessages } from '#utils/llm/anthropic-chat-utils.js';
+import { applyAnthropicThinking } from '#utils/llm/reasoning-budget.js';
+import { logPromptCacheUsage } from '#utils/llm/prompt-cache-policy.js';
 
 /**
- * Anthropic 官方 LLM 客户端（Messages API）
+ * Anthropic 官方 Messages API 客户端
+ * @see https://platform.claude.com/docs/en/api/overview
+ * @see https://platform.claude.com/docs/en/build-with-claude/thinking
  *
- * 默认：
- * - baseUrl: https://api.anthropic.com/v1
- * - path: /messages
- * - 认证：x-api-key
- *
- * 说明：
- * - 这里按“外部调用 model=provider”的约定，仅在内部配置中使用 model/chatModel 指定真实模型
- * - 图片由上游统一转换为纯文本占位描述（不再通过独立的识图工厂），保证消息结构简单稳定
- * - Anthropic 工具调用协议不同，本实现默认不注入 MCP tools（建议 enableTools=false）
+ * - 端点：`POST {baseUrl}/messages`（默认 `https://api.anthropic.com/v1/messages`）
+ * - 静态密钥：`x-api-key`（默认）；WIF 短时令牌：`authMode: bearer` → `Authorization: Bearer`
+ * - 必带：`anthropic-version`（默认 `2023-06-01`）、`content-type: application/json`
+ * - 思考：`thinkingType=adaptive` + `reasoningEffort`→`output_config.effort`（4.6+）；旧模型用 `enabled`+budget_tokens
  */
 export default class AnthropicLLMClient {
+  _timeout = 360000;
+
   constructor(config = {}) {
     this.config = config;
     this.endpoint = this.normalizeEndpoint(config);
@@ -56,7 +55,7 @@ export default class AnthropicLLMClient {
       }
     }
 
-    // Anthropic 要求提供版本头
+    // Anthropic 要求 anthropic-version（官方 overview：必填）
     headers['anthropic-version'] = String(this.config.anthropicVersion || '2023-06-01');
 
     if (this.config.headers) {
@@ -273,20 +272,15 @@ export default class AnthropicLLMClient {
         const json = JSON.parse(data);
         const type = json?.type;
 
-        // Anthropic Messages streaming 常见事件：
-        // - content_block_delta: { delta: { type: 'text_delta', text: '...' } }
-        // - content_block_start: { content_block: { type: 'text', text: '...' } }
-        // - message_delta / message_start / message_stop: 通常不含文本增量
+        // Messages streaming：content_block_delta / content_block_start（text）
         let deltaText = '';
         if (type === 'content_block_delta') {
-          deltaText = json?.delta?.text ?? '';
-        } else if (type === 'content_block_start') {
-          if (json?.content_block?.type === 'text') {
-            deltaText = json?.content_block?.text ?? '';
+          const delta = json?.delta || {};
+          if (delta.type === 'text_delta' || delta.text) {
+            deltaText = delta.text ?? '';
           }
-        } else {
-          // 兼容少数实现直接把文本塞在 delta.text / content_block.text
-          deltaText = json?.delta?.text ?? json?.content_block?.text ?? '';
+        } else if (type === 'content_block_start' && json?.content_block?.type === 'text') {
+          deltaText = json.content_block.text ?? '';
         }
 
         if (deltaText && typeof onDelta === 'function') onDelta(deltaText);

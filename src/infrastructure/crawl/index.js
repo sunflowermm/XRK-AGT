@@ -56,7 +56,12 @@ export {
   closeDispatcher,
   mergeSsrFPolicies
 } from './ssrf-policy.js';
-export { gotoWithNavigationGuard, InvalidBrowserNavigationUrlError } from './browser-navigation-guard.js';
+export {
+  gotoWithNavigationGuard,
+  InvalidBrowserNavigationUrlError,
+  PLAYWRIGHT_WAIT_UNTIL,
+  normalizePlaywrightWaitUntil
+} from './browser-navigation-guard.js';
 export {
   buildBrowserRuntime,
   toPlaywrightAgentLaunchOptions,

@@ -6,7 +6,7 @@ import OpenAIResponsesCompatibleLLMClient from './OpenAIResponsesCompatibleLLMCl
  * @see https://www.volcengine.com/docs/82379/1569618
  * - 端点：`POST {baseUrl}/responses`（默认 baseUrl=`https://ark.cn-beijing.volces.com/api/v3`）
  * - 鉴权：`Authorization: Bearer <API Key>`
- * - 深度思考：`thinking.type` = enabled | disabled | auto
+ * - 深度思考：`thinking.type` = enabled | disabled | auto；力度用 `reasoning.effort`（Responses）
  * - 多模态 / 工具：Responses `input` + `function_call` / `function_call_output`
  */
 
@@ -41,11 +41,15 @@ export default class VolcengineLLMClient extends OpenAIResponsesCompatibleLLMCli
       body.thinking = { type: thinkingType };
     }
 
-    const rawEffort = overrides.reasoningEffort ?? this.config.reasoningEffort;
+    const rawEffort = overrides.reasoningEffort ?? overrides.reasoning_effort ?? this.config.reasoningEffort ?? this.config.reasoning_effort;
+    delete body.reasoning_effort;
     if (rawEffort != null && rawEffort !== '' && thinkingType !== 'disabled') {
-      body.reasoning_effort = String(rawEffort).trim().toLowerCase();
-    } else {
-      delete body.reasoning_effort;
+      const prev = body.reasoning && typeof body.reasoning === 'object' ? body.reasoning : {};
+      body.reasoning = { ...prev, effort: String(rawEffort).trim().toLowerCase() };
+    } else if (thinkingType === 'disabled' && body.reasoning?.effort !== undefined) {
+      const { effort: _drop, ...rest } = body.reasoning;
+      if (Object.keys(rest).length) body.reasoning = rest;
+      else delete body.reasoning;
     }
 
     return body;

@@ -1,5 +1,5 @@
 import OpenAICompatibleLLMClient from './OpenAICompatibleLLMClient.js';
-import { buildOpenAICompatEndpoint } from '../../utils/llm/openai-chat-utils.js';
+import { buildOpenAICompatEndpoint } from '#utils/llm/openai-chat-utils.js';
 
 /** New-API / CherryIN 等路径型 OpenAI Chat Completions 兼容工厂共用实现 */
 export default class OpenAIPathCompatLLMClient extends OpenAICompatibleLLMClient {

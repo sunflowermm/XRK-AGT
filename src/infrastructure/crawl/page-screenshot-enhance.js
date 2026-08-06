@@ -143,7 +143,7 @@ export function createLocalFontScreenshotHelper(options) {
     await route.fulfill({
       status: 200,
       headers: { 'Content-Type': contentType, 'Cache-Control': 'public, max-age=86400' },
-      body: fs.readFileSync(filePath),
+      body: await fs.promises.readFile(filePath),
     })
     return true
   }
@@ -174,6 +174,7 @@ export function createLocalFontScreenshotHelper(options) {
   }
 
   async function waitFonts(page) {
+    const fontDeadline = AbortSignal.timeout(fontWaitMs)
     await Promise.race([
       page
         .evaluate(async (specs) => {
@@ -183,7 +184,13 @@ export function createLocalFontScreenshotHelper(options) {
           await document.fonts.ready
         }, loadSpecs)
         .catch(() => {}),
-      new Promise((resolve) => setTimeout(resolve, fontWaitMs)),
+      new Promise((resolve) => {
+        if (fontDeadline.aborted) {
+          resolve()
+          return
+        }
+        fontDeadline.addEventListener('abort', () => resolve(), { once: true })
+      }),
     ])
 
     const families = await page.evaluate((specs) => {

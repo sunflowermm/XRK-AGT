@@ -2,7 +2,8 @@
  * Monitor Service — Agent 执行追踪（内存环形缓冲）
  * Token/步骤写入供 /metrics.workflow 摘要；不做完整 APM。
  */
-import EventEmitter from 'events';
+import EventEmitter from 'node:events';
+import { normalizeError } from '#utils/normalize-error.js';
 
 export class MonitorService extends EventEmitter {
   executionTraces = new Map();
@@ -69,7 +70,7 @@ export class MonitorService extends EventEmitter {
     const trace = this.executionTraces.get(traceId);
     const entry = {
       traceId,
-      message: Error.isError(error) ? error.message : String(error ?? 'unknown'),
+      message: normalizeError(error ?? 'unknown').message,
       timestamp: Date.now(),
     };
     if (trace) trace.errors.push(entry);

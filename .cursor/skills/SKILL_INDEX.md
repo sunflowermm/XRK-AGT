@@ -8,7 +8,7 @@
 | **产品 / 办事助手模型** | `agents/skills/standard/**` · 工作区 `skills/` | 工具、场景、**agent-core-dev**（导航写工作区 Core） | 勿**改** `.cursor` / `src`；写 Core 时可 **read** `.cursor/skills/xrk-*` |
 | **人读契约** | `docs/*` | 现行行为与配置真源 | 过程日记、迁移叙事 |
 
-全局工程师技能：本机 `~/.cursor/AGENTS.md` · `~/.agents/skills/`。  
+全局工程师技能（可选）：维护者本机 Cursor / agents skills，非克隆仓库必装。  
 办事助手运营：[docs/agents.md](../../docs/agents.md) · 跑通契约：[docs/agent-context.md](../../docs/agent-context.md)。  
 开发入口：仓库根 [`AGENTS.md`](../../AGENTS.md)。
 
@@ -32,11 +32,9 @@
 | 文档导航 | `xrk-docs` |
 | 架构总览 | `xrk-project-overview` |
 | 外部方案调研 | `xrk-github-research` |
-| 品红抠图 / 竖屏口播 | `immersive-short-video` |
 
 ## 设计与前端
 
-- **`immersive-short-video`**：竖屏口播/科普；品红抠图；seek 逐帧 + NVENC（见 skill 内 `reference-capture.md`）
 - `accessibility-compliance` · `design-system-patterns` · `fronted-design` · `interaction-design`
 - `mobile-android-design` / `mobile-ios-design` / `react-native-design`
 - `responsive-design` · `ui-ux-pro-max` · `visual-design-foundations` · `web-component-design`

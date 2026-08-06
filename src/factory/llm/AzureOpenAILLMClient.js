@@ -1,29 +1,30 @@
-import { partitionAndExecuteToolCalls } from '../../utils/llm/tool-partition-utils.js';
+import { partitionAndExecuteToolCalls } from '#utils/llm/tool-partition-utils.js';
 import {
   appendToolBudgetExhaustedNudge,
   toolBudgetFinalizeOverrides
-} from '../../utils/llm/tool-loop-finalize.js';
-import { buildOpenAIChatCompletionsBody, applyOpenAITools } from '../../utils/llm/openai-chat-utils.js';
-import { transformMessagesWithVision } from '../../utils/llm/message-transform.js';
-import { buildFetchOptionsWithProxy } from '../../utils/llm/proxy-utils.js';
-import { ensureMessagesImagesDataUrl } from '../../utils/llm/image-utils.js';
-import RuntimeUtil from '../../utils/runtime-util.js';
-import { iterateSSE } from '../../utils/llm/sse-utils.js';
+} from '#utils/llm/tool-loop-finalize.js';
+import { createLlmHttpError } from '#utils/llm/llm-http-error.js';
+import { buildOpenAIChatCompletionsBody, applyOpenAITools } from '#utils/llm/openai-chat-utils.js';
+import { transformMessagesWithVision } from '#utils/llm/message-transform.js';
+import { buildFetchOptionsWithProxy } from '#utils/llm/proxy-utils.js';
+import { ensureMessagesImagesDataUrl } from '#utils/llm/image-utils.js';
+import RuntimeUtil from '#utils/runtime-util.js';
+import { iterateSSE } from '#utils/llm/sse-utils.js';
+import { normalizeError } from '#utils/normalize-error.js';
 
 /**
- * Azure OpenAI 官方 LLM 客户端（Chat Completions）
+ * Azure OpenAI / Foundry Chat Completions 客户端
+ * @see https://learn.microsoft.com/en-us/azure/foundry/openai/api-version-lifecycle
+ * @see https://learn.microsoft.com/en-us/rest/api/aifoundry/azureopenai/chat
  *
- * Azure 的关键差异：
- * - endpoint 形如：https://{resource}.openai.azure.com
- * - 路径包含 deployment：/openai/deployments/{deployment}/chat/completions
- * - 必须带 api-version query：?api-version=2024-xx-xx
- * - 认证默认用 header: api-key
- *
- * 说明：
- * - 对外调用 model=provider 的约定下，deployment（真实模型）在 yaml 中配置
- * - tool calling 使用 OpenAI tools/tool_calls 协议 + MCPToolAdapter 多轮执行
+ * - 经典部署：`/openai/deployments/{deployment}/chat/completions?api-version=YYYY-MM-DD`
+ * - Foundry v1：`path=/openai/v1/chat/completions`（`api-version` 可选；body 带 `model`）
+ * - 认证：默认 header `api-key`；Microsoft Entra：`authMode: bearer` → `Authorization: Bearer`
+ * - deployment（真实部署名）在 yaml；对外 model=provider 约定不变
  */
 export default class AzureOpenAILLMClient {
+  _timeout = 360000;
+
   constructor(config = {}) {
     this.config = config;
     this.endpoint = this.normalizeEndpoint(config);
@@ -57,7 +58,13 @@ export default class AzureOpenAILLMClient {
     };
 
     if (this.config.apiKey) {
-      headers['api-key'] = String(this.config.apiKey).trim();
+      const key = String(this.config.apiKey).trim();
+      const mode = String(this.config.authMode ?? 'api-key').trim().toLowerCase();
+      if (mode === 'bearer') {
+        headers.Authorization = `Bearer ${key}`;
+      } else {
+        headers['api-key'] = key;
+      }
     }
 
     if (this.config.headers) {
@@ -68,15 +75,28 @@ export default class AzureOpenAILLMClient {
   }
 
   async transformMessages(messages) {
-    // Azure OpenAI 与 OpenAI Chat Completions 多模态协议兼容
     return await transformMessagesWithVision(messages, this.config, { mode: 'openai' });
   }
 
   buildBody(messages, overrides = {}) {
-    // Azure endpoint/deployment 在 URL 中处理，这里复用 OpenAI-like body 生成逻辑即可
     const body = buildOpenAIChatCompletionsBody(messages, this.config, overrides, undefined);
-    // Azure 某些版本会忽略 model，但保留可增强兼容性；若为空则删除，避免下游严格校验
-    if (body.model === undefined) delete body.model;
+    const pathHint = String(this.config.path || this.endpoint || '');
+    const isFoundryV1 = /\/openai\/v1\//i.test(pathHint);
+
+    if (isFoundryV1) {
+      if (body.model === undefined || body.model === '') {
+        body.model =
+          overrides.model ||
+          overrides.chatModel ||
+          this.config.model ||
+          this.config.chatModel ||
+          this.config.deployment ||
+          this.config.azureDeployment;
+      }
+    } else {
+      // 经典 deployments/{name}/chat/completions：模型由路径决定，勿再传 model
+      delete body.model;
+    }
 
     applyOpenAITools(body, this.config, overrides);
     return body;
@@ -103,7 +123,10 @@ export default class AzureOpenAILLMClient {
 
       if (!resp.ok) {
         const text = await resp.text().catch(() => '');
-        throw new Error(`Azure OpenAI 请求失败: ${resp.status} ${resp.statusText}${text ? ` | ${text}` : ''}`);
+        throw createLlmHttpError(
+          `Azure OpenAI 请求失败: ${resp.status} ${resp.statusText}${text ? ` | ${text}` : ''}`,
+          { status: resp.status, headers: resp.headers }
+        );
       }
 
       const result = await resp.json();
@@ -149,7 +172,7 @@ export default class AzureOpenAILLMClient {
     } catch (err) {
       RuntimeUtil.makeLog(
         'warn',
-        `[AzureOpenAILLMClient] 工具轮次收尾失败: ${Error.isError(err) ? err.message : String(err)}`,
+        `[AzureOpenAILLMClient] 工具轮次收尾失败: ${normalizeError(err).message}`,
         'LLMFactory'
       );
     }
@@ -159,14 +182,13 @@ export default class AzureOpenAILLMClient {
   async chatStream(messages, onDelta, overrides = {}) {
     const transformedMessages = await this.transformMessages(messages);
     await ensureMessagesImagesDataUrl(transformedMessages, { timeoutMs: this.timeout });
-    
+
     const maxToolRounds = this.config.maxToolRounds || 7;
     let currentMessages = [...transformedMessages];
     let round = 0;
-    let resp = null;
-    
+
     while (round < maxToolRounds) {
-      resp = await fetch(
+      const resp = await fetch(
         this.endpoint,
         buildFetchOptionsWithProxy(this.config, {
           method: 'POST',
@@ -178,27 +200,30 @@ export default class AzureOpenAILLMClient {
 
       if (!resp.ok || !resp.body) {
         const text = await resp.text().catch(() => '');
-        throw new Error(`Azure OpenAI 流式请求失败: ${resp.status} ${resp.statusText}${text ? ` | ${text}` : ''}`);
+        throw createLlmHttpError(
+          `Azure OpenAI 流式请求失败: ${resp.status} ${resp.statusText}${text ? ` | ${text}` : ''}`,
+          { status: resp.status, headers: resp.headers }
+        );
       }
-      
+
       const toolCallsCollector = {
         toolCalls: [],
         content: '',
         finishReason: null
       };
-      
+
       const enableMcp = overrides?.mcpToolMode !== 'passthrough';
       await this._consumeSSEWithToolCalls(resp, onDelta, toolCallsCollector, overrides);
-      
+
       if (toolCallsCollector.toolCalls.length > 0 && toolCallsCollector.finishReason === 'tool_calls' && enableMcp) {
         RuntimeUtil.makeLog('info', `[AzureOpenAILLMClient] 检测到工具调用，执行工具: ${toolCallsCollector.toolCalls.length}个`, 'LLMFactory');
-        
+
         currentMessages.push({
           role: 'assistant',
           content: toolCallsCollector.content || null,
           tool_calls: toolCallsCollector.toolCalls
         });
-        
+
         const buildPayload = (mid, res) => mid.map((tc, i) => ({
           name: tc.function?.name || `工具${i + 1}`,
           arguments: tc.function?.arguments || {},
@@ -233,7 +258,7 @@ export default class AzureOpenAILLMClient {
           } catch (err) {
             RuntimeUtil.makeLog(
               'warn',
-              `[AzureOpenAILLMClient] 流式工具轮次收尾失败: ${Error.isError(err) ? err.message : String(err)}`,
+              `[AzureOpenAILLMClient] 流式工具轮次收尾失败: ${normalizeError(err).message}`,
               'LLMFactory'
             );
           }
@@ -242,11 +267,11 @@ export default class AzureOpenAILLMClient {
         continue;
       }
       if (toolCallsCollector.content || !toolCallsCollector.toolCalls.length || !enableMcp) break;
-      
+
       round++;
     }
   }
-  
+
   async _consumeSSEWithToolCalls(resp, onDelta, collector, options = {}) {
     const toolCallsMap = new Map();
 
@@ -291,7 +316,7 @@ export default class AzureOpenAILLMClient {
           }
         }
       } catch {
-        // ignore
+        // ignore malformed SSE chunk
       }
     }
 
@@ -301,4 +326,3 @@ export default class AzureOpenAILLMClient {
     }
   }
 }
-

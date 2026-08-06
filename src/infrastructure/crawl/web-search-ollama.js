@@ -8,6 +8,7 @@ import {
   resolveSiteName,
   wrapWebContent
 } from './web-search-shared.js';
+import { normalizeError } from '#utils/normalize-error.js';
 
 const OLLAMA_DEFAULT_BASE_URL = 'http://127.0.0.1:11434';
 const OLLAMA_CLOUD_BASE_URL = 'https://ollama.com';
@@ -103,7 +104,7 @@ export async function runOllamaSearch(params, runtime = {}) {
       payload = await response.json();
       break;
     } catch (err) {
-      lastError = Error.isError(err) ? err : new Error(String(err));
+      lastError = normalizeError(err);
       if (attempt === attempts[attempts.length - 1]) throw lastError;
     }
   }

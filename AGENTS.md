@@ -1,20 +1,17 @@
-# AGENTS.md — XRK-AGT（本仓库）
+# AGENTS.md — XRK-AGT（Coding Agent）
 
-面向在本仓库写代码、改 Core、排查框架的 AI / 开发者。
+面向在本仓库写代码、改 Core、排查框架的 AI / 开发者（含克隆本仓的用户）。
 
-## 相关文档
+## 哪份 AGENTS.md？
 
-| 文件 | 读者 | 内容 |
-|------|------|------|
-| **本文件** | Cursor / 框架与 Core 开发 | 放码、配置归属、本仓 skill 路由 |
-| `~/.cursor/AGENTS.md` | 本机所有项目 | 全局技能、代理、PCB、生图/视频等 |
-| [`docs/agents.md`](docs/agents.md) | 用户 / 运维 / 维护者 | 运行时对话 Agent（办事助手） |
-| [`docs/agent-context.md`](docs/agent-context.md) | 框架 / Core / 运维 | Agent 跑通契约：概念地图、消息三层、Workspace、工具环 |
-| `agents/workspace/AGENTS.md` → `data/ai-workspace/{id}/` | 办事助手模型 | 注入 prompt 的办事规则 |
-| `core/<core>/AGENTS.md`（若有） | 产品 Agent | 该产品工作区与工具边界 |
+| 文件 | 读者 | 写什么 |
+|------|------|--------|
+| **本文件**（仓库根） | **Coding Agent** | 放码、配置归属、本仓 skill 路由；**仓库契约**，勿写个人工作流 |
+| `agents/workspace/AGENTS.md` → `data/ai-workspace/{id}/` | **产品 / 办事助手模型** | 注入 prompt 的办事规则 |
+| `core/<core>/AGENTS.md`（若有） | **产品 Agent** | 该产品工作区与工具边界；**不写** LLM 工厂 / commonconfig / 底层路径 |
+| [`docs/agents.md`](docs/agents.md) | 人（运维 / 维护者） | 办事助手怎么配、怎么用 |
 
-写框架 / Core：本文件 + `.cursor/rules` + `xrk-*` skill。  
-调办事助手：`agents/` 或 `data/ai-workspace/{id}/`，说明见 [`docs/agents.md`](docs/agents.md)。
+人读契约与导航：[`docs/README.md`](docs/README.md) · [`docs/agent-context.md`](docs/agent-context.md)。
 
 ## 项目定位
 
@@ -33,23 +30,22 @@
 | `xrk-agent-behavior.mdc` | 本仓边界与 skill 入口 |
 | `xrk-third-party-plugins.mdc` | 主仓 gitignore / 子服插件约定 |
 
-叠加全局：`~/.cursor/rules/ponytail.mdc` · `~/.cursor/rules/senior-engineer.mdc`。  
-写码优先复用 Loader / ConfigBase / HttpResponse / `#utils/*`。
+写码优先复用 Loader / ConfigBase / HttpResponse / `#utils/*`。文档 / skill 与实现冲突时以**代码**为准。
 
 ## 一眼锁定（任务 → Skill）
 
-改 `core/` / `src/` 前：Grep 调用方 → **Read** 对应 `SKILL.md` → 再动手。索引：[`.cursor/skills/SKILL_INDEX.md`](.cursor/skills/SKILL_INDEX.md)（含**读者分流**）。
+改 `core/` / `src/` 前：Grep 调用方 → **Read** 对应 `SKILL.md` → 再动手。索引：[`.cursor/skills/SKILL_INDEX.md`](.cursor/skills/SKILL_INDEX.md)。
 
 | 读者 | 技能树 |
 |------|--------|
 | **Coding Agent**（本对话改代码） | `.cursor/skills/xrk-*` |
-| **产品 / 办事助手模型** | `agents/skills/standard/**`（目录卡）；写工作区 Core 时按 **agent-core-dev** **只读** `.cursor/skills/xrk-*` |
+| **产品 / 办事助手模型** | `agents/skills/standard/**`；写工作区 Core 时按 **agent-core-dev** **只读** `.cursor/skills/xrk-*` |
 | **人读契约** | `docs/*`（勿把 coding skill 写进产品 skill） |
 
 | 你在做什么 | 先读 |
 |------------|------|
 | 写/审 Core 或 `src/` 服务端代码 | `xrk-node-runtime` → `xrk-coding-style` |
-| `core/*/www` 静态页 / WebView / 挂载 / `sign.json` | `xrk-www-compat`；落地页加全局 `hallmark` |
+| `core/*/www` 静态页 / WebView / 挂载 / `sign.json` | `xrk-www-compat` |
 | HTTP API / handler / 响应形状 | `xrk-http-api`；前端解包见 `xrk-www-compat` |
 | 新增/改 YAML 字段、schema、模板路径 | `xrk-config` |
 | 插件 / Loader / 基类扩展点 | `xrk-infrastructure` · `xrk-plugins` |
@@ -61,9 +57,6 @@
 | 爬虫 / Playwright | `xrk-crawl` |
 | 架构总览 / 放哪 | `xrk-project-overview` · `xrk-project.mdc` |
 | 外部方案调研再接入 | `xrk-github-research`（说明如何接 Loader / ConfigBase） |
-| 品红抠图 / 竖屏口播 | `immersive-short-video`（跨项目约定见本机 AGENTS） |
-
-冲突时：过程类（ponytail / 调试）→ 上表领域 skill → 细分子 skill。
 
 ## 放码与配置
 
@@ -103,4 +96,4 @@
 
 ## GitHub MCP（可选）
 
-模板：`.cursor/mcp.json.example`。PAT 放本机 `~/.cursor/mcp.json`。
+模板：`.cursor/mcp.json.example`。本地 PAT 放在本机 Cursor MCP 配置，勿提交密钥。

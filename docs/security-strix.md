@@ -26,10 +26,10 @@
 
 官方 `curl … | bash` 面向 Linux/macOS/WSL。原生 Windows **优先下独立二进制**（pip 常因缺 MSVC/`link.exe`、编译 litellm 失败）。
 
-需要走代理时（例：本机 `7890`）：
+需要走代理时（把下方 URL 换成你本机代理，勿提交个人端口到仓库）：
 
 ```powershell
-$proxy = 'http://127.0.0.1:7890'
+$proxy = 'http://127.0.0.1:<port>'
 $env:HTTP_PROXY = $proxy; $env:HTTPS_PROXY = $proxy
 ```
 
@@ -40,7 +40,7 @@ docker version
 # 2) 独立二进制（推荐；版本号以 Releases 为准）
 $dir = Join-Path $env:LOCALAPPDATA 'strix-bin'
 New-Item -ItemType Directory -Force -Path $dir | Out-Null
-curl.exe -L --proxy http://127.0.0.1:7890 -o "$dir\strix.zip" `
+curl.exe -L --proxy $proxy -o "$dir\strix.zip" `
   https://github.com/usestrix/strix/releases/download/v1.3.1/strix-1.3.1-windows-x86_64.zip
 Expand-Archive "$dir\strix.zip" $dir -Force
 Copy-Item -Force "$dir\strix-*-windows-x86_64.exe" "$dir\strix.exe"

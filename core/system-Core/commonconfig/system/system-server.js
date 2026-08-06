@@ -923,7 +923,7 @@ export const serverConfig = {
               proxy: {
                 type: 'string',
                 label: '统一代理',
-                description: '如：http://127.0.0.1:7890，留空表示不走代理',
+                description: '如：http://127.0.0.1:<port>，留空表示不走代理',
                 default: '',
                 component: 'Input'
               }

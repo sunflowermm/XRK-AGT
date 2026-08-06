@@ -1,20 +1,28 @@
-import { partitionAndExecuteToolCalls } from '../../utils/llm/tool-partition-utils.js';
+import { partitionAndExecuteToolCalls } from '#utils/llm/tool-partition-utils.js';
 import {
   appendToolBudgetExhaustedNudge,
   toolBudgetFinalizeOverrides
-} from '../../utils/llm/tool-loop-finalize.js';
-import { createLlmHttpError } from '../../utils/llm/llm-http-error.js';
-import { transformMessagesWithVision } from '../../utils/llm/message-transform.js';
-import { buildOpenAIChatCompletionsBody, applyOpenAITools } from '../../utils/llm/openai-chat-utils.js';
-import { buildFetchOptionsWithProxy } from '../../utils/llm/proxy-utils.js';
-import { createToolNameMapper } from '../../utils/llm/tool-name-utils.js';
-import RuntimeUtil from '../../utils/runtime-util.js';
-import { iterateSSE } from '../../utils/llm/sse-utils.js';
+} from '#utils/llm/tool-loop-finalize.js';
+import { createLlmHttpError } from '#utils/llm/llm-http-error.js';
+import { transformMessagesWithVision } from '#utils/llm/message-transform.js';
+import { buildOpenAIChatCompletionsBody, applyOpenAITools } from '#utils/llm/openai-chat-utils.js';
+import { buildFetchOptionsWithProxy } from '#utils/llm/proxy-utils.js';
+import { createToolNameMapper } from '#utils/llm/tool-name-utils.js';
+import RuntimeUtil from '#utils/runtime-util.js';
+import { iterateSSE } from '#utils/llm/sse-utils.js';
+import { normalizeError } from '#utils/normalize-error.js';
 
+/**
+ * DeepSeek Chat Completions：`reasoning_effort` ∈ low | high | max
+ * @see https://api-docs.deepseek.com/api/create-chat-completion
+ * 兼容映射：medium / xhigh → high（官方兼容约定）
+ */
 function normalizeDeepSeekReasoningEffort(value) {
   if (value === undefined || value === null || value === '') return;
   const v = String(value).trim().toLowerCase();
-  if (v === 'max' || v === 'xhigh') return 'max';
+  if (v === 'low') return 'low';
+  if (v === 'max') return 'max';
+  if (v === 'high' || v === 'medium' || v === 'xhigh') return 'high';
   return 'high';
 }
 
@@ -46,6 +54,7 @@ function applyResponseFormat(body, overrides, config) {
  */
 export default class DeepSeekLLMClient {
   _toolNames = createToolNameMapper();
+  _timeout = 360000;
 
   constructor(config = {}) {
     this.config = config;
@@ -184,7 +193,7 @@ export default class DeepSeekLLMClient {
     } catch (err) {
       RuntimeUtil.makeLog(
         'warn',
-        `[DeepSeekLLMClient] 工具轮次收尾失败: ${Error.isError(err) ? err.message : String(err)}`,
+        `[DeepSeekLLMClient] 工具轮次收尾失败: ${normalizeError(err).message}`,
         'LLMFactory'
       );
     }
@@ -261,7 +270,7 @@ export default class DeepSeekLLMClient {
           } catch (err) {
             RuntimeUtil.makeLog(
               'warn',
-              `[DeepSeekLLMClient] 流式工具轮次收尾失败: ${Error.isError(err) ? err.message : String(err)}`,
+              `[DeepSeekLLMClient] 流式工具轮次收尾失败: ${normalizeError(err).message}`,
               'LLMFactory'
             );
           }

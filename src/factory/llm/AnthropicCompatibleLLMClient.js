@@ -1,25 +1,31 @@
 import AnthropicLLMClient from './AnthropicLLMClient.js';
-import { buildFetchOptionsWithProxy } from '../../utils/llm/proxy-utils.js';
-import { iterateSSE } from '../../utils/llm/sse-utils.js';
-import { partitionAndExecuteToolCalls } from '../../utils/llm/tool-partition-utils.js';
+import { iterateSSE } from '#utils/llm/sse-utils.js';
+import { partitionAndExecuteToolCalls } from '#utils/llm/tool-partition-utils.js';
 import {
   appendToolBudgetExhaustedNudge,
-  toolBudgetFinalizeOverrides
-} from '../../utils/llm/tool-loop-finalize.js';
+  toolBudgetFinalizeOverrides,
+} from '#utils/llm/tool-loop-finalize.js';
 import {
   applyAnthropicTools,
   ensureAnthropicMaxTokens,
   normalizeAnthropicMessages,
-  normalizeAnthropicToolHistory
-} from '../../utils/llm/anthropic-chat-utils.js';
-import { createToolNameMapper } from '../../utils/llm/tool-name-utils.js';
-import RuntimeUtil from '../../utils/runtime-util.js';
-import { logPromptCacheUsage } from '../../utils/llm/prompt-cache-policy.js';
+  normalizeAnthropicToolHistory,
+} from '#utils/llm/anthropic-chat-utils.js';
+import { createToolNameMapper } from '#utils/llm/tool-name-utils.js';
+import RuntimeUtil from '#utils/runtime-util.js';
+import { logPromptCacheUsage } from '#utils/llm/prompt-cache-policy.js';
+import { normalizeError } from '#utils/normalize-error.js';
 
 /**
- * Anthropic Messages 兼容工厂（anthropic_compat_llm.providers）
- * - Bearer 认证 + /v1/messages URL 补全
- * - MCP 工具：按 streams 白名单注入 tools[]，多轮 tool_use / tool_result
+ * Anthropic Messages 兼容网关（anthropic_compat_llm.providers）
+ *
+ * 官方 Claude API（platform.claude.com）：
+ * - `POST https://api.anthropic.com/v1/messages`
+ * - 静态密钥用 `x-api-key`；Workload Identity 短时令牌才用 `Authorization: Bearer`
+ * - 必带 `anthropic-version`（默认 `2023-06-01`，由基类写入）
+ *
+ * 本类面向第三方 Messages 兼容反代：默认 `authMode=bearer`（网关常见）；
+ * 若反代要求官方头，配置 `authMode: x-api-key`。工具环 / SSE 事件形状按 Messages API。
  */
 export default class AnthropicCompatibleLLMClient extends AnthropicLLMClient {
   _toolNames = createToolNameMapper();
@@ -27,7 +33,7 @@ export default class AnthropicCompatibleLLMClient extends AnthropicLLMClient {
   constructor(config = {}) {
     super({
       authMode: 'bearer',
-      ...config
+      ...config,
     });
   }
 
@@ -265,7 +271,7 @@ export default class AnthropicCompatibleLLMClient extends AnthropicLLMClient {
     } catch (err) {
       RuntimeUtil.makeLog(
         'warn',
-        `[AnthropicCompatibleLLMClient] 工具轮次收尾失败: ${Error.isError(err) ? err.message : String(err)}`,
+        `[AnthropicCompatibleLLMClient] 工具轮次收尾失败: ${normalizeError(err).message}`,
         'LLMFactory'
       );
     }

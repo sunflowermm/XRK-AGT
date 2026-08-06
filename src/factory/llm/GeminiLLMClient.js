@@ -1,22 +1,23 @@
-import { transformMessagesWithVision } from '../../utils/llm/message-transform.js';
-import { buildFetchOptionsWithProxy } from '../../utils/llm/proxy-utils.js';
-import { fetchAsBase64 } from '../../utils/llm/image-utils.js';
-import { iterateSSE } from '../../utils/llm/sse-utils.js';
+import { transformMessagesWithVision } from '#utils/llm/message-transform.js';
+import { buildFetchOptionsWithProxy } from '#utils/llm/proxy-utils.js';
+import { fetchAsBase64 } from '#utils/llm/image-utils.js';
+import { iterateSSE } from '#utils/llm/sse-utils.js';
+import { createLlmHttpError } from '#utils/llm/llm-http-error.js';
 
 /**
  * Gemini 官方 LLM 客户端（Google Generative Language API）
+ * 文档：https://ai.google.dev/api
  *
- * 默认：
- * - baseUrl: https://generativelanguage.googleapis.com
- * - path: /v1beta/models/{model}:generateContent
- * - 认证：通过 query 参数 key=API_KEY（apiKey）
- *
- * 注意：
- * - 这里实现的是“纯聊天 + 可选流式(SSE)输出”的最小闭环
- * - 图片直接通过多模态 content（text + image_url/base64）传给 Gemini，由上游 `transformMessagesWithVision` 做统一结构转换
- * - MCP tool calling：Gemini 的 function calling 协议与 OpenAI 不同；本实现默认不注入 MCP tools（建议在配置中 enableTools=false）
+ * - baseUrl 默认 `https://generativelanguage.googleapis.com`
+ * - path 默认 `/v1beta/models/{model}:generateContent`
+ * - 认证：优先 `x-goog-api-key`；`authMode: query` 时退回 `?key=`
+ * - 流式：`:streamGenerateContent?alt=sse`
+ * - 多模态：inlineData(base64)；上游 `transformMessagesWithVision` 先统一为 OpenAI content
+ * - MCP tools：Gemini function calling 协议不同，默认不注入（建议 enableTools=false）
  */
 export default class GeminiLLMClient {
+  _timeout = 360000;
+
   constructor(config = {}) {
     this.config = config;
     this.endpoint = this.normalizeEndpoint(config);
@@ -40,23 +41,32 @@ export default class GeminiLLMClient {
     return this._timeout ?? 360000;
   }
 
+  /** @returns {'header'|'query'} */
+  authMode() {
+    const mode = String(this.config.authMode || 'header').trim().toLowerCase();
+    return mode === 'query' || mode === 'key' ? 'query' : 'header';
+  }
+
   buildHeaders(extra = {}) {
     const headers = {
       'Content-Type': 'application/json',
       ...extra
     };
+    if (this.authMode() === 'header' && this.config.apiKey) {
+      headers['x-goog-api-key'] = String(this.config.apiKey).trim();
+    }
     if (this.config.headers) Object.assign(headers, this.config.headers);
     return headers;
   }
 
-  withKey(url) {
+  resolveUrl(url) {
+    if (this.authMode() !== 'query') return url;
     const u = new URL(url);
     u.searchParams.set('key', String(this.config.apiKey).trim());
     return u.toString();
   }
 
   async transformMessages(messages) {
-    // 统一为 OpenAI 风格的多模态 content（text + image_url），再转成 Gemini parts
     return await transformMessagesWithVision(messages, this.config, { mode: 'openai' });
   }
 
@@ -64,7 +74,6 @@ export default class GeminiLLMClient {
     const raw = String(url ?? '').trim();
     if (!raw) return null;
 
-    // Gemini 官方多模态最稳的方式是 inlineData(base64)：统一使用公共工具下载并转码
     const info = await fetchAsBase64(raw, { timeoutMs: this.timeout });
     if (!info || !info.base64) return null;
     return { inlineData: { mimeType: info.mimeType || 'image/png', data: info.base64 } };
@@ -87,7 +96,6 @@ export default class GeminiLLMClient {
         const text = m.content.toString();
         if (text) parts.push({ text });
       } else if (Array.isArray(m.content)) {
-        // OpenAI 多模态 content 数组：[{type:'text',text},{type:'image_url',image_url:{url}}]
         for (const p of m.content) {
           if (p?.type === 'text' && p.text) {
             parts.push({ text: String(p.text) });
@@ -96,13 +104,11 @@ export default class GeminiLLMClient {
             if (inlinePart) {
               parts.push(inlinePart);
             } else {
-              // 下载/解析失败：回退为可读占位（避免整条消息丢失）
               parts.push({ text: `[图片:${String(p.image_url.url)}]` });
             }
           }
         }
       } else if (m.content && typeof m.content === 'object') {
-        // 兼容少数场景：{text, content}
         const text = (m.content.text ?? m.content.content ?? '').toString();
         if (text) parts.push({ text });
       }
@@ -150,7 +156,6 @@ export default class GeminiLLMClient {
   }
 
   extractTextFromResponse(json) {
-    // generateContent: candidates[0].content.parts[].text
     const parts = json?.candidates?.[0]?.content?.parts;
     if (!Array.isArray(parts)) return '';
     return parts.map(p => p?.text ?? '').join('');
@@ -159,7 +164,7 @@ export default class GeminiLLMClient {
   async chat(messages, overrides = {}) {
     const transformedMessages = await this.transformMessages(messages);
     const resp = await fetch(
-      this.withKey(this.endpoint),
+      this.resolveUrl(this.endpoint),
       buildFetchOptionsWithProxy(this.config, {
         method: 'POST',
         headers: this.buildHeaders(overrides.headers),
@@ -170,7 +175,10 @@ export default class GeminiLLMClient {
 
     if (!resp.ok) {
       const text = await resp.text().catch(() => '');
-      throw new Error(`Gemini 请求失败: ${resp.status} ${resp.statusText}${text ? ` | ${text}` : ''}`);
+      throw createLlmHttpError(
+        `Gemini 请求失败: ${resp.status} ${resp.statusText}${text ? ` | ${text}` : ''}`,
+        { status: resp.status, headers: resp.headers }
+      );
     }
 
     const data = await resp.json();
@@ -178,10 +186,9 @@ export default class GeminiLLMClient {
   }
 
   async chatStream(messages, onDelta, overrides = {}) {
-    // Gemini SSE: :streamGenerateContent?alt=sse
     const transformedMessages = await this.transformMessages(messages);
     const baseUrl = this.endpoint.replace(/:generateContent$/, ':streamGenerateContent');
-    const url = new URL(this.withKey(baseUrl));
+    const url = new URL(this.resolveUrl(baseUrl));
     url.searchParams.set('alt', 'sse');
 
     const resp = await fetch(
@@ -196,7 +203,10 @@ export default class GeminiLLMClient {
 
     if (!resp.ok || !resp.body) {
       const text = await resp.text().catch(() => '');
-      throw new Error(`Gemini 流式请求失败: ${resp.status} ${resp.statusText}${text ? ` | ${text}` : ''}`);
+      throw createLlmHttpError(
+        `Gemini 流式请求失败: ${resp.status} ${resp.statusText}${text ? ` | ${text}` : ''}`,
+        { status: resp.status, headers: resp.headers }
+      );
     }
     let emitted = '';
     for await (const { data } of iterateSSE(resp)) {
@@ -210,9 +220,8 @@ export default class GeminiLLMClient {
           emitted = full;
         }
       } catch {
-        // ignore
+        // ignore malformed SSE chunk
       }
     }
   }
 }
-

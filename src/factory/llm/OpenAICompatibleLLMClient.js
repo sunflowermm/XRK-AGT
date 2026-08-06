@@ -1,17 +1,18 @@
-import { partitionAndExecuteToolCalls } from '../../utils/llm/tool-partition-utils.js';
-import { buildOpenAIChatCompletionsBody, applyOpenAITools, buildOpenAICompatEndpoint } from '../../utils/llm/openai-chat-utils.js';
-import { transformMessagesWithVision } from '../../utils/llm/message-transform.js';
-import { buildFetchOptionsWithProxy } from '../../utils/llm/proxy-utils.js';
-import { ensureMessagesImagesDataUrl } from '../../utils/llm/image-utils.js';
-import { cleanupMessages } from '../../utils/llm/message-cleanup.js';
-import RuntimeUtil from '../../utils/runtime-util.js';
-import { iterateSSE } from '../../utils/llm/sse-utils.js';
-import { logPromptCacheUsage } from '../../utils/llm/prompt-cache-policy.js';
+import { partitionAndExecuteToolCalls } from '#utils/llm/tool-partition-utils.js';
+import { buildOpenAIChatCompletionsBody, applyOpenAITools, buildOpenAICompatEndpoint } from '#utils/llm/openai-chat-utils.js';
+import { transformMessagesWithVision } from '#utils/llm/message-transform.js';
+import { buildFetchOptionsWithProxy } from '#utils/llm/proxy-utils.js';
+import { ensureMessagesImagesDataUrl } from '#utils/llm/image-utils.js';
+import { cleanupMessages } from '#utils/llm/message-cleanup.js';
+import RuntimeUtil from '#utils/runtime-util.js';
+import { iterateSSE } from '#utils/llm/sse-utils.js';
+import { logPromptCacheUsage } from '#utils/llm/prompt-cache-policy.js';
 import {
   appendToolBudgetExhaustedNudge,
   toolBudgetFinalizeOverrides
-} from '../../utils/llm/tool-loop-finalize.js';
-import { createLlmHttpError } from '../../utils/llm/llm-http-error.js';
+} from '#utils/llm/tool-loop-finalize.js';
+import { createLlmHttpError } from '#utils/llm/llm-http-error.js';
+import { normalizeError } from '#utils/normalize-error.js';
 
 /**
  * OpenAI 兼容第三方网关客户端（NewAPI / CherryIN / 自建反代等）。
@@ -22,6 +23,8 @@ import { createLlmHttpError } from '../../utils/llm/llm-http-error.js';
  * - 各厂商官方 builtin（deepseek / volcengine / anthropic …）独立 *LLMClient，按各自文档 buildBody
  */
 export default class OpenAICompatibleLLMClient {
+  _timeout = 360000;
+
   constructor(config = {}) {
     this.config = config;
     this.endpoint = this.normalizeEndpoint(config);
@@ -333,7 +336,7 @@ export default class OpenAICompatibleLLMClient {
     } catch (err) {
       RuntimeUtil.makeLog(
         'warn',
-        `[OpenAICompatibleLLMClient] 工具轮次收尾失败: ${Error.isError(err) ? err.message : String(err)}`,
+        `[OpenAICompatibleLLMClient] 工具轮次收尾失败: ${normalizeError(err).message}`,
         'LLMFactory'
       );
       return {

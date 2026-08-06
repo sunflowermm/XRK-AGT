@@ -1,4 +1,7 @@
 /**
+ * Playwright 导航 SSRF 守卫
+ * waitUntil 取值对齐官方 Page.goto：load | domcontentloaded | networkidle | commit
+ * @see https://playwright.dev/docs/api/class-page#page-goto
  */
 import { isIP } from 'node:net';
 import {
@@ -12,6 +15,20 @@ import {
 import { normalizeHostname } from './ssrf-ip-policy.js';
 
 export { SsrFBlockedError };
+
+/** @see https://playwright.dev/docs/api/class-page#page-goto — networkidle 官方 DISCOURAGED */
+export const PLAYWRIGHT_WAIT_UNTIL = Object.freeze(['load', 'domcontentloaded', 'networkidle', 'commit']);
+
+/**
+ * @param {unknown} raw
+ * @param {'load'|'domcontentloaded'|'networkidle'|'commit'} [fallback='load']
+ * @returns {'load'|'domcontentloaded'|'networkidle'|'commit'}
+ */
+export function normalizePlaywrightWaitUntil(raw, fallback = 'load') {
+  const v = String(raw ?? fallback).trim().toLowerCase();
+  if (PLAYWRIGHT_WAIT_UNTIL.includes(v)) return /** @type {typeof PLAYWRIGHT_WAIT_UNTIL[number]} */ (v);
+  return fallback;
+}
 
 export class InvalidBrowserNavigationUrlError extends Error {
   constructor(message) {
@@ -137,10 +154,10 @@ export async function assertBrowserNavigationResultAllowedForPage(page, ssrfPoli
 export async function gotoWithNavigationGuard(page, url, opts = {}) {
   const {
     timeoutMs = 60_000,
-    waitUntil = 'load',
     ssrfPolicy = {},
     onBlocked
   } = opts;
+  const waitUntil = normalizePlaywrightWaitUntil(opts.waitUntil, 'load');
   let blockedError = null;
 
   const handler = async (route, request) => {

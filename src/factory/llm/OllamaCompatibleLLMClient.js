@@ -1,8 +1,47 @@
-import { transformMessagesWithVision } from '../../utils/llm/message-transform.js';
-import { buildFetchOptionsWithProxy } from '../../utils/llm/proxy-utils.js';
-import { fetchAsBase64 } from '../../utils/llm/image-utils.js';
+import { transformMessagesWithVision } from '#utils/llm/message-transform.js';
+import { buildFetchOptionsWithProxy } from '#utils/llm/proxy-utils.js';
+import { fetchAsBase64 } from '#utils/llm/image-utils.js';
+import { createLlmHttpError } from '#utils/llm/llm-http-error.js';
+
+/**
+ * Ollama Chat API（/api/chat）
+ * @see https://docs.ollama.com/api/chat
+ * think: boolean | "low" | "medium" | "high" | "max"
+ */
+
+const OLLAMA_THINK_LEVELS = new Set(['low', 'medium', 'high', 'max']);
+
+/**
+ * @param {Record<string, unknown>} overrides
+ * @param {Record<string, unknown>} config
+ * @returns {boolean|string|undefined}
+ */
+function resolveOllamaThink(overrides, config) {
+  const raw =
+    overrides.think ??
+    config.think ??
+    overrides.thinkingType ??
+    overrides.thinking_type ??
+    config.thinkingType ??
+    config.thinking_type ??
+    overrides.reasoningEffort ??
+    overrides.reasoning_effort ??
+    config.reasoningEffort ??
+    config.reasoning_effort;
+  if (raw === undefined || raw === null || raw === '') return;
+  if (typeof raw === 'boolean') return raw;
+  const v = String(raw).trim().toLowerCase();
+  if (v === 'true' || v === 'enabled') return true;
+  if (v === 'false' || v === 'disabled' || v === 'none') return false;
+  if (OLLAMA_THINK_LEVELS.has(v)) return v;
+  if (v === 'minimal') return 'low';
+  if (v === 'xhigh') return 'max';
+  return true;
+}
 
 export default class OllamaCompatibleLLMClient {
+  _timeout = 360000;
+
   constructor(config = {}) {
     this.config = config;
     this.endpoint = this.normalizeEndpoint(config);
@@ -107,6 +146,9 @@ export default class OllamaCompatibleLLMClient {
       ...(Object.keys(options).length ? { options } : {})
     };
 
+    const think = resolveOllamaThink(overrides, this.config);
+    if (think !== undefined) body.think = think;
+
     if (this.config.extraBody && typeof this.config.extraBody === 'object') Object.assign(body, this.config.extraBody);
     if (overrides.extraBody && typeof overrides.extraBody === 'object') Object.assign(body, overrides.extraBody);
 
@@ -129,7 +171,10 @@ export default class OllamaCompatibleLLMClient {
 
     if (!resp.ok) {
       const text = await resp.text().catch(() => '');
-      throw new Error(`ollama_compat 请求失败: ${resp.status} ${resp.statusText}${text ? ` | ${text}` : ''}`);
+      throw createLlmHttpError(
+        `ollama_compat 请求失败: ${resp.status} ${resp.statusText}${text ? ` | ${text}` : ''}`,
+        { status: resp.status, headers: resp.headers }
+      );
     }
 
     const json = await resp.json();
@@ -152,7 +197,10 @@ export default class OllamaCompatibleLLMClient {
 
     if (!resp.ok || !resp.body) {
       const text = await resp.text().catch(() => '');
-      throw new Error(`ollama_compat 流式请求失败: ${resp.status} ${resp.statusText}${text ? ` | ${text}` : ''}`);
+      throw createLlmHttpError(
+        `ollama_compat 流式请求失败: ${resp.status} ${resp.statusText}${text ? ` | ${text}` : ''}`,
+        { status: resp.status, headers: resp.headers }
+      );
     }
 
     const reader = resp.body.getReader();
@@ -172,18 +220,26 @@ export default class OllamaCompatibleLLMClient {
         if (!text) continue;
         try {
           const evt = JSON.parse(text);
+          const thinking = evt?.message?.thinking || '';
+          if (thinking && typeof onDelta === 'function') onDelta('', { reasoning_content: thinking });
           const delta = evt?.message?.content || '';
           if (delta && typeof onDelta === 'function') onDelta(delta);
-        } catch {}
+        } catch {
+          /* ignore partial JSON lines */
+        }
       }
     }
 
     if (buffer.trim()) {
       try {
         const evt = JSON.parse(buffer.trim());
+        const thinking = evt?.message?.thinking || '';
+        if (thinking && typeof onDelta === 'function') onDelta('', { reasoning_content: thinking });
         const delta = evt?.message?.content || '';
         if (delta && typeof onDelta === 'function') onDelta(delta);
-      } catch {}
+      } catch {
+        /* ignore */
+      }
     }
   }
 }

@@ -1,6 +1,6 @@
 import YAML from 'yaml';
-import fs from 'fs';
-import path from 'path';
+import fs from 'node:fs';
+import path from 'node:path';
 import paths from '#utils/paths.js';
 import RuntimeUtil from '#utils/runtime-util.js';
 import { HotReloadBase } from '#utils/hot-reload-base.js';

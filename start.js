@@ -1,39 +1,52 @@
-import { promises as fs } from 'fs';
-import fsSync from 'fs';
-import path from 'path';
-import os from 'os';
-import { spawn, spawnSync } from 'child_process';
+import { promises as fs } from 'node:fs';
+import fsSync from 'node:fs';
+import path from 'node:path';
+import os from 'node:os';
+import { spawn, spawnSync } from 'node:child_process';
 import inquirer from 'inquirer';
 import chalk from 'chalk';
-import { fixWindowsUTF8 } from './src/utils/win-utf8.js';
+import { fixWindowsUTF8 } from '#utils/win-utf8.js';
+import { createSimpleLogger } from '#utils/simple-logger.js';
+import { getBrowserStatus, installPlaywrightChromium } from '#utils/bootstrap-deps.js';
+import {
+  MenuSignalHandler,
+  resolveChildExit,
+  killProcessTree,
+  registerShutdownHook,
+  EXIT_STOP,
+  EXIT_RESTART,
+} from '#utils/process-signals.js';
+import { normalizeError } from '#utils/normalize-error.js';
 
 fixWindowsUTF8();
-
 process.setMaxListeners(30);
 
 const entry = process.argv[1];
 if (entry && path.basename(entry) === 'start.js') {
   const appPath = path.resolve(process.cwd(), 'app.js');
-  const result = spawnSync(process.argv[0], [appPath, ...process.argv.slice(2)], { stdio: 'inherit', cwd: process.cwd() });
+  const result = spawnSync(process.argv[0], [appPath, ...process.argv.slice(2)], {
+    stdio: 'inherit',
+    cwd: process.cwd(),
+  });
   process.exit(result.status !== null ? result.status : 1);
 }
 
 let globalMenuSignalHandler = null;
 
 async function cleanup() {
-  if (globalMenuSignalHandler) {
-    await globalMenuSignalHandler.cleanup();
-    globalMenuSignalHandler = null;
-  }
+  if (!globalMenuSignalHandler) return;
+  await globalMenuSignalHandler.cleanup();
+  globalMenuSignalHandler = null;
 }
 
 const PATHS = {
   LOGS: './logs',
   DEFAULT_CONFIG: './config/default_config',
-  SERVER_BOTS: './data/server_bots'
+  SERVER_BOTS: './data/server_bots',
 };
 const PM2_TMP_PREFIX = path.join(os.tmpdir(), 'xrk-agt-pm2-');
 
+/** 子进程 exit(0) 停止自动重启；exit(1) 表示重启 */
 const CONFIG = {
   MAX_RESTARTS: 1000,
   PM2_LINES: 100,
@@ -41,43 +54,42 @@ const CONFIG = {
   RESTART_DELAYS: {
     SHORT: 1000,
     MEDIUM: 5000,
-    LONG: 15000
+    LONG: 15000,
   },
-  /** 子进程 exit(0) 停止自动重启；exit(1) 表示重启 */
   EXIT_STOP,
   EXIT_RESTART,
 };
 
 const JSON_SPACE = 2;
 
+function formatError(err) {
+  const error = normalizeError(err);
+  return error.stack || error.message;
+}
+
+/** @returns {number | null} */
+function parsePort(value) {
+  const n = Number.parseInt(String(value ?? ''), 10);
+  return Number.isInteger(n) && n > 0 && n < 65536 ? n : null;
+}
+
 async function writeFileIfChanged(filePath, content) {
   try {
     const existing = await fs.readFile(filePath, typeof content === 'string' ? 'utf8' : undefined);
-    if (existing === content) {
-      return false;
-    }
-  } catch {}
+    if (existing === content) return false;
+  } catch (err) {
+    if (Error.isError(err) && err.code !== 'ENOENT') throw err;
+  }
 
   await fs.mkdir(path.dirname(filePath), { recursive: true });
   await fs.writeFile(filePath, content);
   return true;
 }
 
-// 使用统一的简单日志工具
-import { createSimpleLogger } from './src/utils/simple-logger.js';
-import {
-  getBrowserStatus,
-  installPlaywrightChromium
-} from './src/utils/bootstrap-deps.js';
-import { MenuSignalHandler, resolveChildExit, killProcessTree, registerShutdownHook, EXIT_STOP, EXIT_RESTART } from './src/utils/process-signals.js';
-
 let _restartLogger = null;
 
-/** 复用同一日志实例，避免重复创建 */
 function getLogger() {
-  if (!_restartLogger) {
-    _restartLogger = createSimpleLogger(path.join(PATHS.LOGS, 'restart.log'), false);
-  }
+  _restartLogger ??= createSimpleLogger(path.join(PATHS.LOGS, 'restart.log'), false);
   return _restartLogger;
 }
 
@@ -87,20 +99,13 @@ class BaseManager {
   }
 }
 
-
 class PM2Manager extends BaseManager {
   getPM2Path() {
-    // 优先使用本地 node_modules 中的 PM2
     const localPm2Path = process.platform === 'win32'
       ? path.join(process.cwd(), 'node_modules', 'pm2', 'bin', 'pm2.cmd')
       : path.join(process.cwd(), 'node_modules', 'pm2', 'bin', 'pm2');
-    
-    // 检查本地是否存在
-    if (fsSync.existsSync(localPm2Path)) {
-      return localPm2Path;
-    }
-    
-    // 回退到全局 PM2
+
+    if (fsSync.existsSync(localPm2Path)) return localPm2Path;
     return 'pm2';
   }
 
@@ -112,36 +117,30 @@ class PM2Manager extends BaseManager {
     const pm2Path = this.getPM2Path();
     let cmdCommand = pm2Path;
     let cmdArgs = [command, ...args];
-    
-    // Windows 上，如果使用全局 PM2，需要通过 cmd /c 调用
-    // 如果使用本地 PM2 路径，直接执行即可
+
+    // Windows 全局 PM2 走 cmd /c；本地路径直接执行
     if (process.platform === 'win32' && pm2Path === 'pm2') {
       cmdCommand = 'cmd';
       cmdArgs = ['/c', 'pm2', command, ...args];
     }
-    
+
     await this.logger.log(`执行PM2命令: ${command} ${args.join(' ')}`);
-    
-    // 使用参数数组传递，避免 DEP0190 警告
+
     const result = spawnSync(cmdCommand, cmdArgs, {
       stdio: 'inherit',
       windowsHide: true,
       detached: false,
-      shell: false
+      shell: false,
     });
-    
+
     const success = result.status === 0;
-    
     if (success) {
       await this.logger.success(`PM2 ${command} ${processName} 成功`);
     } else {
       await this.logger.error(`PM2 ${command} ${processName} 失败，状态码: ${result.status}`);
-      
     }
-    
     return success;
   }
-
 
   async createConfig(port) {
     const processName = this.getProcessName(port);
@@ -159,15 +158,15 @@ class PM2Manager extends BaseManager {
       error_file: `./logs/pm2_server_error_${port}.log`,
       env: {
         NODE_ENV: 'production',
-        XRK_SERVER_PORT: port.toString()
-      }
+        XRK_SERVER_PORT: port.toString(),
+      },
     };
-    
+
     const pm2Dir = await fs.mkdtemp(PM2_TMP_PREFIX);
     const configPath = path.join(pm2Dir, `pm2_server_${port}.json`);
     const payload = JSON.stringify({ apps: [pm2Config] }, null, JSON_SPACE);
     await writeFileIfChanged(configPath, payload);
-    
+
     const cleanup = async () => {
       try {
         await fs.rm(pm2Dir, { recursive: true, force: true });
@@ -190,23 +189,24 @@ class PM2Manager extends BaseManager {
       },
       logs: () => this.executePM2Command('logs', [processName, '--lines', CONFIG.PM2_LINES.toString()], processName),
       stop: () => this.executePM2Command('stop', [processName], processName),
-      restart: () => this.executePM2Command('restart', [processName], processName)
+      restart: () => this.executePM2Command('restart', [processName], processName),
     };
-    
+
     return commandMap[action]?.() || false;
   }
 }
 
 class ServerManager extends BaseManager {
+  _activeChild = null;
+
   constructor(logger, pm2Manager) {
     super(logger);
     this.pm2Manager = pm2Manager;
-    this._activeChild = null;
 
     if (!globalMenuSignalHandler) {
       globalMenuSignalHandler = new MenuSignalHandler({
         log: (msg, level) => this.logger.log(msg, level),
-        warning: (msg) => this.logger.warning(msg)
+        warning: (msg) => this.logger.warning(msg),
       });
     }
     this.signalHandler = globalMenuSignalHandler;
@@ -224,7 +224,7 @@ class ServerManager extends BaseManager {
   }
 
   async ensurePortConfig(port, silent = false) {
-    const { seedPortConfigs } = await import('./src/infrastructure/config/config-seed.js');
+    const { seedPortConfigs } = await import('#infrastructure/config/config-seed.js');
     return seedPortConfigs(port, { silent, logger: this.logger });
   }
 
@@ -236,7 +236,7 @@ class ServerManager extends BaseManager {
       await this.logger.warning(`端口 ${port} 的配置目录已删除`);
       return true;
     } catch (error) {
-      await this.logger.error(`删除端口配置失败: ${error.message}\n${error.stack}`);
+      await this.logger.error(`删除端口配置失败: ${formatError(error)}`);
       return false;
     }
   }
@@ -245,12 +245,10 @@ class ServerManager extends BaseManager {
     try {
       const files = await fs.readdir(PATHS.SERVER_BOTS);
       const ports = [];
-      
       for (const file of files) {
-        const port = parseInt(file, 10);
-        !isNaN(port) && port > 0 && port < 65536 && ports.push(port);
+        const port = parsePort(file);
+        if (port != null) ports.push(port);
       }
-      
       return ports.sort((a, b) => a - b);
     } catch {
       return [];
@@ -262,37 +260,33 @@ class ServerManager extends BaseManager {
       type: 'input',
       name: 'port',
       message: chalk.bold('请输入新的服务器端口号:'),
-      validate: (input) => {
-        const portNum = parseInt(input);
-        return !isNaN(portNum) && portNum > 0 && portNum < 65536
+      validate: (input) =>
+        parsePort(input) != null
           ? true
-          : chalk.red('请输入有效的端口号 (1-65535)');
-      }
+          : chalk.red('请输入有效的端口号 (1-65535)'),
     }]);
-    
-    const portNum = parseInt(port);
+
+    const portNum = parsePort(port);
     await this.ensurePortConfig(portNum);
-    
     return portNum;
   }
 
   async startServerMode(port) {
-    // 检查是否跳过配置检查（用于自动重启场景，避免重复日志）
     const skipConfigCheck = process.env.XRK_SKIP_CONFIG_CHECK === '1';
-    
+
     if (!skipConfigCheck) {
       await this.logger.log(`启动葵子服务器，端口: ${port}`);
       await this.ensurePortConfig(port);
     }
-    
+
     try {
       const { default: AgentRuntime } = await import('./src/agent-runtime.js');
-      const { setRuntimeGlobal } = await import('./src/utils/runtime-globals.js');
+      const { setRuntimeGlobal } = await import('#utils/runtime-globals.js');
       const runtime = new AgentRuntime();
       setRuntimeGlobal('AgentRuntime', runtime);
       await runtime.run({ port });
     } catch (error) {
-      await this.logger.error(`服务器模式启动失败: ${error.message}\n${error.stack}`);
+      await this.logger.error(`服务器模式启动失败: ${formatError(error)}`);
       throw error;
     }
   }
@@ -370,7 +364,7 @@ class ServerManager extends BaseManager {
 
       child.on('error', (err) => {
         this.signalHandler._ensureReadline();
-        void this.logger.error(`子进程启动失败: ${err.message}`);
+        void this.logger.error(`子进程启动失败: ${normalizeError(err).message}`);
         if (this._activeChild === child) this._activeChild = null;
         resolve(CONFIG.EXIT_RESTART);
       });
@@ -399,7 +393,7 @@ class ServerManager extends BaseManager {
         await this.logger.warning(`服务器响应异常: ${response.status}`);
       }
     } catch (error) {
-      await this.logger.error(`停止请求失败: ${error.message}`);
+      await this.logger.error(`停止请求失败: ${normalizeError(error).message}`);
     }
   }
 }
@@ -422,11 +416,11 @@ class MenuManager {
         const selected = await this.showMainMenu();
         shouldExit = await this.handleMenuAction(selected);
       } catch (error) {
-        if (error.isTtyError) {
+        if (error?.isTtyError) {
           console.error(chalk.red('无法在当前环境中渲染菜单'));
           break;
         }
-        const errorMsg = error.stack || error.message || String(error);
+        const errorMsg = formatError(error);
         console.error(chalk.red('\n菜单操作出错:'));
         console.error(chalk.red(errorMsg));
         await this.serverManager.logger.error(`菜单操作出错: ${errorMsg}`);
@@ -643,8 +637,8 @@ class MenuManager {
       await installPlaywrightChromium();
       console.log(chalk.green('\n✓ Playwright Chromium 安装完成\n'));
     } catch (err) {
-      console.error(chalk.red(`\n✗ 安装失败: ${err.message}\n`));
-      await this.serverManager.logger.error(`Playwright 浏览器安装失败: ${err.message}`);
+      console.error(chalk.red(`\n✗ 安装失败: ${normalizeError(err).message}\n`));
+      await this.serverManager.logger.error(`Playwright 浏览器安装失败: ${formatError(err)}`);
     }
   }
 
@@ -720,22 +714,15 @@ class MenuManager {
 
 function getNodeArgs() {
   const nodeArgs = [...process.execArgv];
-  
-  if (!nodeArgs.includes('--expose-gc')) {
-    nodeArgs.push('--expose-gc');
-  }
-  
-  if (!nodeArgs.includes('--no-warnings')) {
-    nodeArgs.push('--no-warnings');
-  }
-  
+  if (!nodeArgs.includes('--expose-gc')) nodeArgs.push('--expose-gc');
+  if (!nodeArgs.includes('--no-warnings')) nodeArgs.push('--no-warnings');
   return nodeArgs;
 }
 
 if (process.env.XRK_FROM_APP !== '1') {
   process.on('uncaughtException', async (error) => {
     const logger = getLogger();
-    const errorMsg = error.stack || `${error.message}\n${error.stack || ''}`;
+    const errorMsg = formatError(error);
     console.error('\n未捕获的异常:');
     console.error(errorMsg);
     await logger.error(`未捕获的异常: ${errorMsg}`);
@@ -750,42 +737,36 @@ if (process.env.XRK_FROM_APP !== '1') {
 
 async function main() {
   const logger = getLogger();
-  // 目录结构由 app.js Bootstrap.validateEnvironment → paths.ensureBaseDirs 已创建
-
   const commandArg = process.argv[2];
-  const portArg = process.argv[3] || process.env.XRK_SERVER_PORT;
-  const port = portArg && !isNaN(parseInt(portArg)) ? parseInt(portArg) : null;
-  
-  // 处理命令行参数启动
+  const port = parsePort(process.argv[3] || process.env.XRK_SERVER_PORT);
+
   if (commandArg === 'server' && port) {
     const serverManager = new ServerManager(logger, null);
     await serverManager.startServerMode(port);
     return;
   }
-  
+
   if (commandArg === 'stop' && port) {
     const serverManager = new ServerManager(logger, null);
     await serverManager.stopServer(port);
     return;
   }
-  
-  // Docker 环境或非 TTY 环境，直接启动服务器模式
+
   if (process.env.DOCKER_CONTAINER === '1' || !process.stdout.isTTY) {
-    const defaultPort = parseInt(process.env.XRK_SERVER_PORT || '8080', 10);
+    const defaultPort = parsePort(process.env.XRK_SERVER_PORT) ?? 8080;
     const serverManager = new ServerManager(logger, null);
     await serverManager.startServerMode(defaultPort);
     return;
   }
-  
-  // 显示交互式菜单（仅限 TTY 环境）
+
   const pm2Manager = new PM2Manager(logger);
   const serverManager = new ServerManager(logger, pm2Manager);
   const menuManager = new MenuManager(serverManager, pm2Manager);
-  
+
   if (process.stdout.isTTY) {
     process.stdout.write('\x1b[2J\x1b[H');
   }
-  
+
   await menuManager.run();
   await cleanup();
 }
@@ -794,7 +775,7 @@ export default main;
 
 main().catch(async (error) => {
   const logger = getLogger();
-  await logger.error(`启动失败: ${error.message}\n${error.stack}`);
+  await logger.error(`启动失败: ${formatError(error)}`);
   await cleanup();
   process.exit(1);
 });

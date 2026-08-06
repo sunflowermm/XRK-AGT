@@ -1,13 +1,54 @@
-import { pick } from '../../utils/llm/openai-chat-utils.js';
-import { buildFetchOptionsWithProxy } from '../../utils/llm/proxy-utils.js';
-import { transformMessagesWithVision } from '../../utils/llm/message-transform.js';
-import { ensureMessagesImagesDataUrl } from '../../utils/llm/image-utils.js';
-import { iterateSSE } from '../../utils/llm/sse-utils.js';
-import { partitionAndExecuteToolCalls } from '../../utils/llm/tool-partition-utils.js';
-import { MCPToolAdapter } from '../../utils/llm/mcp-tool-adapter.js';
-import { appendToolBudgetExhaustedNudge } from '../../utils/llm/tool-loop-finalize.js';
-import { createLlmHttpError } from '../../utils/llm/llm-http-error.js';
-import RuntimeUtil from '../../utils/runtime-util.js';
+import { pick } from '#utils/llm/openai-chat-utils.js';
+import { buildFetchOptionsWithProxy } from '#utils/llm/proxy-utils.js';
+import { transformMessagesWithVision } from '#utils/llm/message-transform.js';
+import { ensureMessagesImagesDataUrl } from '#utils/llm/image-utils.js';
+import { iterateSSE } from '#utils/llm/sse-utils.js';
+import { partitionAndExecuteToolCalls } from '#utils/llm/tool-partition-utils.js';
+import { MCPToolAdapter } from '#utils/llm/mcp-tool-adapter.js';
+import { appendToolBudgetExhaustedNudge } from '#utils/llm/tool-loop-finalize.js';
+import { createLlmHttpError } from '#utils/llm/llm-http-error.js';
+import RuntimeUtil from '#utils/runtime-util.js';
+import { normalizeError } from '#utils/normalize-error.js';
+
+/** @see https://developers.openai.com/api/docs/guides/reasoning */
+const OPENAI_REASONING_EFFORTS = new Set(['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max']);
+const OPENAI_REASONING_MODES = new Set(['standard', 'pro']);
+
+/**
+ * Responses 协议用 `reasoning: { effort, mode }`，不是 Chat Completions 的顶层 `reasoning_effort`
+ * @param {Record<string, unknown>} body
+ * @param {Record<string, unknown>} overrides
+ * @param {Record<string, unknown>} config
+ */
+function applyOpenAIResponsesReasoning(body, overrides, config) {
+  const rawEffort = pick(overrides, config, ['reasoningEffort', 'reasoning_effort']);
+  const rawMode = pick(overrides, config, ['reasoningMode', 'reasoning_mode']);
+  const rawSummary = pick(overrides, config, ['reasoningSummary', 'reasoning_summary']);
+
+  delete body.reasoning_effort;
+
+  if (
+    (rawEffort === undefined || rawEffort === null || rawEffort === '') &&
+    (rawMode === undefined || rawMode === null || rawMode === '') &&
+    (rawSummary === undefined || rawSummary === null || rawSummary === '')
+  ) {
+    return;
+  }
+
+  const prev = body.reasoning && typeof body.reasoning === 'object' ? { ...body.reasoning } : {};
+  if (rawEffort !== undefined && rawEffort !== null && rawEffort !== '') {
+    const effort = String(rawEffort).trim().toLowerCase();
+    if (OPENAI_REASONING_EFFORTS.has(effort)) prev.effort = effort;
+  }
+  if (rawMode !== undefined && rawMode !== null && rawMode !== '') {
+    const mode = String(rawMode).trim().toLowerCase();
+    if (OPENAI_REASONING_MODES.has(mode)) prev.mode = mode;
+  }
+  if (rawSummary !== undefined && rawSummary !== null && rawSummary !== '') {
+    prev.summary = rawSummary;
+  }
+  if (Object.keys(prev).length) body.reasoning = prev;
+}
 
 function isOpenAIResponsesBuiltInTool(tool) {
   const type = String(tool?.type || '').trim();
@@ -56,6 +97,8 @@ function extractFunctionCalls(resp) {
 }
 
 export default class OpenAIResponsesCompatibleLLMClient {
+  _timeout = 360000;
+
   constructor(config = {}) {
     this.config = config;
     this.endpoint = this.normalizeEndpoint(config);
@@ -164,9 +207,22 @@ export default class OpenAIResponsesCompatibleLLMClient {
     const toolChoice = pick(overrides, this.config, ['tool_choice', 'toolChoice']);
     if (toolChoice !== undefined) body.tool_choice = toolChoice;
 
+    // Responses API：reasoning.effort / reasoning.mode（非 Chat Completions 的 reasoning_effort）
+    // @see https://developers.openai.com/api/docs/guides/reasoning
+    applyOpenAIResponsesReasoning(body, overrides, this.config);
+
     const extraBody = pick(overrides, this.config, ['extraBody']);
     if (this.config.extraBody && typeof this.config.extraBody === 'object') Object.assign(body, this.config.extraBody);
     if (extraBody && typeof extraBody === 'object') Object.assign(body, extraBody);
+
+    // extraBody 若误带顶层 reasoning_effort，归一到 reasoning.effort
+    if (body.reasoning_effort != null && body.reasoning_effort !== '') {
+      const prev = body.reasoning && typeof body.reasoning === 'object' ? body.reasoning : {};
+      if (prev.effort === undefined) {
+        body.reasoning = { ...prev, effort: String(body.reasoning_effort).trim().toLowerCase() };
+      }
+      delete body.reasoning_effort;
+    }
 
     return body;
   }
@@ -314,7 +370,7 @@ export default class OpenAIResponsesCompatibleLLMClient {
     } catch (err) {
       RuntimeUtil.makeLog(
         'warn',
-        `[OpenAIResponsesCompatibleLLMClient] 工具轮次收尾失败: ${Error.isError(err) ? err.message : String(err)}`,
+        `[OpenAIResponsesCompatibleLLMClient] 工具轮次收尾失败: ${normalizeError(err).message}`,
         'LLMFactory'
       );
       return executedToolNames.length ? { content: '', executedToolNames } : '';
@@ -419,7 +475,7 @@ export default class OpenAIResponsesCompatibleLLMClient {
     } catch (err) {
       RuntimeUtil.makeLog(
         'warn',
-        `[OpenAIResponsesCompatibleLLMClient] 流式工具轮次收尾失败: ${Error.isError(err) ? err.message : String(err)}`,
+        `[OpenAIResponsesCompatibleLLMClient] 流式工具轮次收尾失败: ${normalizeError(err).message}`,
         'LLMFactory'
       );
     }

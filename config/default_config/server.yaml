@@ -306,7 +306,7 @@ contentSafety:
 # 外联请求（HTTP client）
 # ----------------------------------------
 outbound:
-  # 可选：统一外联代理（undici ProxyAgent）。示例: "http://127.0.0.1:7890"
+  # 可选：统一外联代理（undici ProxyAgent）。示例: "http://127.0.0.1:<port>"
   proxy: ""
 
 # ----------------------------------------

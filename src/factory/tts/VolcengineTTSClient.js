@@ -5,10 +5,11 @@
  */
 
 import WebSocket from 'ws';
-import zlib from 'zlib';
+import zlib from 'node:zlib';
 import { v4 as uuidv4 } from 'uuid';
 import RuntimeUtil from '#utils/runtime-util.js';
 import { buildVolcengineSpeechHeaders } from '#utils/volcengine-speech-headers.js';
+import { normalizeError } from '#utils/normalize-error.js';
 
 const TTS_EVENTS = {
     START_CONNECTION: 1,
@@ -30,36 +31,30 @@ const TTS_EVENTS = {
 };
 
 export default class VolcengineTTSClient {
+    ws = null;
+    connected = false;
+    connecting = false;
+    connectionId = null;
+    currentSessionId = null;
+    sessionActive = false;
+    totalAudioBytes = 0;
+    audioChunkCount = 0;
+    lastChunkTime = null;
+    sessionStartTime = null;
+    _sessionResolve = null;
+    _sessionTimeout = null;
+    /** 串行化下发：保证多段 audio 按序送设备，避免与 xiaozhi Opus 编码/流控 乱序导致丢包 */
+    _audioSendPromise = Promise.resolve();
+
     /**
-     * 构造函数
-     * @param {string} deviceId - 设备ID
-     * @param {Object} config - TTS配置
-     * @param {Object} AgentRuntime - AgentRuntime实例
+     * @param {string} deviceId
+     * @param {Object} config
+     * @param {Object} AgentRuntime
      */
     constructor(deviceId, config, AgentRuntime) {
         this.deviceId = deviceId;
         this.config = config;
         this.AgentRuntime = AgentRuntime;
-        
-        // WebSocket相关
-        this.ws = null;
-        this.connected = false;
-        this.connecting = false;
-        
-        // 连接和会话状态
-        this.connectionId = null;
-        this.currentSessionId = null;
-        this.sessionActive = false;
-        
-        // 统计信息
-        this.totalAudioBytes = 0;
-        this.audioChunkCount = 0;
-        this.lastChunkTime = null;
-        this.sessionStartTime = null;
-        this._sessionResolve = null;
-        this._sessionTimeout = null;
-        /** 串行化下发：保证多段 audio 按序送设备，避免与 xiaozhi Opus 编码/流控 乱序导致丢包 */
-        this._audioSendPromise = Promise.resolve();
     }
 
     /**
@@ -342,7 +337,7 @@ export default class VolcengineTTSClient {
                     ws.on('error', (err) => {
                         clearTimeout(connectTimeout);
                         RuntimeUtil.makeLog('error',
-                            `❌ [TTS] WebSocket错误: ${err.message}`,
+                            `❌ [TTS] WebSocket错误: ${normalizeError(err).message}`,
                             this.deviceId
                         );
                         this.connected = false;

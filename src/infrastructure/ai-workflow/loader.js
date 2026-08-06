@@ -1,4 +1,4 @@
-import path from 'path';
+import path from 'node:path';
 import RuntimeUtil from '#utils/runtime-util.js';
 import paths from '#utils/paths.js';
 import { resolveQualifiedCoreModuleKey } from '#utils/core-fs.js';

@@ -1,6 +1,8 @@
 /**
- * Reasoning effort → budget_tokens（对齐 cline REASONING_EFFORT_RATIOS）。
- * 供 Anthropic thinking.budget_tokens / 部分网关透传。
+ * Reasoning effort → budget_tokens / Anthropic output_config.effort
+ * @see https://platform.claude.com/docs/en/build-with-claude/thinking
+ * @see https://platform.claude.com/docs/en/build-with-claude/effort
+ * @see https://platform.claude.com/docs/en/build-with-claude/extended-thinking
  */
 
 export const REASONING_EFFORT_RATIOS = Object.freeze({
@@ -12,6 +14,9 @@ export const REASONING_EFFORT_RATIOS = Object.freeze({
   minimal: 0.1,
   none: 0
 });
+
+/** Anthropic output_config.effort 官方常用档（minimal 降为 low） */
+const ANTHROPIC_OUTPUT_EFFORTS = new Set(['low', 'medium', 'high', 'xhigh', 'max']);
 
 /**
  * @param {unknown} effort
@@ -43,7 +48,30 @@ export function resolveReasoningBudgetTokens(opts = {}) {
 }
 
 /**
- * Anthropic Messages：根据 thinkingType / reasoningEffort 注入 thinking 块。
+ * @param {unknown} effort
+ * @returns {string|undefined}
+ */
+function toAnthropicOutputEffort(effort) {
+  const e = normalizeReasoningEffort(effort);
+  if (!e || e === 'none') return undefined;
+  if (e === 'minimal') return 'low';
+  if (ANTHROPIC_OUTPUT_EFFORTS.has(e)) return e;
+  return undefined;
+}
+
+function clearTemperatureUnlessExplicit(body, config, overrides) {
+  if (overrides.temperature === undefined && config.temperature === undefined) {
+    delete body.temperature;
+  }
+}
+
+/**
+ * Anthropic Messages：thinking + effort。
+ * - adaptive（推荐，Claude 4.6+ / 4.7+）：`thinking: { type: "adaptive" }` + `output_config.effort`
+ * - enabled（旧版 extended thinking）：`thinking: { type: "enabled", budget_tokens }`
+ * - disabled：`thinking: { type: "disabled" }`
+ * thinkingType=`auto` 视为 adaptive（现行官方路径）；旧模型可显式设 `enabled`。
+ *
  * @param {object} body
  * @param {object} config
  * @param {object} overrides
@@ -58,21 +86,37 @@ export function applyAnthropicThinking(body, config = {}, overrides = {}) {
     ?? config.reasoningEffort
     ?? config.reasoning_effort;
 
-  const type = thinkingType != null && thinkingType !== ''
+  const rawType = thinkingType != null && thinkingType !== ''
     ? String(thinkingType).trim().toLowerCase()
-    : (effort && normalizeReasoningEffort(effort) && normalizeReasoningEffort(effort) !== 'none'
-      ? 'enabled'
-      : null);
+    : null;
 
-  if (!type || type === 'disabled') {
-    if (type === 'disabled') body.thinking = { type: 'disabled' };
+  let type = rawType;
+  if (!type) {
+    const e = normalizeReasoningEffort(effort);
+    if (e && e !== 'none') type = 'adaptive';
+    else return body;
+  }
+
+  if (type === 'disabled') {
+    body.thinking = { type: 'disabled' };
     return body;
   }
 
-  if (type !== 'enabled' && type !== 'auto') return body;
+  if (type === 'adaptive' || type === 'auto') {
+    body.thinking = { type: 'adaptive' };
+    const outEffort = toAnthropicOutputEffort(effort);
+    if (outEffort) {
+      const prev = body.output_config && typeof body.output_config === 'object' ? body.output_config : {};
+      body.output_config = { ...prev, effort: outEffort };
+    }
+    clearTemperatureUnlessExplicit(body, config, overrides);
+    return body;
+  }
+
+  if (type !== 'enabled') return body;
 
   const maxTokens = Number(body.max_tokens ?? overrides.maxTokens ?? config.maxTokens ?? 8192) || 8192;
-  // Anthropic：budget_tokens 须小于 max_tokens
+  // 非 interleaved：budget_tokens 须小于 max_tokens
   const maxBudget = Math.max(1024, maxTokens - 1);
   const budget = resolveReasoningBudgetTokens({
     effort: effort || 'medium',
@@ -87,9 +131,6 @@ export function applyAnthropicThinking(body, config = {}, overrides = {}) {
   }
 
   body.thinking = { type: 'enabled', budget_tokens: budget };
-  // extended thinking 时常与 temperature 互斥，未显式要求时去掉
-  if (overrides.temperature === undefined && config.temperature === undefined) {
-    delete body.temperature;
-  }
+  clearTemperatureUnlessExplicit(body, config, overrides);
   return body;
 }

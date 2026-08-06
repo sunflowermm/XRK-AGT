@@ -1,4 +1,5 @@
 /**
+ * Playwright / SSRF 受控 fetch：每跳 pin DNS、manual 重定向、环检测
  */
 import {
   SsrFBlockedError,
@@ -38,6 +39,19 @@ function rewriteRedirectInitForCrossOrigin(init, allowUnsafeReplay) {
   return { ...init, body: undefined, headers: dropBodyHeaders(init.headers) };
 }
 
+function assertHttpUrl(urlString) {
+  let parsedUrl;
+  try {
+    parsedUrl = new URL(urlString);
+  } catch {
+    throw new SsrFBlockedError('Invalid URL: must be http or https');
+  }
+  if (!['http:', 'https:'].includes(parsedUrl.protocol)) {
+    throw new SsrFBlockedError('Invalid URL: must be http or https');
+  }
+  return parsedUrl;
+}
+
 /**
  * @param {string} url
  * @param {RequestInit} [init]
@@ -58,15 +72,7 @@ export async function fetchWithSsrFGuard(url, init = {}, options = {}) {
   let redirectCount = 0;
 
   while (true) {
-    let parsedUrl;
-    try {
-      parsedUrl = new URL(currentUrl);
-    } catch {
-      throw new Error('Invalid URL: must be http or https');
-    }
-    if (!['http:', 'https:'].includes(parsedUrl.protocol)) {
-      throw new Error('Invalid URL: must be http or https');
-    }
+    const parsedUrl = assertHttpUrl(currentUrl);
 
     const effectivePolicy = resolveSsrFPolicyForUrl(parsedUrl, ssrfPolicy);
     await assertUrlSafeForFetch(currentUrl, effectivePolicy, options.lookupFn);
@@ -122,7 +128,7 @@ export async function fetchWithSsrFGuard(url, init = {}, options = {}) {
 
       const visitKey = getRedirectVisitKey(nextUrl, currentInit);
       if (visited.has(visitKey)) {
-        throw new Error('Redirect loop detected');
+        throw new SsrFBlockedError('Redirect loop detected');
       }
       visited.add(visitKey);
 

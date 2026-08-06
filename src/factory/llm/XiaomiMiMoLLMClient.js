@@ -1,28 +1,30 @@
-import { partitionAndExecuteToolCalls } from '../../utils/llm/tool-partition-utils.js';
+import { partitionAndExecuteToolCalls } from '#utils/llm/tool-partition-utils.js';
 import {
   appendToolBudgetExhaustedNudge,
   toolBudgetFinalizeOverrides
-} from '../../utils/llm/tool-loop-finalize.js';
-import { createLlmHttpError } from '../../utils/llm/llm-http-error.js';
-import { transformMessagesWithVision } from '../../utils/llm/message-transform.js';
-import { buildOpenAIChatCompletionsBody, applyOpenAITools } from '../../utils/llm/openai-chat-utils.js';
-import { buildFetchOptionsWithProxy } from '../../utils/llm/proxy-utils.js';
-import { createToolNameMapper } from '../../utils/llm/tool-name-utils.js';
-import RuntimeUtil from '../../utils/runtime-util.js';
-import { iterateSSE } from '../../utils/llm/sse-utils.js';
+} from '#utils/llm/tool-loop-finalize.js';
+import { createLlmHttpError } from '#utils/llm/llm-http-error.js';
+import { transformMessagesWithVision } from '#utils/llm/message-transform.js';
+import { buildOpenAIChatCompletionsBody, applyOpenAITools } from '#utils/llm/openai-chat-utils.js';
+import { buildFetchOptionsWithProxy } from '#utils/llm/proxy-utils.js';
+import { createToolNameMapper } from '#utils/llm/tool-name-utils.js';
+import RuntimeUtil from '#utils/runtime-util.js';
+import { iterateSSE } from '#utils/llm/sse-utils.js';
+import { normalizeError } from '#utils/normalize-error.js';
 
 /**
  * 小米 MiMo LLM 客户端
+ * @see https://mimo.mi.com/docs/en-US/api/chat/openai-api
  *
- * 默认使用 OpenAI 兼容 Chat Completions 接口：
- * - baseUrl: https://api.xiaomimimo.com/v1
- * - path: /chat/completions
- * - 认证头：api-key: $MIMO_API_KEY
- *
- * 模型本身是纯文本的，图片由上游转为简单的占位文本后再交给 MiMo 处理（不再依赖独立的识图工厂）。
+ * - baseUrl: https://api.xiaomimimo.com/v1 · path: /chat/completions
+ * - 认证：`api-key`（默认）或 `authMode: bearer` → Authorization
+ * - 可选 `thinking: { type }`；出站 `max_completion_tokens`
+ * - 纯文本模型：图片由上游 text_only 占位
  */
 export default class XiaomiMiMoLLMClient {
   _toolNames = createToolNameMapper();
+
+  _timeout = 360000;
 
   constructor(config = {}) {
     this.config = config;
@@ -198,7 +200,7 @@ export default class XiaomiMiMoLLMClient {
     } catch (err) {
       RuntimeUtil.makeLog(
         'warn',
-        `[XiaomiMiMoLLMClient] 工具轮次收尾失败: ${Error.isError(err) ? err.message : String(err)}`,
+        `[XiaomiMiMoLLMClient] 工具轮次收尾失败: ${normalizeError(err).message}`,
         'LLMFactory'
       );
     }
@@ -290,7 +292,7 @@ export default class XiaomiMiMoLLMClient {
           } catch (err) {
             RuntimeUtil.makeLog(
               'warn',
-              `[XiaomiMiMoLLMClient] 流式工具轮次收尾失败: ${Error.isError(err) ? err.message : String(err)}`,
+              `[XiaomiMiMoLLMClient] 流式工具轮次收尾失败: ${normalizeError(err).message}`,
               'LLMFactory'
             );
           }
