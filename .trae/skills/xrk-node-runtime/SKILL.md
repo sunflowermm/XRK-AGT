@@ -11,7 +11,7 @@ description: 编写或审查 core/src 代码时，确保使用 Node 26 稳定 AP
 
 ## 版本
 
-- **要求**：Node ≥ 26.0（实测 26.2）；`package.json` engines 与 `app.js` 启动校验一致。
+- **要求**：Node ≥ 26.0（推荐 / 实测 **26.7.x**，至少 ≥ 26.5.1）；`package.json` engines 与 `app.js` 启动校验一致。
 - **勿用**：Node 24 特性检测回退、polyfill、未在文档列出的实验 API（如 `node:ffi`，除非用户明确要求）。
 
 ---
@@ -73,7 +73,7 @@ export default {
 import { exec } from '#utils/exec-async.js';
 
 const { stdout, stderr } = await exec('node --version');
-// 26.2 尚无 node:child_process/promises — 勿在各文件 promisify(exec)
+// 至 26.7 仍无 node:child_process/promises — 勿在各文件 promisify(exec)
 ```
 
 ## 代码示例（二进制 / 设备路径）

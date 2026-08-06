@@ -1,6 +1,7 @@
 # Node.js 26 运行时约定
 
 > **版本要求**：`package.json` → `engines.node` **≥ 26.0.0**（Current；预计 2026-10 转 LTS）。  
+> **推荐 / 实测**：Current **26.7.x**（至少覆盖 **≥ 26.5.1** 安全修复）。`engines` 下限不因小版本抬高；业务代码无需为 26.5–26.7 新 API 跟改。  
 > **包管理**：仅 **pnpm**。  
 > **写法与性能**：[coding-style.md](coding-style.md) · 挂载：[runtime-surface.md](runtime-surface.md)  
 > 架构索引：[底层架构设计.md](底层架构设计.md) · 编码禁止项：`.cursor/rules/xrk-dev-requirements.mdc` · skill **`xrk-node-runtime`**
@@ -44,28 +45,31 @@ Node 26 捆绑 V8 14.6 与 Undici 8：JSON 密集路径、原生 `fetch`、LLM �
 
 ### 2.3 未深度使用的 Node 26 内置能力
 
-Temporal、Web Storage、`node:ffi`（实验）等——本项目当前未依赖，新代码按需选用即可。
+Temporal、Web Storage、`node:ffi`（实验）、Perfetto 追踪、crypto STORE 私钥加载等——本项目当前未依赖；新 Current 小版本若仅增加此类能力，**不必为跟版本改业务代码**。
 
 ---
 
-## 3. 运行时说明（26.2）
+## 3. 运行时说明（26.7）
 
 | 项 | 说明 |
 |----|------|
-| `node:child_process/promises` | 26.2 **不存在** → 统一 `#utils/exec-async.js` |
+| `node:child_process/promises` | 至 **26.7** 官方 API **仍无**该子模块 → 统一 `#utils/exec-async.js` |
 | Tasker 外网 DNS 失败 | `ENOTFOUND` 等记 **warn**，不触发进程重启 |
+| Current 小版本 | 建议跟到最新 Current（安全与根证书）；`engines` 仍为 `>=26.0.0` |
 
 ---
 
 ## 4. 本地验证
 
 ```bash
-node -v                    # 应 >= v26.0.0
+node -v                    # 应 >= v26.0.0（推荐 v26.7.x）
 node --check src/agent-runtime.js
 node -e "import('#utils/exec-async.js').then(m=>console.log('exec',typeof m.exec))"
 node -e "console.log('Error.isError', typeof Error.isError)"
 ```
 
+Windows + Cursor：若 `node -v` 显示 Cursor 自带的 helpers（如 22.x），请确认 PATH 优先为系统安装的 Node（如 `C:\Program Files\nodejs`），或直接用该路径下的 `node.exe` 启动本项目。
+
 ---
 
-*最后更新：2026-06-14*
+*最后更新：2026-08-07*
