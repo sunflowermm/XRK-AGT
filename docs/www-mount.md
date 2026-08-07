@@ -182,6 +182,7 @@ Vite `base` 必须与该 URL 一致。
 | `serve` | string | resolve | `static`/`dist` 强制静态；`proxy`/`dev` 反代；未写则看 `enabled` |
 | `staticRoot` | string | resolve / build | 静态根相对路径；`"."` = 纯静态挂目录本体 |
 | `outDir` | string | resolve / build | `staticRoot` 别名 |
+| `spa` | boolean | mount | `true` 时对无扩展名的 GET 回落 `index.html`（Vue/React history）。别名 `historyApiFallback` |
 | `buildOnStart` | boolean | Launcher | **反代**：有 `build` 段且 `!== false` 时启动前先编。静态前端不读此字段 |
 | `build` | object | build / Launcher | `{ command, args?, cwd?, env? }`。静态：无则有 `package.json` 时默认 `pnpm build`。反代：生产路径可先 build 再启进程 |
 

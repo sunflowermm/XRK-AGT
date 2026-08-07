@@ -172,6 +172,20 @@ export async function mountCoreWwwStatic(app, staticOptions = {}) {
         app.use(mountPath, mountLimiter);
       }
       app.use(mountPath, express.static(staticRoot, mountStaticOpts));
+
+      // Vue/React history 模式：无实体文件的 GET 回落到 index.html（否则 /app/sqlite 会 404）
+      const spaEnabled = sign?.spa === true || sign?.historyApiFallback === true;
+      const spaIndex = path.join(staticRoot, 'index.html');
+      if (spaEnabled && fsSync.existsSync(spaIndex)) {
+        app.use(mountPath, (req, res, next) => {
+          if (req.method !== 'GET' && req.method !== 'HEAD') return next();
+          // 带扩展名的当作静态资源缺失，不吞掉 404
+          if (path.extname(req.path)) return next();
+          res.sendFile(spaIndex, (err) => (err ? next(err) : undefined));
+        });
+        reason = `${reason}; spa→index.html`;
+      }
+
       mountedPaths.add(mountPath);
       RuntimeUtil.makeLog(
         'info',
