@@ -10,7 +10,7 @@ export const SYSTEM_CORE_DIR = path.join(root, 'core', 'system-Core');
 export const SYSTEM_CORE_BASELINE = Object.freeze({
   http: 11,
   workflow: 7,
-  plugin: 15,
+  plugin: 18,
   tasker: 4,
   events: 4,
 });

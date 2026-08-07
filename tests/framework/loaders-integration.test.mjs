@@ -4,6 +4,7 @@ import { bootstrapTestEnv } from '../helpers/bootstrap.mjs';
 import {
   SYSTEM_CORE_BASELINE,
   systemCoreHttpApiKeys,
+  systemCorePluginKeys,
   systemCoreStreamBasenames,
 } from '../helpers/system-core.mjs';
 
@@ -22,7 +23,6 @@ describe('加载器集成（system-Core 基准）', () => {
 
   it(`PluginLoader 至少加载 system-Core 入库的 ${SYSTEM_CORE_BASELINE.plugin} 个插件`, async () => {
     const { default: PluginLoader } = await import('../../src/infrastructure/plugins/loader.js');
-    const { systemCorePluginKeys } = await import('../helpers/system-core.mjs');
     const officialKeys = systemCorePluginKeys();
     const listed = (await PluginLoader.getPlugins()).filter((p) => p.core === 'system-Core');
     for (const key of officialKeys) {

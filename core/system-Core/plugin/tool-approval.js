@@ -24,41 +24,34 @@ export class ToolApproval extends PluginBase {
     })
   }
 
-  async approve() {
-    if (!isToolApprovalEnabled()) {
-      await this.reply('交互审批未开启（ai-workflow.security.approval.enabled，默认关）')
-      return true
-    }
-    const parsed = parseApprovalCommand(this.e.msg, 'allow')
-    const result = resolveToolApproval(parsed?.id || '', 'allow')
-    if (result.ok) {
-      await this.reply(`已批准 ${result.id}`)
-    } else {
-      await this.reply(result.error || '批准失败')
-    }
+  async #requireEnabled(detail = false) {
+    if (isToolApprovalEnabled()) return true
+    await this.reply(
+      detail
+        ? '交互审批未开启（默认关）。开启：security.approval.enabled=true'
+        : '交互审批未开启（ai-workflow.security.approval.enabled，默认关）'
+    )
+    return false
+  }
+
+  async #resolve(action, okVerb, failVerb) {
+    if (!(await this.#requireEnabled())) return true
+    const parsed = parseApprovalCommand(this.e.msg, action)
+    const result = resolveToolApproval(parsed?.id || '', action)
+    await this.reply(result.ok ? `已${okVerb} ${result.id}` : result.error || `${failVerb}失败`)
     return true
   }
 
-  async deny() {
-    if (!isToolApprovalEnabled()) {
-      await this.reply('交互审批未开启（ai-workflow.security.approval.enabled，默认关）')
-      return true
-    }
-    const parsed = parseApprovalCommand(this.e.msg, 'deny')
-    const result = resolveToolApproval(parsed?.id || '', 'deny')
-    if (result.ok) {
-      await this.reply(`已拒绝 ${result.id}`)
-    } else {
-      await this.reply(result.error || '拒绝失败')
-    }
-    return true
+  approve() {
+    return this.#resolve('allow', '批准', '批准')
+  }
+
+  deny() {
+    return this.#resolve('deny', '拒绝', '拒绝')
   }
 
   async listPending() {
-    if (!isToolApprovalEnabled()) {
-      await this.reply('交互审批未开启（默认关）。开启：security.approval.enabled=true')
-      return true
-    }
+    if (!(await this.#requireEnabled(true))) return true
     const list = listPendingApprovals()
     if (!list.length) {
       await this.reply('当前无待审批')

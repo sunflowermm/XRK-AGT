@@ -35,7 +35,6 @@ export class RecipeSchedule extends PluginBase {
           `[recipe-schedule] 触发 ${r.id}: ${(userPrompt || r.title).slice(0, 120)}`,
           'RecipeSchedule'
         )
-        // ponytail: 仅日志 → 接 chat.process(e, prompt) 做无人值守执行
       }
     }))
   }
