@@ -15,7 +15,7 @@ core/*
 !core/system-Core/**
 ```
 
-- 主仓仅 `system-Core`；其余业务 Core（jm-Core、lsy-Core、vibe-learn-Core 等）本地存在即可，**勿**写 `!core/<产品>/` 或 `core/<产品>/`。
+- 主仓仅 `system-Core`；其余业务 Core（jm-Core、lsy-Core、vibe-learn 等）本地存在即可，**勿**写 `!core/<产品>/` 或 `core/<产品>/`。
 - 独立 git 产品 Core：规则 / 精工 mdc 随**该 Core 仓**管理；主仓不为其加白名单、不 alwaysApply 产品细则。
 
 ## data/

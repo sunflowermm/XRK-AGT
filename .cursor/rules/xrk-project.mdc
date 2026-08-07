@@ -59,7 +59,7 @@ alwaysApply: true
 
 ### 独立 git 产品 Core
 
-- 业务 Core（如 `vibe-learn-Core`）常为**单独仓库**，本地 clone 到 `core/<名>/`；主仓只白名单 `system-Core`（见 `xrk-third-party-plugins`）。
+- 业务 Core（如 `vibe-learn`）常为**单独仓库**，本地 clone 到 `core/<名>/`；主仓只白名单 `system-Core`（见 `xrk-third-party-plugins`）。
 - **产品精工 / 内容约定**写在该 Core 仓的 `.cursor/rules/*.mdc`（随产品仓提交），**不要**塞进主仓 alwaysApply。
 - 主仓若需在 monorepo 工作区触发：用 `globs: core/<名>/**` 做薄路由，正文以 Core 仓规则为准。
 

@@ -34,7 +34,7 @@
 | Rules / Skills | `agents/rules/` 全文；技能**目录** + `tools.read` | 根 `AGENTS.md` 不进办事助手链 |
 | harness 案例（Pi 等） | 仅对照；本仓默认 **有** MCP | 旁支，非升级路径 |
 
-应用向学习课径见 vibe-learn 第五章（`core/vibe-learn-Core`）；**契约以本文与代码为准**。
+应用向学习课径见 vibe-learn 第五章（`core/vibe-learn`）；**契约以本文与代码为准**。
 
 ---
 

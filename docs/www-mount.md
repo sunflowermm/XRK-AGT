@@ -249,7 +249,7 @@ mountCoreWwwStatic()       → 零配置静态 + 有 sign 的静态（只挂产�
 | 目录 | URL |
 |------|-----|
 | `Example-Core/www/frontend-example/` | `/example` |
-| `vibe-learn-Core/www/vibe-learn/` | `/vibe-learn` |
+| `vibe-learn/www/vibe-learn/` | `/vibe-learn` |
 | 纯静态 + `proxy.mount: "/help-docs"` | `/help-docs` |
 
 ---

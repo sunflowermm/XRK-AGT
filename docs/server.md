@@ -651,7 +651,7 @@ static:
 | `static` / `cacheTime` | 覆盖 `server.static`（sign 优先） |
 | `rateLimit` | 本挂载限流；与 `server.rateLimit` 合并，sign 优先 |
 
-规范示例：`Example-Core/www/frontend-example/`（URL `/example`）、`vibe-learn-Core/www/vibe-learn/`。
+规范示例：`Example-Core/www/frontend-example/`（URL `/example`）、`vibe-learn/www/vibe-learn/`。
 
 ### 生产注意
 
