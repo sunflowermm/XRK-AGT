@@ -43,7 +43,7 @@ www/<子目录>/
 对外 URL（静态与反代共用）优先级：`proxy.mount` → `mount` → `/${id}` → `/${文件夹名}`。  
 Vite `base` 必须与该 URL 一致。
 
-例：`system-Core/www/xrk/` → `/xrk/`（启动过程 build 后挂 `dist`）。
+例：`system-Core/www/xrk/` → `/xrk/`（`dist` 预构建入库；启动过程仅 stale 时再编）。
 
 ### ① 纯静态：`staticRoot: "."`
 

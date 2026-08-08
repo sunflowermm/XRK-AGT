@@ -1,0 +1,1836 @@
+{
+  "apiGroups": [
+    {
+      "id": "core",
+      "title": "核心系统",
+      "apis": [
+        {
+          "id": "system-auth-mode",
+          "method": "GET",
+          "path": "/api/system/auth-mode",
+          "title": "鉴权模式",
+          "description": "公开：是否要求 API Key（requiresKey），控制台用此接口而非 401 探测"
+        },
+        {
+          "id": "system-status",
+          "method": "GET",
+          "path": "/api/status",
+          "title": "系统状态",
+          "description": "获取系统运行状态、机器人信息和适配器列表"
+        },
+        {
+          "id": "system-status-detail",
+          "method": "GET",
+          "path": "/api/system/status",
+          "title": "系统状态详情",
+          "description": "获取系统状态详细信息"
+        },
+        {
+          "id": "system-overview",
+          "method": "GET",
+          "path": "/api/system/overview",
+          "title": "系统概览",
+          "description": "获取仪表盘面板、工作流与网络统计数据",
+          "queryParams": [
+            {
+              "name": "withHistory",
+              "label": "包含历史网络数据",
+              "type": "select",
+              "options": [
+                {
+                  "value": "0",
+                  "label": "否"
+                },
+                {
+                  "value": "1",
+                  "label": "是"
+                }
+              ],
+              "defaultValue": "1"
+            }
+          ]
+        },
+        {
+          "id": "system-config",
+          "method": "GET",
+          "path": "/api/config",
+          "title": "系统配置",
+          "description": "获取系统配置信息"
+        },
+        {
+          "id": "health-check",
+          "method": "GET",
+          "path": "/api/health",
+          "title": "健康检查",
+          "description": "检查系统各服务的健康状态"
+        }
+      ]
+    },
+    {
+      "id": "bot",
+      "title": "机器人管理",
+      "apis": [
+        {
+          "id": "bot-list",
+          "method": "GET",
+          "path": "/api/bots",
+          "title": "机器人列表",
+          "description": "获取所有已连接的机器人",
+          "queryParams": [
+            {
+              "name": "includeDevices",
+              "label": "包含设备",
+              "type": "select",
+              "options": [
+                {
+                  "value": "0",
+                  "label": "否"
+                },
+                {
+                  "value": "1",
+                  "label": "是"
+                }
+              ],
+              "defaultValue": "0"
+            }
+          ]
+        },
+        {
+          "id": "bot-friends",
+          "method": "GET",
+          "path": "/api/bot/:uin/friends",
+          "title": "好友列表",
+          "description": "获取指定机器人的好友列表",
+          "pathParams": {
+            "uin": {
+              "label": "机器人UIN",
+              "placeholder": "123456789",
+              "defaultValue": "123456789"
+            }
+          }
+        },
+        {
+          "id": "bot-groups",
+          "method": "GET",
+          "path": "/api/bot/:uin/groups",
+          "title": "群组列表",
+          "description": "获取指定机器人的群组列表",
+          "pathParams": {
+            "uin": {
+              "label": "机器人UIN",
+              "placeholder": "123456789",
+              "defaultValue": "123456789"
+            }
+          }
+        },
+        {
+          "id": "bot-control",
+          "method": "POST",
+          "path": "/api/bot/:uin/control",
+          "title": "控制机器人",
+          "description": "执行机器人控制命令",
+          "pathParams": {
+            "uin": {
+              "label": "机器人UIN",
+              "placeholder": "123456789",
+              "defaultValue": "123456789"
+            }
+          },
+          "bodyParams": [
+            {
+              "name": "action",
+              "label": "操作类型",
+              "type": "select",
+              "required": true,
+              "options": [
+                {
+                  "value": "shutdown",
+                  "label": "关机"
+                },
+                {
+                  "value": "startup",
+                  "label": "开机"
+                }
+              ],
+              "defaultValue": "shutdown"
+            }
+          ]
+        },
+        {
+          "id": "message-send",
+          "method": "POST",
+          "path": "/api/message/send",
+          "title": "发送消息",
+          "description": "向好友或群组发送消息",
+          "bodyParams": [
+            {
+              "name": "bot_id",
+              "label": "机器人ID",
+              "type": "text",
+              "placeholder": "留空使用默认机器人",
+              "defaultValue": "留空使用默认机器人"
+            },
+            {
+              "name": "type",
+              "label": "消息类型",
+              "type": "select",
+              "required": true,
+              "options": [
+                {
+                  "value": "private",
+                  "label": "私聊"
+                },
+                {
+                  "value": "group",
+                  "label": "群聊"
+                }
+              ],
+              "defaultValue": "group"
+            },
+            {
+              "name": "target_id",
+              "label": "目标ID",
+              "type": "text",
+              "required": true,
+              "placeholder": "好友QQ或群号",
+              "defaultValue": "123456789"
+            },
+            {
+              "name": "message",
+              "label": "消息内容",
+              "type": "textarea",
+              "required": true,
+              "placeholder": "输入消息内容",
+              "defaultValue": "你好，这是一条测试消息！"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "stdin",
+      "title": "标准输入",
+      "apis": [
+        {
+          "id": "stdin-command",
+          "method": "POST",
+          "path": "/api/stdin/command",
+          "title": "发送命令",
+          "description": "通过标准输入发送命令到机器人系统",
+          "bodyParams": [
+            {
+              "name": "command",
+              "label": "命令内容",
+              "type": "textarea",
+              "required": true,
+              "placeholder": "输入命令",
+              "defaultValue": "#更新"
+            },
+            {
+              "name": "user_info",
+              "label": "用户信息",
+              "type": "json",
+              "placeholder": "{\"user_id\": \"web_api_user\"}",
+              "defaultValue": {
+                "user_id": "web_api_user",
+                "nickname": "Web API 用户"
+              }
+            },
+            {
+              "name": "json",
+              "label": "返回JSON结果",
+              "type": "select",
+              "options": [
+                {
+                  "value": "true",
+                  "label": "是（按插件输出结构化返回）"
+                },
+                {
+                  "value": "false",
+                  "label": "否（仅返回基础执行结果）"
+                }
+              ],
+              "defaultValue": "true"
+            }
+          ]
+        },
+        {
+          "id": "stdin-event",
+          "method": "POST",
+          "path": "/api/stdin/event",
+          "title": "触发事件",
+          "description": "创建自定义事件触发插件响应",
+          "bodyParams": [
+            {
+              "name": "event_type",
+              "label": "事件类型",
+              "type": "text",
+              "required": true,
+              "placeholder": "message",
+              "defaultValue": "message"
+            },
+            {
+              "name": "content",
+              "label": "事件内容",
+              "type": "json",
+              "required": true,
+              "placeholder": "{\"message\": \"测试\"}",
+              "defaultValue": {
+                "message": [
+                  {
+                    "type": "text",
+                    "text": "你好"
+                  }
+                ]
+              }
+            },
+            {
+              "name": "user_info",
+              "label": "用户信息",
+              "type": "json",
+              "defaultValue": {
+                "user_id": "web_api_user",
+                "nickname": "Web API 用户"
+              }
+            },
+            {
+              "name": "json",
+              "label": "返回 JSON",
+              "type": "select",
+              "options": [
+                {
+                  "value": "true",
+                  "label": "是"
+                },
+                {
+                  "value": "false",
+                  "label": "否"
+                }
+              ],
+              "defaultValue": "true"
+            }
+          ]
+        },
+        {
+          "id": "stdin-status",
+          "method": "GET",
+          "path": "/api/stdin/status",
+          "title": "Stdin状态",
+          "description": "获取标准输入处理器的状态信息"
+        }
+      ]
+    },
+    {
+      "id": "ai",
+      "title": "AI 功能",
+      "apis": [
+        {
+          "id": "ai-stream",
+          "method": "GET",
+          "path": "/api/ai/stream",
+          "title": "AI 流式对话",
+          "description": "通过 SSE 获取 AI 流式回复",
+          "queryParams": [
+            {
+              "name": "prompt",
+              "label": "提示词",
+              "type": "text",
+              "required": true,
+              "placeholder": "你好",
+              "defaultValue": "你好"
+            },
+            {
+              "name": "workflow",
+              "label": "工作流名称",
+              "type": "text",
+              "placeholder": "chat",
+              "defaultValue": "chat"
+            },
+            {
+              "name": "persona",
+              "label": "人设",
+              "type": "text",
+              "placeholder": "AI 人设设置",
+              "defaultValue": "你是一个友好的助手"
+            }
+          ]
+        },
+        {
+          "id": "ai-models",
+          "method": "GET",
+          "path": "/api/ai/models",
+          "title": "AI 模型列表",
+          "description": "获取可用的 AI 模型和工作流列表（支持 format=openai 参数返回 OpenAI 兼容格式）",
+          "queryParams": [
+            {
+              "name": "format",
+              "label": "返回格式",
+              "type": "select",
+              "options": [
+                {
+                  "value": "",
+                  "label": "详细格式（默认）"
+                },
+                {
+                  "value": "openai",
+                  "label": "OpenAI 兼容格式"
+                }
+              ],
+              "defaultValue": "openai"
+            }
+          ]
+        },
+        {
+          "id": "v3-models",
+          "method": "GET",
+          "path": "/api/v3/models",
+          "title": "OpenAI 模型列表",
+          "description": "OpenAI 兼容的模型列表接口（与 /v3/chat/completions 搭配使用）"
+        },
+        {
+          "id": "v3-chat-completions",
+          "method": "POST",
+          "path": "/api/v3/chat/completions",
+          "title": "OpenAI 兼容接口",
+          "description": "OpenAI Chat Completions 兼容接口（用于子服务端调用）",
+          "bodyParams": [
+            {
+              "name": "apiKey",
+              "label": "访问密钥",
+              "type": "password",
+              "required": false,
+              "placeholder": "访问密钥",
+              "defaultValue": "demo-key",
+              "hint": "可选；多数部署用顶栏 X-API-Key 即可"
+            },
+            {
+              "name": "messages",
+              "label": "消息列表",
+              "type": "json",
+              "required": true,
+              "placeholder": "[{\"role\": \"user\", \"content\": \"你好\"}]",
+              "defaultValue": [
+                {
+                  "role": "user",
+                  "content": "你好"
+                }
+              ]
+            },
+            {
+              "name": "model",
+              "label": "模型/提供商",
+              "type": "text",
+              "placeholder": "volcengine",
+              "defaultValue": "volcengine"
+            },
+            {
+              "name": "stream",
+              "label": "流式输出",
+              "type": "select",
+              "options": [
+                {
+                  "value": "false",
+                  "label": "否"
+                },
+                {
+                  "value": "true",
+                  "label": "是"
+                }
+              ],
+              "defaultValue": "false"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "config",
+      "title": "配置管理",
+      "apis": [
+        {
+          "id": "config-list",
+          "method": "GET",
+          "path": "/api/config/list",
+          "title": "配置列表",
+          "description": "获取所有配置文件列表"
+        },
+        {
+          "id": "config-structure",
+          "method": "GET",
+          "path": "/api/config/:name/structure",
+          "title": "配置结构",
+          "description": "获取配置文件的 Schema 结构",
+          "pathParams": {
+            "name": {
+              "label": "配置名称",
+              "placeholder": "system",
+              "defaultValue": "system"
+            }
+          }
+        },
+        {
+          "id": "config-flat-structure",
+          "method": "GET",
+          "path": "/api/config/:name/flat-structure",
+          "title": "扁平化结构",
+          "description": "获取配置文件的扁平化 Schema 结构（Schema）",
+          "pathParams": {
+            "name": {
+              "label": "配置名称",
+              "placeholder": "system",
+              "defaultValue": "system"
+            }
+          },
+          "queryParams": [
+            {
+              "name": "path",
+              "label": "配置路径",
+              "type": "text",
+              "placeholder": "log_level",
+              "defaultValue": "log_level"
+            }
+          ]
+        },
+        {
+          "id": "config-flat",
+          "method": "GET",
+          "path": "/api/config/:name/flat",
+          "title": "扁平化数据",
+          "description": "获取配置文件当前值的扁平化数据",
+          "pathParams": {
+            "name": {
+              "label": "配置名称",
+              "placeholder": "system",
+              "defaultValue": "system"
+            }
+          },
+          "queryParams": [
+            {
+              "name": "path",
+              "label": "配置路径",
+              "type": "text",
+              "placeholder": "log_level",
+              "defaultValue": "log_level"
+            }
+          ]
+        },
+        {
+          "id": "config-read",
+          "method": "GET",
+          "path": "/api/config/:name/read",
+          "title": "读取配置",
+          "description": "读取指定配置文件（或子配置）的内容",
+          "pathParams": {
+            "name": {
+              "label": "配置名称",
+              "placeholder": "system",
+              "defaultValue": "system"
+            }
+          },
+          "queryParams": [
+            {
+              "name": "path",
+              "label": "配置路径",
+              "type": "text",
+              "placeholder": "log_level",
+              "defaultValue": "log_level"
+            }
+          ]
+        },
+        {
+          "id": "config-write",
+          "method": "POST",
+          "path": "/api/config/:name/write",
+          "title": "写入配置",
+          "description": "写入配置到指定文件或子配置",
+          "pathParams": {
+            "name": {
+              "label": "配置名称",
+              "placeholder": "system",
+              "defaultValue": "system"
+            }
+          },
+          "bodyParams": [
+            {
+              "name": "data",
+              "label": "配置数据",
+              "type": "json",
+              "required": true,
+              "placeholder": "{\"log_level\": \"info\"}",
+              "defaultValue": {
+                "log_level": "info"
+              }
+            },
+            {
+              "name": "path",
+              "label": "配置路径",
+              "type": "text",
+              "placeholder": "log_level",
+              "defaultValue": "log_level"
+            },
+            {
+              "name": "backup",
+              "label": "是否备份",
+              "type": "select",
+              "options": [
+                {
+                  "value": "true",
+                  "label": "是"
+                },
+                {
+                  "value": "false",
+                  "label": "否"
+                }
+              ],
+              "defaultValue": "true"
+            }
+          ]
+        },
+        {
+          "id": "config-batch-set",
+          "method": "POST",
+          "path": "/api/config/:name/batch-set",
+          "title": "批量设置",
+          "description": "批量设置配置项（扁平化 path => value）",
+          "pathParams": {
+            "name": {
+              "label": "配置名称",
+              "placeholder": "system",
+              "defaultValue": "system"
+            }
+          },
+          "bodyParams": [
+            {
+              "name": "flat",
+              "label": "扁平化数据",
+              "type": "json",
+              "required": true,
+              "placeholder": "{\"log_level\": \"info\"}",
+              "defaultValue": {
+                "log_level": "info"
+              }
+            },
+            {
+              "name": "path",
+              "label": "（可选）子配置名称",
+              "type": "text",
+              "placeholder": "log",
+              "defaultValue": "log"
+            },
+            {
+              "name": "backup",
+              "label": "是否备份",
+              "type": "select",
+              "options": [
+                {
+                  "value": "true",
+                  "label": "是"
+                },
+                {
+                  "value": "false",
+                  "label": "否"
+                }
+              ],
+              "defaultValue": "true"
+            }
+          ]
+        },
+        {
+          "id": "config-validate",
+          "method": "POST",
+          "path": "/api/config/:name/validate",
+          "title": "校验配置",
+          "description": "根据 Schema 校验配置数据是否有效（不落盘）",
+          "pathParams": {
+            "name": {
+              "label": "配置名称",
+              "placeholder": "system",
+              "defaultValue": "system"
+            }
+          },
+          "bodyParams": [
+            {
+              "name": "data",
+              "label": "待校验数据",
+              "type": "json",
+              "required": true,
+              "placeholder": "{\"log_level\": \"debug\"}",
+              "defaultValue": {
+                "log_level": "debug"
+              }
+            }
+          ]
+        },
+        {
+          "id": "config-backup",
+          "method": "POST",
+          "path": "/api/config/:name/backup",
+          "title": "备份配置文件",
+          "description": "为指定配置生成一份备份文件",
+          "pathParams": {
+            "name": {
+              "label": "配置名称",
+              "placeholder": "system",
+              "defaultValue": "system"
+            }
+          }
+        },
+        {
+          "id": "config-reset",
+          "method": "POST",
+          "path": "/api/config/:name/reset",
+          "title": "重置为默认值",
+          "description": "将配置重置为默认值（可选是否备份）",
+          "pathParams": {
+            "name": {
+              "label": "配置名称",
+              "placeholder": "system",
+              "defaultValue": "system"
+            }
+          },
+          "bodyParams": [
+            {
+              "name": "backup",
+              "label": "是否备份当前值",
+              "type": "select",
+              "options": [
+                {
+                  "value": "true",
+                  "label": "是"
+                },
+                {
+                  "value": "false",
+                  "label": "否"
+                }
+              ],
+              "defaultValue": "true"
+            }
+          ]
+        },
+        {
+          "id": "config-clear-cache",
+          "method": "POST",
+          "path": "/api/config/clear-cache",
+          "title": "清除配置缓存",
+          "description": "清除所有配置文件在内存中的缓存"
+        }
+      ]
+    },
+    {
+      "id": "device",
+      "title": "设备管理",
+      "apis": [
+        {
+          "id": "device-register",
+          "method": "POST",
+          "path": "/api/device/register",
+          "title": "注册设备",
+          "description": "注册新的物联网设备到系统",
+          "bodyParams": [
+            {
+              "name": "device_id",
+              "label": "设备ID",
+              "type": "text",
+              "required": true,
+              "placeholder": "DEVICE_001",
+              "defaultValue": "SENSOR_001"
+            },
+            {
+              "name": "device_type",
+              "label": "设备类型",
+              "type": "text",
+              "required": true,
+              "placeholder": "sensor",
+              "defaultValue": "sensor"
+            },
+            {
+              "name": "device_name",
+              "label": "设备名称",
+              "type": "text",
+              "placeholder": "温度传感器",
+              "defaultValue": "温湿度传感器"
+            },
+            {
+              "name": "capabilities",
+              "label": "设备能力",
+              "type": "json",
+              "placeholder": "[\"temperature\"]",
+              "defaultValue": [
+                "temperature"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "device-list",
+          "method": "GET",
+          "path": "/api/devices",
+          "title": "设备列表",
+          "description": "获取所有注册的物联网设备"
+        },
+        {
+          "id": "device-detail",
+          "method": "GET",
+          "path": "/api/device/:deviceId",
+          "title": "设备详情",
+          "description": "获取指定设备的详细信息",
+          "pathParams": {
+            "deviceId": {
+              "label": "设备ID",
+              "placeholder": "DEVICE_001",
+              "defaultValue": "SENSOR_001"
+            }
+          }
+        },
+        {
+          "id": "device-ai",
+          "method": "POST",
+          "path": "/api/device/:deviceId/ai",
+          "title": "设备AI回复",
+          "description": "触发设备工作流，执行AI并驱动表情/TTS",
+          "pathParams": {
+            "deviceId": {
+              "label": "设备ID",
+              "placeholder": "webclient",
+              "defaultValue": "webclient"
+            }
+          },
+          "bodyParams": [
+            {
+              "name": "text",
+              "label": "问题/文本",
+              "type": "textarea",
+              "required": true,
+              "placeholder": "你好",
+              "defaultValue": "你好"
+            },
+            {
+              "name": "workflow",
+              "label": "工作流",
+              "type": "text",
+              "placeholder": "device",
+              "defaultValue": "device"
+            }
+          ]
+        },
+        {
+          "id": "device-asr-sessions",
+          "method": "GET",
+          "path": "/api/device/:deviceId/asr/sessions",
+          "title": "ASR 会话列表",
+          "description": "查看指定设备当前活跃的语音识别会话",
+          "pathParams": {
+            "deviceId": {
+              "label": "设备ID",
+              "placeholder": "DEVICE_001",
+              "defaultValue": "SENSOR_001"
+            }
+          }
+        },
+        {
+          "id": "device-asr-recordings",
+          "method": "GET",
+          "path": "/api/device/:deviceId/asr/recordings",
+          "title": "ASR 录音列表",
+          "description": "查看指定设备已保存的录音文件",
+          "pathParams": {
+            "deviceId": {
+              "label": "设备ID",
+              "placeholder": "DEVICE_001",
+              "defaultValue": "SENSOR_001"
+            }
+          }
+        },
+        {
+          "id": "device-tts",
+          "method": "POST",
+          "path": "/api/device/tts",
+          "title": "设备TTS播报",
+          "description": "调用设备 TTS 为指定设备播放一段文字",
+          "bodyParams": [
+            {
+              "name": "device_id",
+              "label": "设备ID",
+              "type": "text",
+              "required": true,
+              "placeholder": "DEVICE_001",
+              "defaultValue": "SENSOR_001"
+            },
+            {
+              "name": "text",
+              "label": "播报文本",
+              "type": "textarea",
+              "required": true,
+              "placeholder": "你好，这是一条测试播报",
+              "defaultValue": "你好，这是一条测试播报"
+            }
+          ]
+        },
+        {
+          "id": "device-file",
+          "method": "GET",
+          "path": "/api/device/file/:fileId",
+          "title": "设备文件访问",
+          "description": "通过后端生成的 fileId 访问设备相关的本地文件（只读）",
+          "pathParams": {
+            "fileId": {
+              "label": "文件ID（base64url）",
+              "placeholder": "ZzpcZGF0YVxkZXZpY2VcYTku...",
+              "defaultValue": "ZzpcZGF0YVxkZXZpY2VcZmlsZS5wbmc"
+            }
+          }
+        },
+        {
+          "id": "trash-file",
+          "method": "GET",
+          "path": "/api/trash/:relPath",
+          "title": "临时文件访问",
+          "description": "读取回收站内文件（相对路径）",
+          "pathParams": {
+            "relPath": {
+              "label": "相对路径",
+              "placeholder": "example.png",
+              "defaultValue": "example.png"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "file",
+      "title": "文件管理",
+      "apis": [
+        {
+          "id": "file-upload",
+          "method": "POST",
+          "path": "/api/file/upload",
+          "title": "上传文件",
+          "description": "上传文件到服务器（multipart/form-data，字段名 file）",
+          "requestType": "multipart",
+          "fileField": "file",
+          "multiple": true
+        },
+        {
+          "id": "file-get",
+          "method": "GET",
+          "path": "/api/file/:id",
+          "title": "获取文件",
+          "description": "通过文件ID获取文件内容",
+          "pathParams": {
+            "id": {
+              "label": "文件ID",
+              "placeholder": "file_id",
+              "defaultValue": "example-file-id"
+            }
+          },
+          "queryParams": [
+            {
+              "name": "download",
+              "label": "下载模式",
+              "type": "select",
+              "options": [
+                {
+                  "value": "false",
+                  "label": "预览"
+                },
+                {
+                  "value": "true",
+                  "label": "下载"
+                }
+              ],
+              "defaultValue": "false"
+            }
+          ]
+        },
+        {
+          "id": "file-delete",
+          "method": "DELETE",
+          "path": "/api/file/:id",
+          "title": "删除文件",
+          "description": "删除已上传的文件",
+          "pathParams": {
+            "id": {
+              "label": "文件ID",
+              "placeholder": "file_id",
+              "defaultValue": "example-file-id"
+            }
+          }
+        },
+        {
+          "id": "file-list",
+          "method": "GET",
+          "path": "/api/files",
+          "title": "文件列表",
+          "description": "获取所有已上传的文件列表"
+        }
+      ]
+    },
+    {
+      "id": "plugin",
+      "title": "插件管理",
+      "apis": [
+        {
+          "id": "plugin-list",
+          "method": "GET",
+          "path": "/api/plugins",
+          "title": "插件列表",
+          "description": "获取所有已加载的插件信息"
+        },
+        {
+          "id": "plugin-summary",
+          "method": "GET",
+          "path": "/api/plugins/summary",
+          "title": "插件概览",
+          "description": "单次返回插件列表及统计数据"
+        },
+        {
+          "id": "plugin-reload",
+          "method": "POST",
+          "path": "/api/plugin/:key/reload",
+          "title": "重载插件",
+          "description": "重新加载指定插件",
+          "pathParams": {
+            "key": {
+              "label": "插件标识",
+              "placeholder": "example-plugin",
+              "defaultValue": "example-plugin"
+            }
+          }
+        },
+        {
+          "id": "plugin-tasks",
+          "method": "GET",
+          "path": "/api/plugins/tasks",
+          "title": "定时任务",
+          "description": "获取所有插件的定时任务列表"
+        },
+        {
+          "id": "plugin-stats",
+          "method": "GET",
+          "path": "/api/plugins/stats",
+          "title": "插件统计",
+          "description": "获取插件统计数据"
+        }
+      ]
+    },
+    {
+      "id": "mcp",
+      "title": "MCP 服务",
+      "apis": [
+        {
+          "id": "mcp-jsonrpc-post",
+          "method": "POST",
+          "path": "/api/mcp/jsonrpc",
+          "title": "JSON-RPC 调用 (POST)",
+          "description": "通过 HTTP POST 调用 MCP JSON-RPC 接口",
+          "bodyParams": [
+            {
+              "name": "jsonrpc",
+              "label": "JSON-RPC 版本",
+              "type": "text",
+              "required": true,
+              "defaultValue": "2.0"
+            },
+            {
+              "name": "id",
+              "label": "请求 ID",
+              "type": "number",
+              "required": true,
+              "defaultValue": "1"
+            },
+            {
+              "name": "method",
+              "label": "方法",
+              "type": "text",
+              "required": true,
+              "defaultValue": "rpc.discover",
+              "placeholder": "tools/list"
+            },
+            {
+              "name": "params",
+              "label": "参数",
+              "type": "json",
+              "defaultValue": {}
+            }
+          ]
+        },
+        {
+          "id": "mcp-jsonrpc-get",
+          "method": "GET",
+          "path": "/api/mcp/jsonrpc",
+          "title": "JSON-RPC SSE 通道",
+          "description": "通过 GET 建立 JSON-RPC SSE 长连接（只读）"
+        },
+        {
+          "id": "mcp-jsonrpc-stream",
+          "method": "POST",
+          "path": "/api/mcp/jsonrpc/:stream",
+          "title": "JSON-RPC 指定流调用",
+          "description": "对指定工作流进行 JSON-RPC 调用",
+          "pathParams": {
+            "stream": {
+              "label": "工作流名称",
+              "placeholder": "chat",
+              "defaultValue": "chat"
+            }
+          },
+          "bodyParams": [
+            {
+              "name": "jsonrpc",
+              "label": "JSON-RPC 版本",
+              "type": "text",
+              "required": true,
+              "defaultValue": "2.0"
+            },
+            {
+              "name": "id",
+              "label": "请求 ID",
+              "type": "number",
+              "required": true,
+              "defaultValue": "1"
+            },
+            {
+              "name": "method",
+              "label": "方法",
+              "type": "text",
+              "required": true,
+              "defaultValue": "rpc.discover",
+              "placeholder": "tools/list"
+            },
+            {
+              "name": "params",
+              "label": "参数",
+              "type": "json",
+              "defaultValue": {}
+            }
+          ]
+        },
+        {
+          "id": "mcp-tools",
+          "method": "GET",
+          "path": "/api/mcp/tools",
+          "title": "工具列表",
+          "description": "获取所有 MCP 工具列表",
+          "queryParams": [
+            {
+              "name": "stream",
+              "label": "工作流过滤",
+              "type": "text",
+              "placeholder": "chat",
+              "defaultValue": "chat"
+            }
+          ]
+        },
+        {
+          "id": "mcp-tools-streams",
+          "method": "GET",
+          "path": "/api/mcp/tools/workflows",
+          "title": "工具分组",
+          "description": "按工作流分组获取工具列表"
+        },
+        {
+          "id": "mcp-tools-stream-detail",
+          "method": "GET",
+          "path": "/api/mcp/tools/workflow/:workflowName",
+          "title": "指定工作流工具",
+          "description": "查看某个工作流下可用的工具列表",
+          "pathParams": {
+            "workflowName": {
+              "label": "工作流名称",
+              "placeholder": "chat",
+              "defaultValue": "chat"
+            }
+          }
+        },
+        {
+          "id": "mcp-tools-call",
+          "method": "POST",
+          "path": "/api/mcp/tools/call",
+          "title": "调用工具",
+          "description": "调用指定的 MCP 工具",
+          "bodyParams": [
+            {
+              "name": "name",
+              "label": "工具名称",
+              "type": "text",
+              "required": true,
+              "placeholder": "chat.screenshot",
+              "defaultValue": "chat.screenshot"
+            },
+            {
+              "name": "arguments",
+              "label": "工具参数",
+              "type": "json",
+              "placeholder": "{}",
+              "defaultValue": {
+                "prompt": "当前屏幕截图"
+              }
+            }
+          ]
+        },
+        {
+          "id": "mcp-tool-detail",
+          "method": "GET",
+          "path": "/api/mcp/tools/:name",
+          "title": "单个工具详情",
+          "description": "查看指定 MCP 工具的描述与入参 Schema",
+          "pathParams": {
+            "name": {
+              "label": "工具名称",
+              "placeholder": "chat.screenshot",
+              "defaultValue": "chat.screenshot"
+            }
+          }
+        },
+        {
+          "id": "mcp-resources",
+          "method": "GET",
+          "path": "/api/mcp/resources",
+          "title": "资源列表",
+          "description": "列出 MCP 暴露的所有资源"
+        },
+        {
+          "id": "mcp-resource-read",
+          "method": "GET",
+          "path": "/api/mcp/resources/:uri",
+          "title": "读取资源",
+          "description": "读取指定 URI 的 MCP 资源内容",
+          "pathParams": {
+            "uri": {
+              "label": "资源 URI",
+              "placeholder": "file:///...",
+              "defaultValue": "file:///README.md"
+            }
+          }
+        },
+        {
+          "id": "mcp-prompts",
+          "method": "GET",
+          "path": "/api/mcp/prompts",
+          "title": "提示词列表",
+          "description": "列出 MCP Server 注册的所有提示词"
+        },
+        {
+          "id": "mcp-prompt-get",
+          "method": "POST",
+          "path": "/api/mcp/prompts/:name",
+          "title": "获取提示词内容",
+          "description": "渲染指定名称的提示词模板",
+          "pathParams": {
+            "name": {
+              "label": "提示词名称",
+              "placeholder": "example",
+              "defaultValue": "example"
+            }
+          },
+          "bodyParams": [
+            {
+              "name": "arguments",
+              "label": "提示词参数",
+              "type": "json",
+              "placeholder": "{\"user\": \"demo\"}",
+              "defaultValue": {
+                "user": "demo"
+              }
+            }
+          ]
+        },
+        {
+          "id": "mcp-connect",
+          "method": "GET",
+          "path": "/api/mcp/connect",
+          "title": "SSE 心跳连接",
+          "description": "建立 MCP 状态 SSE 连接（仅用于监控不建议频繁调用）"
+        },
+        {
+          "id": "mcp-health",
+          "method": "GET",
+          "path": "/api/mcp/health",
+          "title": "MCP 健康检查",
+          "description": "检查 MCP 服务状态"
+        }
+      ]
+    },
+    {
+      "id": "ai-workspace",
+      "title": "AI 工作区",
+      "apis": [
+        {
+          "id": "ai-workspaces-list",
+          "method": "GET",
+          "path": "/api/ai/workspaces",
+          "title": "工作区列表",
+          "description": "列出可用 AI 工作区预设与默认工作区"
+        },
+        {
+          "id": "ai-workspaces-create",
+          "method": "POST",
+          "path": "/api/ai/workspaces",
+          "title": "创建工作区",
+          "description": "创建新的 Agent 工作区",
+          "bodyParams": [
+            {
+              "name": "id",
+              "label": "工作区 ID",
+              "type": "text",
+              "required": true,
+              "defaultValue": "demo-agent",
+              "placeholder": "demo-agent"
+            }
+          ]
+        },
+        {
+          "id": "ai-workspace-files",
+          "method": "GET",
+          "path": "/api/ai/workspace/files",
+          "title": "列出文件",
+          "description": "列出工作区文件",
+          "queryParams": [
+            {
+              "name": "workspace",
+              "label": "工作区",
+              "type": "text",
+              "defaultValue": "default",
+              "placeholder": "default"
+            },
+            {
+              "name": "dir",
+              "label": "子目录",
+              "type": "text",
+              "defaultValue": "uploads",
+              "placeholder": "uploads"
+            },
+            {
+              "name": "limit",
+              "label": "数量上限",
+              "type": "number",
+              "defaultValue": "50",
+              "placeholder": "50"
+            }
+          ]
+        },
+        {
+          "id": "ai-workspace-upload",
+          "method": "POST",
+          "path": "/api/ai/workspace/files/upload",
+          "title": "上传文件",
+          "description": "multipart 上传到工作区（字段名 file）",
+          "requestType": "multipart",
+          "fileField": "file",
+          "multiple": true,
+          "queryParams": [
+            {
+              "name": "workspace",
+              "label": "工作区",
+              "type": "text",
+              "defaultValue": "default",
+              "placeholder": "default"
+            },
+            {
+              "name": "dir",
+              "label": "子目录",
+              "type": "text",
+              "defaultValue": "uploads",
+              "placeholder": "uploads"
+            }
+          ]
+        },
+        {
+          "id": "ai-workspace-serve",
+          "method": "GET",
+          "path": "/api/ai/workspace/files/serve",
+          "title": "预览/提供文件",
+          "description": "按相对路径提供工作区文件",
+          "queryParams": [
+            {
+              "name": "workspace",
+              "label": "工作区",
+              "type": "text",
+              "defaultValue": "default",
+              "placeholder": "default"
+            },
+            {
+              "name": "path",
+              "label": "相对路径",
+              "type": "text",
+              "required": true,
+              "defaultValue": "AGENTS.md",
+              "placeholder": "AGENTS.md"
+            }
+          ]
+        },
+        {
+          "id": "ai-workspace-download",
+          "method": "GET",
+          "path": "/api/ai/workspace/files/download",
+          "title": "下载文件",
+          "description": "下载工作区文件",
+          "queryParams": [
+            {
+              "name": "workspace",
+              "label": "工作区",
+              "type": "text",
+              "defaultValue": "default",
+              "placeholder": "default"
+            },
+            {
+              "name": "path",
+              "label": "相对路径",
+              "type": "text",
+              "required": true,
+              "defaultValue": "AGENTS.md",
+              "placeholder": "AGENTS.md"
+            }
+          ]
+        },
+        {
+          "id": "ai-workspace-agents-get",
+          "method": "GET",
+          "path": "/api/ai/workspace/agents",
+          "title": "读取 Agents 规则",
+          "description": "读取工作区 AGENTS / 规则内容",
+          "queryParams": [
+            {
+              "name": "workspace",
+              "label": "工作区",
+              "type": "text",
+              "defaultValue": "default",
+              "placeholder": "default"
+            }
+          ]
+        },
+        {
+          "id": "ai-workspace-agents-put",
+          "method": "PUT",
+          "path": "/api/ai/workspace/agents",
+          "title": "写入 Agents 规则",
+          "description": "覆盖写入工作区规则文本",
+          "queryParams": [
+            {
+              "name": "workspace",
+              "label": "工作区",
+              "type": "text",
+              "defaultValue": "default",
+              "placeholder": "default"
+            }
+          ],
+          "bodyParams": [
+            {
+              "name": "content",
+              "label": "规则内容",
+              "type": "textarea",
+              "required": true,
+              "defaultValue": "# Agent rules\n\n保持简洁。",
+              "placeholder": "# Agent rules"
+            }
+          ]
+        },
+        {
+          "id": "ai-workspace-audit",
+          "method": "GET",
+          "path": "/api/ai/workspace/audit",
+          "title": "审计日志",
+          "description": "读取工作区审计尾部",
+          "queryParams": [
+            {
+              "name": "workspace",
+              "label": "工作区",
+              "type": "text",
+              "defaultValue": "default",
+              "placeholder": "default"
+            },
+            {
+              "name": "limit",
+              "label": "条数",
+              "type": "number",
+              "defaultValue": "20",
+              "placeholder": "20"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "data",
+      "title": "数据文件编辑",
+      "apis": [
+        {
+          "id": "data-read",
+          "method": "GET",
+          "path": "/api/data/read",
+          "title": "读取数据文件",
+          "description": "读取 JSON / YAML / 文本文件内容（带基础元信息）",
+          "queryParams": [
+            {
+              "name": "filePath",
+              "label": "文件路径",
+              "type": "text",
+              "required": true,
+              "placeholder": "core/system-Core/www/xrk/api-config.json",
+              "defaultValue": "core/system-Core/www/xrk/api-config.json"
+            },
+            {
+              "name": "encoding",
+              "label": "编码",
+              "type": "text",
+              "placeholder": "utf8",
+              "defaultValue": "utf8"
+            }
+          ]
+        },
+        {
+          "id": "data-write",
+          "method": "POST",
+          "path": "/api/data/write",
+          "title": "写入数据文件",
+          "description": "写入或合并 JSON / YAML 数据文件（支持 overwrite/merge/append/update）",
+          "bodyParams": [
+            {
+              "name": "filePath",
+              "label": "文件路径",
+              "type": "text",
+              "required": true,
+              "placeholder": "core/system-Core/www/xrk/api-config.json",
+              "defaultValue": "core/system-Core/www/xrk/api-config.json"
+            },
+            {
+              "name": "data",
+              "label": "写入数据",
+              "type": "json",
+              "required": true,
+              "placeholder": "{\"key\": \"value\"}",
+              "defaultValue": {
+                "demo": true
+              }
+            },
+            {
+              "name": "operation",
+              "label": "写入操作",
+              "type": "select",
+              "options": [
+                {
+                  "value": "overwrite",
+                  "label": "覆盖"
+                },
+                {
+                  "value": "merge",
+                  "label": "深度合并"
+                },
+                {
+                  "value": "append",
+                  "label": "追加数组"
+                },
+                {
+                  "value": "update",
+                  "label": "按 path 更新"
+                }
+              ],
+              "defaultValue": "merge"
+            },
+            {
+              "name": "path",
+              "label": "（仅 update 时）目标路径",
+              "type": "text",
+              "placeholder": "apiGroups.0.title",
+              "defaultValue": "apiGroups.0.title"
+            },
+            {
+              "name": "backup",
+              "label": "写入前备份原文件",
+              "type": "select",
+              "options": [
+                {
+                  "value": "true",
+                  "label": "是"
+                },
+                {
+                  "value": "false",
+                  "label": "否"
+                }
+              ],
+              "defaultValue": "true"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "examples": {
+    "system-status": {},
+    "system-status-detail": {},
+    "system-overview": {
+      "withHistory": "1"
+    },
+    "system-config": {},
+    "health-check": {},
+    "bot-friends": {
+      "path_uin": "123456789"
+    },
+    "bot-groups": {
+      "path_uin": "123456789"
+    },
+    "bot-control": {
+      "path_uin": "123456789",
+      "action": "shutdown"
+    },
+    "message-send": {
+      "type": "group",
+      "target_id": "123456789",
+      "message": "你好，这是一条测试消息！",
+      "bot_id": "留空使用默认机器人"
+    },
+    "stdin-command": {
+      "command": "#更新",
+      "json": "true",
+      "user_info": {
+        "user_id": "web_api_user",
+        "nickname": "Web API 用户"
+      }
+    },
+    "stdin-event": {
+      "event_type": "message",
+      "content": {
+        "message": [
+          {
+            "type": "text",
+            "text": "你好"
+          }
+        ]
+      },
+      "user_info": {
+        "user_id": "web_api_user",
+        "nickname": "Web API 用户"
+      },
+      "json": "true"
+    },
+    "stdin-status": {},
+    "ai-stream": {
+      "prompt": "你好",
+      "workflow": "chat",
+      "persona": "你是一个友好的助手"
+    },
+    "ai-models": {
+      "format": "openai"
+    },
+    "v3-models": {},
+    "v3-chat-completions": {
+      "apiKey": "demo-key",
+      "messages": [
+        {
+          "role": "user",
+          "content": "你好"
+        }
+      ],
+      "model": "volcengine",
+      "stream": "false"
+    },
+    "config-list": {},
+    "config-structure": {
+      "path_name": "system"
+    },
+    "config-flat-structure": {
+      "path_name": "system",
+      "path": "log_level"
+    },
+    "config-flat": {
+      "path_name": "system",
+      "path": "log_level"
+    },
+    "config-read": {
+      "path_name": "system",
+      "path": "log_level"
+    },
+    "config-write": {
+      "path_name": "system",
+      "data": {
+        "log_level": "info"
+      },
+      "path": "log_level",
+      "backup": "true"
+    },
+    "config-batch-set": {
+      "path_name": "system",
+      "flat": {
+        "log_level": "info"
+      },
+      "path": "log",
+      "backup": "true"
+    },
+    "config-validate": {
+      "path_name": "system",
+      "data": {
+        "log_level": "debug"
+      }
+    },
+    "config-backup": {
+      "path_name": "system"
+    },
+    "config-reset": {
+      "path_name": "system",
+      "backup": "true"
+    },
+    "config-clear-cache": {},
+    "device-register": {
+      "device_id": "SENSOR_001",
+      "device_type": "sensor",
+      "device_name": "温湿度传感器",
+      "capabilities": [
+        "temperature"
+      ]
+    },
+    "device-list": {},
+    "device-detail": {
+      "path_deviceId": "SENSOR_001"
+    },
+    "device-ai": {
+      "path_deviceId": "webclient",
+      "text": "你好",
+      "workflow": "device"
+    },
+    "device-asr-sessions": {
+      "path_deviceId": "SENSOR_001"
+    },
+    "device-asr-recordings": {
+      "path_deviceId": "SENSOR_001"
+    },
+    "device-tts": {
+      "device_id": "SENSOR_001",
+      "text": "你好，这是一条测试播报"
+    },
+    "device-file": {
+      "path_fileId": "ZzpcZGF0YVxkZXZpY2VcZmlsZS5wbmc"
+    },
+    "trash-file": {
+      "path_relPath": "example.png"
+    },
+    "file-upload": {},
+    "file-get": {
+      "path_id": "example-file-id",
+      "download": "false"
+    },
+    "file-delete": {
+      "path_id": "example-file-id"
+    },
+    "file-list": {},
+    "plugin-list": {},
+    "plugin-summary": {},
+    "plugin-reload": {
+      "path_key": "example-plugin"
+    },
+    "plugin-tasks": {},
+    "plugin-stats": {},
+    "mcp-jsonrpc-post": {
+      "jsonrpc": "2.0",
+      "id": "1",
+      "method": "rpc.discover",
+      "params": {}
+    },
+    "mcp-jsonrpc-get": {},
+    "mcp-jsonrpc-stream": {
+      "path_stream": "chat",
+      "jsonrpc": "2.0",
+      "id": "1",
+      "method": "rpc.discover",
+      "params": {}
+    },
+    "mcp-tools": {
+      "stream": "chat"
+    },
+    "mcp-tools-streams": {},
+    "mcp-tools-stream-detail": {
+      "path_workflowName": "chat"
+    },
+    "mcp-tools-call": {
+      "name": "chat.screenshot",
+      "arguments": {
+        "prompt": "当前屏幕截图"
+      }
+    },
+    "mcp-tool-detail": {
+      "path_name": "chat.screenshot"
+    },
+    "mcp-resources": {},
+    "mcp-resource-read": {
+      "path_uri": "file:///README.md"
+    },
+    "mcp-prompts": {},
+    "mcp-prompt-get": {
+      "path_name": "example",
+      "arguments": {
+        "user": "demo"
+      }
+    },
+    "mcp-connect": {},
+    "mcp-health": {},
+    "data-read": {
+      "filePath": "core/system-Core/www/xrk/api-config.json",
+      "encoding": "utf8"
+    },
+    "data-write": {
+      "filePath": "core/system-Core/www/xrk/api-config.json",
+      "data": {
+        "demo": true
+      },
+      "operation": "merge",
+      "backup": "true",
+      "path": "apiGroups.0.title"
+    },
+    "bot-list": {
+      "includeDevices": "0"
+    },
+    "ai-workspaces-list": {},
+    "ai-workspaces-create": {
+      "id": "demo-agent"
+    },
+    "ai-workspace-files": {
+      "workspace": "default",
+      "dir": "uploads",
+      "limit": "50"
+    },
+    "ai-workspace-upload": {
+      "workspace": "default",
+      "dir": "uploads"
+    },
+    "ai-workspace-serve": {
+      "workspace": "default",
+      "path": "AGENTS.md"
+    },
+    "ai-workspace-download": {
+      "workspace": "default",
+      "path": "AGENTS.md"
+    },
+    "ai-workspace-agents-get": {
+      "workspace": "default"
+    },
+    "ai-workspace-agents-put": {
+      "workspace": "default",
+      "content": "# Agent rules\n\n保持简洁。"
+    },
+    "ai-workspace-audit": {
+      "workspace": "default",
+      "limit": "20"
+    }
+  },
+  "quickActions": [
+    {
+      "icon": "AI",
+      "text": "AI 聊天",
+      "action": "ai-chat"
+    },
+    {
+      "icon": "CFG",
+      "text": "配置管理",
+      "apiId": "config-list"
+    },
+    {
+      "icon": "DEV",
+      "text": "设备管理",
+      "apiId": "device-list"
+    },
+    {
+      "icon": "PLG",
+      "text": "插件管理",
+      "apiId": "plugin-list"
+    }
+  ]
+}

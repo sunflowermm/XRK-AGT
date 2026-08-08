@@ -1,6 +1,5 @@
-# 依赖与构建产物（挂载用 dist，由启动时 pnpm build 生成）
+# 依赖本地安装；dist 预构建入库（改 src 后请 pnpm build 再提交）
 node_modules/
-dist/
 
 # 本地 / 工具缓存
 .DS_Store
