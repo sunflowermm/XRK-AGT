@@ -99,7 +99,7 @@ coverage/
 
 # Build outputs
 dist/
-# 控制台预构建产物入库，避免部分环境无法 pnpm build
+# /xrk：dist 入库（维护者改完建议 build 后提交；也支持用户自建）
 !core/system-Core/www/xrk/dist/
 !core/system-Core/www/xrk/dist/**
 out/

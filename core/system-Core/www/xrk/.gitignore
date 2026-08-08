@@ -1,4 +1,4 @@
-# 依赖本地安装；dist 预构建入库（改 src 后请 pnpm build 再提交）
+# node_modules 本地装。dist 入库：维护者改完建议 build 后提交；也支持用户自行 build
 node_modules/
 
 # 本地 / 工具缓存

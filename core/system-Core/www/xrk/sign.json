@@ -5,7 +5,7 @@
   "serve": "static",
   "staticRoot": "dist",
   "build": { "command": "pnpm", "args": ["build"] },
-  "_note": "dist 预构建入库。挂载不 build；启动过程仅在源码新于产物时 stale 编（失败仍挂已有 dist）。跳过：XRK_SKIP_WWW_BUILD=1。开发 HMR：enabled=true + serve=proxy。",
+  "_note": "约定：维护者改 src 后建议 pnpm build 并把 dist 提交入库；也支持用户/部署方自行 build 或启动 stale 编。挂载不 build；编失败仍挂已有 dist。跳过：XRK_SKIP_WWW_BUILD=1。开发 HMR：enabled=true + serve=proxy。",
   "command": "pnpm",
   "args": ["dev"],
   "port": 5177,

@@ -43,7 +43,15 @@ www/<子目录>/
 对外 URL（静态与反代共用）优先级：`proxy.mount` → `mount` → `/${id}` → `/${文件夹名}`。  
 Vite `base` 必须与该 URL 一致。
 
-例：`system-Core/www/xrk/` → `/xrk/`（`dist` 预构建入库；启动过程仅 stale 时再编）。
+例：`system-Core/www/xrk/` → `/xrk/`。
+
+#### `/xrk` 控制台：`dist` 与自建
+
+| 角色 | 约定 |
+|------|------|
+| **维护者 / 合入方** | 改 `core/system-Core/www/xrk/src/`（或影响产物的配置）后，**建议**本地 `pnpm build`（或仓库根 `pnpm run build:www`），把更新后的 **`dist/` 一并提交入库**，方便编不起来的环境开箱即用 |
+| **使用者 / 部署方** | **支持自建**：有 Node + pnpm 时可自行 `cd core/system-Core/www/xrk && pnpm install && pnpm build`；也可靠启动过程 stale 编。编不了或不想编：直接用仓内 `dist`，或设 `XRK_SKIP_WWW_BUILD=1` |
+| **运行时** | 挂载只挂已有产物；源码新于 `dist` 时启动过程会尝试再编，**失败仍挂已有 dist** |
 
 ### ① 纯静态：`staticRoot: "."`
 

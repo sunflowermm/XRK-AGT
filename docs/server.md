@@ -615,8 +615,9 @@ static:
 
 ### 开箱即用的Web控制台
 
-- **开箱即用**：`core/system-Core/www/xrk/`（Vue 控制台，`sign.json` → 启动过程 build 后挂 `dist/`）
+- **开箱即用**：`core/system-Core/www/xrk/`（Vue 控制台；仓内带 `dist/`，`sign.json` 挂产物；源码更新时可 stale 自建）
 - **访问路径**：`/xrk/`（`sign.proxy.mount`，与文件夹名一致）
+- **dist 约定**：维护者改完**建议** build 后把 `dist` 提交入库；也支持用户自行 build。见 [www-mount.md](www-mount.md)
 - **功能完整**：API测试、配置管理、插件管理、设备管理等
 
 ---

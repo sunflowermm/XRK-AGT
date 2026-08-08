@@ -267,7 +267,7 @@ export default {
 
 ## Web 控制台（core/system-Core/www/xrk）与 API 交互
 
-Vue 3 SPA（`src/`），构建产物在 `dist/`。本地：`cd core/system-Core/www/xrk && pnpm install && pnpm build`。开发可用 `sign.json` 的 `enabled: true` 反代 Vite。
+Vue 3 SPA（`src/`），构建产物在 `dist/`（**预构建入库**）。维护者改控制台后**建议** `pnpm build` 并提交 `dist/`；也**支持**使用者自行 `cd core/system-Core/www/xrk && pnpm install && pnpm build`（或根目录 `pnpm run build:www`）。开发可用 `sign.json` 的 `enabled: true` 反代 Vite。详见 [www-mount.md](www-mount.md)「`/xrk` 控制台：`dist` 与自建」。
 
 核心页面：`#/home` 概览 · `#/chat` 对话 · `#/config` 配置 · `#/api` 调试。鉴权头 `X-API-Key`；成功体用 `unwrapSuccess`（见 `src/utils/http.js`）。
 
